@@ -9,46 +9,41 @@ AICO is a local-first, zero-daemon engineering environment and development platf
 * **Headless Core with Universal Web UI**: The Rust backend (powered by `axum`) serves an embedded, responsive WebUI accessible from any desktop browser (Chrome, Firefox, Edge) with multi-tab and multi-window concurrency, and directly from mobile devices over the local Wi-Fi/LAN.
 * **Separation of Concerns**: Fast lexical/vector text retrieval and deep multi-hop graph lineage are decoupled into specialized embedded engines (LanceDB and Kùzu).
 * **Deterministic Tool Gates**: LLMs and agent loops never execute raw shell strings or fabricate unverified file paths. All actions pass through typed Model Context Protocol (MCP) tool gates with an enforced 3-tier security policy.
-* **Triple Repository Decoupling**: The AICO runtime, target implementation codebases, and all SDD specifications reside in strictly decoupled Git repositories.
+* **Decoupled Per-Project Repositories**: The AICO runtime, each target codebase, and each project's dedicated specifications reside in strictly decoupled Git repositories.
 
 ---
 
 ## 2. Repository & Workspace Topology
 
-AICO enforces physical folder and Git repository isolation between the engine, codebases, and specification knowledge bases:
+AICO enforces 1:1 paired repository isolation for each project:
 
 ```
 [Host Machine Filesystem]
-├── d:/dev/aico/                      # 1. AICO Engine Repository (Runtime, skills, core binary)
+├── d:/dev/aico/                      # AICO Engine Source Code (or d:/aico/codebase/aico)
 │
-├── d:/dev/codebase/                  # 2. Codebase Root (Independent Git Repositories)
-│   ├── project-a/                    #    • Project A implementation (clean Git repo)
-│   └── project-b/                    #    • Project B implementation (clean Git repo)
-│
-└── d:/dev/aico-specs/                # 3. Dedicated AICO-Specs Git Repository
-    ├── project-a/
-    │   ├── GLOSSARY.md               #    • Project ubiquitous language
-    │   ├── adr/                      #    • Project architectural decisions (ADR-0001...)
-    │   └── initiatives/
-    │       ├── 001-web-platform/     #    • Initiative Container (Composite Epic)
-    │       │   ├── BRAIN-platform.md #      - Shared Brainstorm (big idea & trade-offs)
-    │       │   ├── adr/              #      - Initiative-specific ADRs
+└── d:/aico/                          # Configured AICO Root (Defined at Installation)
+    ├── codebase/                     # Default Directory for Implementation Repositories
+    │   ├── project-a/                # • Project A Codebase (Independent Git Repo)
+    │   └── project-b/                # • Project B Codebase (Independent Git Repo)
+    │
+    ├── aico-specs/                   # • AICO Engine Specs Git Repo
+    │   ├── .aico-project.json        #   - Manifest linking to d:/dev/aico
+    │   ├── GLOSSARY.md               #   - AICO ubiquitous language
+    │   ├── adr/                      #   - Architecture decisions (ADR-0001..0008)
+    │   └── epics/                    #   - Engine epics (001-aico-core...)
+    │
+    ├── project-a-specs/              # • Dedicated Project A Specs Git Repo
+    │   ├── .aico-project.json        #   - Manifest: { "codebase_path": "../codebase/project-a" }
+    │   ├── GLOSSARY.md
+    │   ├── adr/
+    │   └── epics/
+    │       ├── 001-web-platform/     #     * Composite Epic
+    │       │   ├── BRAIN-platform.md
     │       │   └── specs/
-    │       │       ├── 01-api-srv/   #      - Child Spec: Webserver API
-    │       │       │   ├── DEEP.md   #        * Deep Dive (API blast radius)
-    │       │       │   ├── SPEC.md   #        * EARS Contract (REQ-001..010)
-    │       │       │   └── PLAN.md   #        * Task DAG
-    │       │       └── 02-web-ui/    #      - Child Spec: WebUI Frontend
-    │       │           ├── DEEP.md   #        * Deep Dive (UI blast radius)
-    │       │           ├── SPEC.md   #        * EARS Contract (REQ-011..020)
-    │       │           └── PLAN.md   #        * Task DAG
-    │       └── 002-csv-export/       #    • Initiative Container (Simple Single Feature)
-    │           ├── BRAIN-export.md
-    │           ├── DEEP-export.md
-    │           ├── SPEC-export.md
-    │           └── PLAN-export.md
-    └── project-b/
-        └── ...
+    │       └── 002-csv-export/       #     * Simple Feature Epic
+    │
+    └── project-b-specs/              # • Dedicated Project B Specs Git Repo
+        └── .aico-project.json
 ```
 
 ---
@@ -70,7 +65,7 @@ Dual Embedded Storage Topology:
     │ • BM25 inverted index     │           │ • Native openCypher       │
     │ • Disk-backed IVF-PQ ANN  │           │ • Columnar CSR storage    │
     │ • Built-in RRF score fuse │           │ • Sub-10ms N-hop paths    │
-    │ • Chunks: specs, code,    │           │ • Nodes: Initiative, Spec,│
+    │ • Chunks: specs, code,    │           │ • Nodes: Epic, Spec,      │
     │   brainstorms, plans      │           │   Module, Symbol, Test    │
     └─────────────▲─────────────┘           └─────────────▲─────────────┘
                   │                                       │
@@ -106,7 +101,7 @@ storage_engines:
     license: "MIT (Permissive commercial use)"
     graph_schema:
       node_labels:
-        - "Initiative"
+        - "Epic"
         - "Spec"
         - "Requirement"
         - "Module"
@@ -146,7 +141,7 @@ AICO enables an autonomous development loop ("Auto-Mode") governed by a determin
                                    │ 1. Path Canonicalizer (std::fs::canonicalize)       │
                                    │    • Read: Unrestricted across host filesystem      │
                                    │    • Write: MUST reside within active project path  │
-                                   │      or active initiative SDD folder.               │
+                                   │      or active project specs folder.                │
                                    │      External write -> Blocked / Prompt.            │
                                    │                                                     │
                                    │ 2. Command Policy Interceptor (shlex AST parser)    │
@@ -175,23 +170,23 @@ Built with **React + Vite + Tailwind CSS + Radix UI**, featuring the **`@aico/ui
 ### UI Layout Grid:
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
-│ [🏠 Home]   [📦 Project A]   [🚀 001-web-platform]  [+]                                │
+│ [🏠 Home]   [📦 Project A ▼]   [🚀 001-web-platform]  [+]                               │
 ├──────────────────────────────┬─────────────────────────────────────────────────────────┤
-│ 🔍 Omni-Search               │ 📌 INITIATIVE HUB: 001-web-platform                     │
-│ [x] Proj [x] Init [x] Spec   │ Status: [In Progress]   Specs: [1/2 Verified]           │
-│ [x] Code [x] ADR             │ ─────────────────────────────────────────────────────── │
-│                              │ ▾ 📋 Overview & Goals (Summary, dates, status badges)   │
-│ 📁 Tree View                 │ ▸ 💡 Shared Brainstorm & Trade-offs [↗ Pop-out Tab]     │
-│   ▼ Project A                │ ▸ 🏛️ Architecture Decisions (ADRs)  [↗ Pop-out Tab]     │
-│     ▼ 🚀 001-web-platform    │ ▾ 🔬 Specifications & Child Modules:                    │
-│       • 01-api-server (Spec) │   ┌───────────────────────────────────────────────────┐ │
-│       • 02-web-ui (Spec)     │   │ 01-api-server      [Green 5/5]  [Blast: 4 modules]│ │
-│     ► 🚀 002-csv-export      │   │ ▸ Deep Dive  ▸ EARS Spec  ▸ Task Plan  [↗ Tab]    │ │
+│ 🔍 Omni-Search               │ 📌 EPIC HUB: 001-web-platform                           │
+│ [x] Epics [x] Specs [x] Code │ Status: [In Progress]   Specs: [1/2 Verified]           │
+│                              │ ─────────────────────────────────────────────────────── │
+│ 📁 Tree View (Scoped)        │ ▾ 📋 Overview & Goals (Summary, dates, status badges)   │
+│   ▼ 🚀 001-web-platform      │ ▸ 💡 Shared Brainstorm & Trade-offs [↗ Pop-out Tab]     │
+│     • 01-api-server (Spec)   │ ▸ 🏛️ Architecture Decisions (ADRs)  [↗ Pop-out Tab]     │
+│     • 02-web-ui (Spec)       │ ▾ 🔬 Specifications & Child Modules:                    │
+│   ► 🚀 002-csv-export        │   ┌───────────────────────────────────────────────────┐ │
+│                              │   │ 01-api-server      [Green 5/5]  [Blast: 4 modules]│ │
+│ ──────────────────────────── │   │ ▸ Deep Dive  ▸ EARS Spec  ▸ Task Plan  [↗ Tab]    │ │
+│ ● Agent: cargo test (100%)   │   └───────────────────────────────────────────────────┘ │
+│ ⏱️ LanceDB synced (2s ago)   │   ┌───────────────────────────────────────────────────┐ │
+│ [⚙️ Settings]                 │   │ 02-web-ui          [Red 1/6]    [Blast: UI root]  │ │
+│                              │   │ ▸ Deep Dive  ▸ EARS Spec  ▸ Task Plan  [↗ Tab]    │ │
 │                              │   └───────────────────────────────────────────────────┘ │
-│ ──────────────────────────── │   ┌───────────────────────────────────────────────────┐ │
-│ ● Agent: cargo test (100%)   │   │ 02-web-ui          [Red 1/6]    [Blast: UI root]  │ │
-│ ⏱️ LanceDB synced (2s ago)   │   │ ▸ Deep Dive  ▸ EARS Spec  ▸ Task Plan  [↗ Tab]    │ │
-│ [⚙️ Settings]                 │   └───────────────────────────────────────────────────┘ │
 ├──────────────────────────────┴─────────────────────────────────────────────────────────┤
 │ ⇄ [Dock: Bottom | Right]   [💬 Agent Chat]   [🖥️ Terminal 1]   [📜 Audit Log]           │
 │ Agent > Running behavioral tests for REQ-004...                                        │
@@ -199,22 +194,31 @@ Built with **React + Vite + Tailwind CSS + Radix UI**, featuring the **`@aico/ui
 ```
 
 ### Key UI Features:
-1. **Full-Height Omni-Search Sidebar**:
-   - Real-time LanceDB hybrid search across all levels with scope checkboxes (`Projects`, `Initiatives`, `Specs`, `Code`, `ADRs`).
-   - Tree navigation: Chevron toggles collapse/expand; double-click opens in an internal tab.
+1. **Top Bar Project Dropdown & Project-Scoped Tabs**:
+   - `[ 📦 Project A ▼ ]` dropdown allows switching between projects.
+   - Tabs are project-scoped (clean, concise titles). Switching projects restores that project's tabs without title bloat.
+   - Multi-window support allows opening Project B in a second browser window side-by-side.
+2. **Full-Height Omni-Search Sidebar**:
+   - Real-time LanceDB hybrid search across all levels with scope checkboxes (`Epics`, `Specs`, `Code`, `ADRs`).
+   - Tree navigation is scoped directly to the active project (no redundant Project root node). Chevron toggles collapse/expand; double-click opens an internal tab.
    - Right-click context menu on search and tree items: `Open in New Tab`, `Open in New Window`, `Copy ID`, `Reveal in Git`.
    - Bottom real-time activity indicators ("What is happening right now") and Settings button.
-2. **Unified Initiative Hub (Accordion Workspace)**:
-   - High information density with zero tab clutter: all artifacts for an initiative live in clean, collapsible sections.
+3. **Unified Epic Hub (Accordion Workspace)**:
+   - High information density with zero tab clutter: all artifacts for an epic live in clean, collapsible sections.
    - Every artifact accordion has a dedicated "Open in separate tab" icon (`↗`) to pop it out into an independent tab when desired.
-   - Searching any keyword opens at the Initiative Hub level and automatically scrolls/expands to the matching artifact.
-3. **Dockable Chat & Terminal Panel**:
+   - Searching any keyword opens at the Epic Hub level and automatically scrolls/expands to the matching artifact.
+4. **Dockable Chat & Terminal Panel**:
    - Moveable with 1-click between **Bottom** (wide terminal/diff view) and **Right-hand side** (split-screen assistant view).
    - Constrained to the main canvas area (never cuts beneath the left sidebar).
    - Internal tab strip: `Agent Chat`, `Terminal`, `Audit Log`.
-4. **Mobile LAN Responsive Mode**:
+5. **Mobile LAN Responsive Mode**:
    - Adapts to a single-column touch view with a slide-out navigation drawer.
    - Live real-time WebSocket chat and one-tap permission approval buttons (`[Approve: cargo test]`).
+6. **Multi-Modal Context & Asset Drop Zones**:
+   - Drag-and-drop or clipboard paste (`Ctrl+V`) directly into the Chat for instant multi-modal context (images, audio, PDFs, text guides).
+   - Sidebar & Epic Hub asset drop zones: save project-wide reference documents (`<project>-specs/assets/`) or epic assets (`epics/<slug>/assets/`).
+   - Text documents are automatically chunked and embedded in LanceDB for hybrid semantic search.
+   - Task card drop zones: drag assets directly onto human deliverable tasks in the Plan DAG to fulfill and unblock them.
 
 ---
 
@@ -255,14 +259,14 @@ in_band_annotations:
 
 ## 7. Artifact Lifecycle & Versioning
 
-Every generated SDD artifact in `aico-specs` is tagged with engine metadata and committed to Git:
+Every generated SDD artifact in `<project>-specs` is tagged with engine metadata and committed to Git:
 
 ```yaml
 ---
 id: SPEC-API-001
 type: spec
 aico_version: "0.1.0"
-initiative: "001-web-platform"
+epic: "001-web-platform"
 created_at: "2026-10-05T17:45:00Z"
 derives_from: [BRAIN-web-platform]
 ---
@@ -272,10 +276,22 @@ derives_from: [BRAIN-web-platform]
 * Requirement IDs (`REQ-###`) are immutable.
 * Revisions do not delete requirement IDs; they transition their status to `deprecated` or declare `superseded_by: REQ-###`, guaranteeing historical traceability for test suites across Git history.
 
+### Human Gate Tasks in Plan DAG:
+* Tasks in `PLAN-*.md` can specify `role: user` and `type: asset_delivery`.
+* Downstream automated agent tasks specify `blocked_by: [TASK-XXX]`.
+* Dropping the expected asset onto the task card in the UI fulfills the requirement and unblocks downstream agent execution automatically.
+
+### Bi-Directional Harness (Greenfield & Brownfield):
+* **Forward Path (Greenfield / Idea → Shipped Code)**:
+  `aico-brainstorm` → `aico-spec-creation` → `aico-planning` → `aico-test-scaffolding` → `aico-implementation` → `aico-review-loop`
+* **Reverse Path (Brownfield / Code Repo → Specifications)**:
+  `aico-code-to-spec`: Onboards existing codebases by parsing the AST into Kùzu/LanceDB, extracting domain entities into `GLOSSARY.md`, clustering modules into epics, and reverse-synthesizing formal EARS specifications (`SPEC-*.md`) with test seam designations and `@implements` trace tagging.
+
 ---
 
-## 8. Distribution & Installation
+## 8. Distribution, Installation & Discovery
 
 * **Zero-Dependency Single Binary**: The `aico` executable is distributed as a single self-contained binary with compiled React assets embedded directly via `rust-embed`.
-* **First-Run Wizard (`aico init`)**: Launches the browser setup flow to configure `codebase/` and `aico-specs/` roots.
-* **Architecture Decision Records**: All system design trade-offs are permanently recorded in [`docs/adr/`](docs/adr/).
+* **Single Root Setup Wizard (`aico init`)**: On first launch, the wizard prompts for a single directory (e.g. `d:/aico/`). AICO automatically infers `codebase/` for implementation repositories and scans for sibling `*-specs/` folders.
+* **Deterministic Project Discovery**: Every specs repository contains `.aico-project.json` declaring its linked codebase path (`"codebase_path": "../codebase/project-a"` or an external absolute path). AICO reads these manifests on startup, populates the Top Bar Project Switcher, and establishes background Tree-sitter file watchers.
+* **Architecture Decision Records**: All system design trade-offs are permanently recorded in [`docs/adr/`](docs/adr/) and mirrored in `aico-specs/adr/`.

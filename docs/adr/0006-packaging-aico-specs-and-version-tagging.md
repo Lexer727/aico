@@ -1,4 +1,4 @@
-# ADR-0006: Packaging, AICO-Specs Repository & Version Tagging
+# ADR-0006: Packaging, Dedicated Project Specs & Version Tagging
 
 - **Status**: accepted
 - **Date**: 2026-10-05
@@ -10,11 +10,11 @@ AICO must be simple to install and maintain across development machines without 
 ## Decision Drivers
 - Zero-dependency installation: single binary executable.
 - Deterministic tracking of AICO engine versions against generated specifications.
-- Clean Git-backed separation for specifications in a dedicated repository (`aico-specs`).
+- Clean Git-backed separation for specifications in per-project specs repositories (`<project>-specs`).
 - Safe, automated migrations for internal embedded storage.
 
 ## Considered Options
-1. **Option A (Chosen)**: Standalone Rust binary with embedded React assets (`rust-embed`), dedicated `aico-specs` Git repository, startup DB migration runner, and mandatory `aico_version` frontmatter tagging on all generated artifacts.
+1. **Option A (Chosen)**: Standalone Rust binary with embedded React assets (`rust-embed`), dedicated per-project specs Git repositories (`<project>-specs`), startup DB migration runner, and mandatory `aico_version` frontmatter tagging on all generated artifacts.
 2. **Option B**: Multi-process package requiring separate Node.js server and native backend processes.
 3. **Option C**: Unversioned markdown artifacts without AICO release metadata.
 
@@ -26,7 +26,7 @@ Chosen option: **Option A**.
 - The compiled React WebUI bundle is embedded directly inside the binary using `rust-embed`.
 - On first launch, `aico init` prompts for:
   - `Codebase Root` (e.g. `d:/dev/codebase/`)
-  - `AICO Specs Repo` (e.g. `d:/dev/aico-specs/`)
+  - Configures default specs location pattern (e.g. `d:/dev/<project>-specs/`)
 
 ### 2. Artifact Version Tagging
 Every generated SDD artifact (Brainstorms, Deep Dives, Specs, Plans) must include the generating AICO version in its YAML frontmatter:
@@ -35,7 +35,7 @@ Every generated SDD artifact (Brainstorms, Deep Dives, Specs, Plans) must includ
 id: SPEC-API-001
 type: spec
 aico_version: "0.1.0"
-initiative: "001-web-platform"
+epic: "001-web-platform"
 created_at: "2026-10-05T17:45:00Z"
 ---
 ```

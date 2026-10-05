@@ -1,6 +1,6 @@
 ---
 name: aico-wayfinder
-description: "Plan a massive, high-fog engineering epic or greenfield system as a shared map of decision tickets, clearing the fog one decision at a time until ready for specification."
+description: "Plan a massive, high-fog engineering initiative or greenfield system as a shared map of decision tickets, clearing the fog one decision at a time until ready for specification."
 disable-model-invocation: true
 ---
 
@@ -31,13 +31,13 @@ When an effort is too large or ambiguous for a single session, do not charge int
 ## Process
 
 ### Phase 1: Chart the Map
-1. **Name the Destination**: Interview the user to lock down the exact end goal of this epic.
+1. **Name the Destination**: Interview the user to lock down the exact end goal of this initiative.
 2. **Map the Frontier (Breadth-First)**: Fan out across the domain. Surface the open decisions and first actionable steps.
    - *If no fog is uncovered* (the path is already obvious and small): Stop immediately and recommend `/aico-brainstorm` or `/aico-spec-creation`.
 3. **Initialize the Wayfinder Map**:
-   Write the map index (in `.scratch/wayfinder/{epic-slug}/map.md` or the issue tracker):
+   Write the map index (in `.scratch/wayfinder/{initiative-slug}/map.md` or the issue tracker):
    ```markdown
-   # Wayfinder Map: {Epic Name}
+   # Wayfinder Map: {Initiative Name}
    
    ## Destination
    {1-2 sentences defining what done looks like}

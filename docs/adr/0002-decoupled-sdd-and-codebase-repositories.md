@@ -1,54 +1,53 @@
-# ADR-0002: Decoupled AICO-Specs Repository and Codebase Isolation
+# ADR-0002: Per-Project Dedicated Specs Repository & Codebase Isolation
 
 - **Status**: accepted
 - **Date**: 2026-10-05
 - **Deciders**: User, Antigravity Agent
 
 ## Context & Problem Statement
-Spec-Driven Development involves numerous artifacts: brainstorms, deep dives, EARS specifications, task plans, and architectural decisions. Placing these directly inside target production codebases can pollute repository commit history, complicate repository access control, and scatter engineering knowledge across fragmented repositories.
+Spec-Driven Development involves numerous artifacts: brainstorms, deep dives, EARS specifications, task plans, and architectural decisions. Initially, storing all specifications across all projects in a single shared repository was considered. However, sharing a single specs repository couples unrelated projects together, complicates Git history, leaks access when sharing a single project's specs with external collaborators, and clutters the UI tree view with redundant project parent folders.
 
 ## Decision Drivers
-- Strict folder and Git repository separation between the AICO runtime, target implementation codebases, and SDD documentation.
-- Support for multiple independent implementation repositories under a single parent Codebase Root.
-- Clear structural hierarchy for grouping initiatives, deep dives, and specifications.
+- Strict folder and Git repository separation between code implementation and SDD documentation.
+- Independent portability and version control for each individual project.
+- Simplified UI hierarchy without redundant project wrapper nodes in the tree view.
 
 ## Considered Options
-1. **Option A (Chosen)**: A dedicated, standalone Git repository (`aico-specs`, e.g. `d:/dev/aico-specs/`) holding all architectural documents for all projects, organized by Project and Initiative (`<project>/initiatives/<init-slug>/`).
-2. **Option B**: Project-local SDD artifacts committed directly to each target repository's root (`specs/`, `docs/`).
-3. **Option C**: Centralized uncommitted data store (`~/.aico/`) without dedicated Git version control.
+1. **Option A (Chosen)**: Dedicated per-project specs repositories located under a configured Specs Root (`d:/aico/<project>-specs`), paired 1:1 with each codebase repository (`codebase/<project>`).
+2. **Option B**: Single monolithic `aico-specs` repository holding all projects' specifications in subfolders.
+3. **Option C**: In-tree `specs/` directory inside each target code repository.
 
 ## Decision Outcome
-Chosen option: **Option A**, because keeping a dedicated `aico-specs` repository decouples architecture planning from raw code repositories while preserving full Git version history. The Codebase Root (`d:/dev/codebase`) contains isolated implementation repositories, and the `aico-specs` repository maps each Project to its corresponding implementation repository via configuration.
+Chosen option: **Option A**.
+Each Project is tracked as a decoupled pair of independent Git repositories:
+1. **Codebase Implementation Repo**: `d:/dev/codebase/<project>/` (or `d:/dev/aico/` for the engine)
+2. **Dedicated Specs Repo**: `d:/aico/<project>-specs/` (e.g. `d:/aico/aico-specs/`, `d:/aico/project-a-specs/`)
 
-### Domain Hierarchy
+### Domain Hierarchy Inside `<project>-specs`:
 ```
-aico-specs/
-├── <project-name>/
-│   ├── GLOSSARY.md
-│   ├── adr/
-│   │   └── ADR-0001-...md
-│   └── initiatives/
-│       ├── init-001-<initiative-slug>/
-│       │   ├── BRAIN-<slug>.md
-│       │   ├── adr/
-│       │   └── specs/
-│       │       ├── 01-<spec-slug>/
-│       │       │   ├── DEEP-<spec-slug>.md
-│       │       │   ├── SPEC-<spec-slug>.md
-│       │       │   └── PLAN-<spec-slug>.md
-│       │       └── 02-...
-│       └── init-002-<single-feature-slug>/
-│           ├── BRAIN-<slug>.md
-│           ├── DEEP-<slug>.md
-│           ├── SPEC-<slug>.md
-│           └── PLAN-<slug>.md
+<project>-specs/
+├── GLOSSARY.md
+├── adr/
+│   ├── ADR-0001-...md
+│   └── ADR-0002-...md
+└── epics/
+    ├── 001-<epic-slug>/
+    │   ├── BRAIN-<slug>.md
+    │   ├── adr/
+    │   └── specs/
+    │       ├── 01-<spec-slug>/
+    │       │   ├── DEEP-<spec-slug>.md
+    │       │   ├── SPEC-<spec-slug>.md
+    │       │   └── PLAN-<spec-slug>.md
+    │       └── 02-...
+    └── 002-<single-feature-slug>/
+        ├── BRAIN-<slug>.md
+        ├── DEEP-<slug>.md
+        ├── SPEC-<slug>.md
+        └── PLAN-<slug>.md
 ```
 
 ### Positive Consequences
-- Target codebases remain clean of engineering process documents if desired.
-- All architecture knowledge and specifications across all projects are consolidated into a single, version-controlled knowledge graph.
-- Deep dives are directly scoped to the Initiative/Spec they analyze, eliminating ambiguity about their placement.
-
-### Negative Consequences / Trade-offs
-- AICO must maintain a mapping configuration between a Project in `aico-specs` and its target repository directory in Codebase Root.
-- Committing artifacts requires committing to the `aico-specs` repository, while code changes are committed to the target project repository.
+- **Complete Project Isolation**: Repositories can be shared, transferred, or archived independently without exposing unrelated projects.
+- **Simplified UI Tree View**: The sidebar tree view is scoped directly to the active project, displaying Epics and Specs without an unnecessary top-level Project folder wrapper.
+- **Independent Git Lifecycles**: Commits to `project-a-specs` are completely decoupled from `project-b-specs`.

@@ -5,13 +5,13 @@
 - **Deciders**: User, Antigravity Agent
 
 ## Context & Problem Statement
-Developers need to navigate seamlessly across systems, large initiatives, and targeted specifications without cognitive overload. Fragmenting an initiative into multiple disconnected tabs forces excessive context switching. Simultaneously, users need omni-search with scope filtering, real-time background execution status, and flexible chat/terminal docking that preserves the unbroken left navigation rail.
+Developers need to navigate seamlessly across systems, large epics, and targeted specifications without cognitive overload. Fragmenting an epic into multiple disconnected tabs forces excessive context switching. Simultaneously, users need omni-search with scope filtering, real-time background execution status, flexible chat/terminal docking, and a clean project switching mechanism.
 
 ## Decision Drivers
 - High information density without visual clutter (folding/accordions).
-- Fast navigation and omni-search spanning Projects, Initiatives, Specs, and Code symbols with fine-grained checkbox filters.
+- Fast navigation and omni-search spanning Epics, Specs, and Code symbols with fine-grained checkbox filters.
 - Ergonomic workspace customization: moveable chat/terminal between right-side and bottom layouts, without clipping the full-height sidebar.
-- Consistent interaction: tree expansion vs. opening in tabs, right-click context menus for multi-window/multi-tab workflows.
+- Project switching: Top bar dropdown with project-scoped tabs (clean workspace per project, with multi-window support for side-by-side cross-project work).
 
 ## Decision Outcome
 Chosen design layout and interaction model:
@@ -19,15 +19,20 @@ Chosen design layout and interaction model:
 ### 1. Structural Grid & Shell:
 - **Top Bar**:
   - `[ 🏠 Home ]` button: returns to project catalog and global health overview.
-  - **Internal Tabs Strip**: displays currently open tabs (e.g., `[ 📦 Project A ]`, `[ 🚀 Web Platform ]`).
+  - **Project Switcher Dropdown**: `[ 📦 Project A ▼ ]` allowing instant switching between registered projects or `[+ New Project]`.
+    - Right-click option on dropdown items: `"Open Project in New Window"`.
+  - **Internal Tabs Strip (Project-Scoped)**:
+    - Tabs are scoped to the currently active project (e.g. `[ 🚀 001-web-platform ]`, `[ 📋 01-api-server ]`).
+    - Switching projects in the dropdown smoothly preserves and restores that project's open tabs, preventing tab title bloat and cross-project pollution.
 - **Left Sidebar (Full Height)**:
   - Extends top-to-bottom of the application viewport (the bottom chat/terminal panel never stretches under the sidebar).
   - **Omni-Search Bar**: Real-time LanceDB hybrid search with explicit scope checkboxes:
-    - `[x] Projects` `[x] Initiatives` `[x] Specs` `[x] Code` `[x] ADRs`
+    - `[x] Epics` `[x] Specs` `[x] Code` `[x] ADRs`
   - **Search & Tree Interaction**:
+    - **No Redundant Project Root**: Tree starts directly at the active project's Epics (`🚀 001-web-platform`, `🚀 002-csv-export`).
     - **Single-click on chevron**: Expands or collapses folders/nodes in the tree.
     - **Double-click on item name**: Opens the item as an internal tab.
-    - **Search Result Navigation**: Clicking any search hit opens at the **Initiative Hub level** (expanding and scrolling directly to the matching artifact/requirement). If the result is a standalone single-feature initiative, it opens that feature directly.
+    - **Search Result Navigation**: Clicking any search hit opens at the **Epic Hub level** (expanding and scrolling directly to the matching artifact/requirement). If the result is a standalone single-feature epic, it opens that feature directly.
     - **Right-Click Context Menu**: Available on all search results and tree entries:
       - `Open in New Tab`
       - `Open in New Window`
@@ -37,7 +42,7 @@ Chosen design layout and interaction model:
     - Real-time background indicators ("Agent: cargo test (12 passed)", "LanceDB synced 2s ago", CPU & active task counters).
     - `[ ⚙️ Settings ]` button (API keys, Auto-Mode permissions, mobile QR pairing).
 
-### 2. Main Content Canvas (Initiative Hub):
+### 2. Main Content Canvas (Epic Hub):
 - Consolidated single-page view with collapsible accordion sections:
   - ▾ **Overview & Status**: Title, goal, dates, test pass/fail metrics.
   - ▸ **💡 Shared Brainstorm & Architectural Trade-offs** (expandable)
