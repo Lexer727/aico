@@ -1,0 +1,19 @@
+# Rust
+target/
+Cargo.lock
+**/*.rs.bk
+
+# Node & Frontend
+node_modules/
+dist/
+.vite/
+
+# Temporary / Scratch
+.scratch/
+*.tmp
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
