@@ -41,7 +41,7 @@ fn test_create_sdd_artifact_gate() {
     assert!(written.starts_with("---\n"));
     assert!(written.contains("id: SPEC-storage\n"));
     assert!(written.contains("type: spec\n"));
-    assert!(written.contains("aico_version: \"0.1.0\"\n"));
+    assert!(written.contains("aico_version: \"0.1.1\"\n"));
     assert!(written.contains("epic: 001-aico-core\n"));
     assert!(written.contains("title: Storage Engine Spec\n"));
     assert!(written.contains("derives_from: [\"ADR-0001\", \"ADR-0003\"]\n"));

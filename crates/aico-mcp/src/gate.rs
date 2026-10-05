@@ -129,7 +129,7 @@ impl ArtifactToolGate {
         let body = params.content.unwrap_or_default();
 
         let full_doc = format!(
-            "---\nid: {}\ntype: {}\naico_version: \"0.1.0\"\nepic: {}\ntitle: {}\nstatus: \"Draft\"\nderives_from: {}\ncreated_at: \"2026-10-05T20:00:00Z\"\n---\n\n{}",
+            "---\nid: {}\ntype: {}\naico_version: \"0.1.1\"\nepic: {}\ntitle: {}\nstatus: \"Draft\"\nderives_from: {}\ncreated_at: \"2026-10-05T20:00:00Z\"\n---\n\n{}",
             doc_id, params.artifact_type, params.epic_slug, params.title, derives_str, body
         );
 
