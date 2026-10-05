@@ -4,6 +4,13 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ProjectStatus {
+    Active,
+    CodebaseMissing,
+    MalformedManifest,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DiscoveredProject {
     pub id: String,
@@ -11,6 +18,7 @@ pub struct DiscoveredProject {
     pub specs_path: PathBuf,
     pub codebase_path: PathBuf,
     pub manifest: ProjectManifest,
+    pub status: ProjectStatus,
 }
 
 pub struct RootScanner;
@@ -18,6 +26,7 @@ pub struct RootScanner;
 impl RootScanner {
     /// Scan root directory for `*-specs` folders containing `.aico-project.json`
     // @implements SPEC-CORE-004::REQ-001
+    // @implements SPEC-CORE-004::REQ-011
     pub fn scan<P: AsRef<Path>>(root: P) -> Result<Vec<DiscoveredProject>, ManifestError> {
         let root_path = root.as_ref();
         if !root_path.exists() || !root_path.is_dir() {
@@ -43,12 +52,19 @@ impl RootScanner {
                     let manifest = ProjectManifest::from_json_str(&content)?;
                     let codebase_path = manifest.resolve_codebase_path(&path)?;
 
+                    let status = if codebase_path.exists() {
+                        ProjectStatus::Active
+                    } else {
+                        ProjectStatus::CodebaseMissing
+                    };
+
                     discovered.push(DiscoveredProject {
                         id: manifest.name.clone(),
                         name: manifest.name.clone(),
                         specs_path: path,
                         codebase_path,
                         manifest,
+                        status,
                     });
                 }
             }

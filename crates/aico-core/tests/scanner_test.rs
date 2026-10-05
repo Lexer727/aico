@@ -45,6 +45,7 @@ fn test_workspace_registry_tracks_active_project() {
             codebase_path: "../codebase/alpha".to_string(),
             created_at: None,
         },
+        status: aico_core::ProjectStatus::Active,
     };
 
     registry.register(project.clone());

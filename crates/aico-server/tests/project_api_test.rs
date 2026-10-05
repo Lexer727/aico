@@ -22,6 +22,7 @@ async fn test_project_management_rest_api() {
             codebase_path: "../codebase/core".to_string(),
             created_at: None,
         },
+        status: aico_core::ProjectStatus::Active,
     };
     registry.register(project);
 
