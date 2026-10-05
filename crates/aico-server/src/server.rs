@@ -140,7 +140,7 @@ impl HostServer {
         self.bound_addr
     }
 
-    /// Builds the internal Axum router with health, project discovery, and core endpoints
+    // @implements SPEC-CORE-001::REQ-002
     // @implements SPEC-CORE-001::REQ-006
     // @implements SPEC-CORE-004::REQ-008
     pub fn build_router(state: AppState) -> Router {
@@ -148,6 +148,7 @@ impl HostServer {
             .route("/api/v1/health", get(health_check_handler))
             .route("/api/v1/projects", get(list_projects_handler))
             .route("/api/v1/projects/active", post(set_active_project_handler))
+            .fallback(crate::assets::static_asset_handler)
             .with_state(state)
     }
 
