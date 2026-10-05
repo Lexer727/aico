@@ -1,0 +1,26 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/aico-core",
+    "crates/aico-security",
+    "crates/aico-server",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["AICO Contributors"]
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+tokio = { version = "1.36", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+regex = "1.10"
+axum = { version = "0.7", features = ["ws"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace", "fs"] }
+reqwest = { version = "0.11", features = ["json"] }
