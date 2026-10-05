@@ -2,7 +2,9 @@ use crate::manifest::{ManifestError, ProjectManifest};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DiscoveredProject {
     pub id: String,
     pub name: String,

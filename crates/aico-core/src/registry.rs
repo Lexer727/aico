@@ -41,4 +41,9 @@ impl WorkspaceRegistry {
     pub fn list(&self) -> Vec<&DiscoveredProject> {
         self.projects.values().collect()
     }
+
+    /// List cloned projects for serialization
+    pub fn list_cloned(&self) -> Vec<DiscoveredProject> {
+        self.projects.values().cloned().collect()
+    }
 }

@@ -1,0 +1,73 @@
+use aico_core::{DiscoveredProject, ProjectManifest, WorkspaceRegistry};
+use aico_server::{AppState, HostServer, ServerConfig};
+use std::path::PathBuf;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+// @verifies SPEC-CORE-004::REQ-008
+#[tokio::test]
+async fn test_project_management_rest_api() {
+    let mut config = ServerConfig::default();
+    config.base_port = 4250;
+
+    let mut registry = WorkspaceRegistry::new();
+    let project = DiscoveredProject {
+        id: "core-project".to_string(),
+        name: "core-project".to_string(),
+        specs_path: PathBuf::from("d:/aico/core-specs"),
+        codebase_path: PathBuf::from("d:/aico/codebase/core"),
+        manifest: ProjectManifest {
+            name: "core-project".to_string(),
+            version: "0.1.0".to_string(),
+            codebase_path: "../codebase/core".to_string(),
+            created_at: None,
+        },
+    };
+    registry.register(project);
+
+    let state = AppState {
+        registry: Arc::new(RwLock::new(registry)),
+        ..Default::default()
+    };
+
+    let mut server = HostServer::with_state(config, state);
+    let addr = server.bind().await.expect("Server should bind successfully");
+
+    let server_task = tokio::spawn(async move {
+        server.serve().await.expect("Server should run");
+    });
+
+    let client = reqwest::Client::new();
+
+    // 1. GET /api/v1/projects
+    let list_res = client
+        .get(format!("http://{}/api/v1/projects", addr))
+        .send()
+        .await
+        .expect("Request should succeed");
+    assert_eq!(list_res.status(), 200);
+
+    let projects: Vec<DiscoveredProject> = list_res.json().await.expect("Should parse as JSON");
+    assert_eq!(projects.len(), 1);
+    assert_eq!(projects[0].name, "core-project");
+
+    // 2. POST /api/v1/projects/active (Valid project)
+    let active_res = client
+        .post(format!("http://{}/api/v1/projects/active", addr))
+        .json(&serde_json::json!({ "project_id": "core-project" }))
+        .send()
+        .await
+        .expect("Active request should succeed");
+    assert_eq!(active_res.status(), 200);
+
+    // 3. POST /api/v1/projects/active (Nonexistent project -> 404)
+    let not_found_res = client
+        .post(format!("http://{}/api/v1/projects/active", addr))
+        .json(&serde_json::json!({ "project_id": "nonexistent" }))
+        .send()
+        .await
+        .expect("Request should complete");
+    assert_eq!(not_found_res.status(), 404);
+
+    server_task.abort();
+}
