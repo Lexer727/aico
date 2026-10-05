@@ -11,6 +11,14 @@ pub enum CommandTier {
     Tier3DangerousOrEgress,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AutoModeState {
+    Off,
+    ReadOnly,
+    Assisted,
+    Autonomous,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PolicyDecision {
     pub tier: CommandTier,
@@ -22,12 +30,21 @@ pub struct PolicyEngine {
     workspace_root: PathBuf,
 }
 
+impl Default for PolicyEngine {
+    fn default() -> Self {
+        Self {
+            workspace_root: PathBuf::from("."),
+        }
+    }
+}
+
 impl PolicyEngine {
     pub fn new<P: AsRef<Path>>(workspace_root: P) -> Self {
         Self {
             workspace_root: Self::normalize_path(workspace_root.as_ref()),
         }
     }
+
 
     /// Normalizes path by resolving `.` and `..` components cleanly
     fn normalize_path(path: &Path) -> PathBuf {
@@ -112,4 +129,29 @@ impl PolicyEngine {
             reason: "Unclassified command requires interactive approval".to_string(),
         }
     }
+
+    /// Evaluate command policy with explicit AutoMode state
+    // @implements SPEC-CORE-002::REQ-011
+    pub fn evaluate_with_mode<P: AsRef<Path>>(&self, cmd: &str, cwd: P, mode: AutoModeState) -> PolicyDecision {
+        let mut decision = self.classify_command(cmd, cwd);
+        match mode {
+            AutoModeState::Off => {
+                if decision.tier == CommandTier::Tier2WorkspaceWrite || decision.tier == CommandTier::Tier3DangerousOrEgress {
+                    decision.requires_gate = true;
+                    decision.reason = format!("AutoMode is Off: {:?} requires interactive gate", decision.tier);
+                }
+            }
+            AutoModeState::ReadOnly => {
+                if decision.tier != CommandTier::Tier1Read {
+                    decision.requires_gate = true;
+                    decision.reason = format!("AutoMode is ReadOnly: {:?} requires interactive gate", decision.tier);
+                }
+            }
+            AutoModeState::Assisted | AutoModeState::Autonomous => {
+                // Tier 1 and Tier 2 proceed according to standard classification; Tier 3 retains requires_gate = true
+            }
+        }
+        decision
+    }
 }
+

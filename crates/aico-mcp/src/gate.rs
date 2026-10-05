@@ -1,0 +1,139 @@
+use std::fs;
+use std::path::{Path, PathBuf};
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+#[derive(Error, Debug, PartialEq, Eq)]
+pub enum GateError {
+    #[error("Custom file path is strictly prohibited: {0}")]
+    CustomPathProhibited(String),
+    #[error("DuplicateArtifactId: Artifact file already exists at {0}")]
+    DuplicateArtifactId(String),
+    #[error("Invalid artifact_type '{0}'. Must be one of: brainstorm, deep_dive, spec, plan")]
+    InvalidArtifactType(String),
+    #[error("Missing required parameter: {0}")]
+    MissingParameter(String),
+    #[error("IO error: {0}")]
+    Io(String),
+}
+
+impl From<std::io::Error> for GateError {
+    fn from(err: std::io::Error) -> Self {
+        GateError::Io(err.to_string())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateArtifactParams {
+    pub specs_root: PathBuf,
+    pub custom_path: Option<String>,
+    pub artifact_type: String,
+    pub epic_slug: String,
+    pub spec_slug: Option<String>,
+    pub slug: String,
+    pub title: String,
+    pub derives_from: Option<Vec<String>>,
+    pub content: Option<String>,
+}
+
+pub struct ArtifactToolGate;
+
+impl ArtifactToolGate {
+    /// Calculate deterministic destination file path for artifact
+    // @implements SPEC-CORE-005::REQ-002
+    // @implements SPEC-CORE-005::REQ-010
+    pub fn determine_path(
+        specs_root: &Path,
+        artifact_type: &str,
+        epic_slug: &str,
+        spec_slug: Option<&str>,
+        slug: &str,
+    ) -> Result<PathBuf, GateError> {
+        let prefix = match artifact_type {
+            "spec" => "SPEC",
+            "plan" => "PLAN",
+            "deep_dive" => "DIVE",
+            "brainstorm" => "BRAIN",
+            other => return Err(GateError::InvalidArtifactType(other.to_string())),
+        };
+
+        let file_name = format!("{}-{}.md", prefix, slug);
+
+        let path = match (artifact_type, spec_slug) {
+            ("brainstorm", None) => {
+                specs_root.join("epics").join(epic_slug).join(file_name)
+            }
+            (_, Some(spec_dir)) => {
+                specs_root
+                    .join("epics")
+                    .join(epic_slug)
+                    .join("specs")
+                    .join(spec_dir)
+                    .join(file_name)
+            }
+            (_, None) => {
+                specs_root
+                    .join("epics")
+                    .join(epic_slug)
+                    .join("specs")
+                    .join(slug)
+                    .join(file_name)
+            }
+        };
+
+        Ok(path)
+    }
+
+    /// Inject YAML frontmatter and write artifact atomically to disk
+    // @implements SPEC-CORE-005::REQ-003
+    // @implements SPEC-CORE-005::REQ-005
+    // @implements SPEC-CORE-005::REQ-012
+    pub fn create_artifact(params: CreateArtifactParams) -> Result<PathBuf, GateError> {
+        if let Some(custom) = params.custom_path {
+            return Err(GateError::CustomPathProhibited(custom));
+        }
+
+        let target_path = Self::determine_path(
+            &params.specs_root,
+            &params.artifact_type,
+            &params.epic_slug,
+            params.spec_slug.as_deref(),
+            &params.slug,
+        )?;
+
+        if target_path.exists() {
+            return Err(GateError::DuplicateArtifactId(target_path.display().to_string()));
+        }
+
+        if let Some(parent) = target_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let prefix = match params.artifact_type.as_str() {
+            "spec" => "SPEC",
+            "plan" => "PLAN",
+            "deep_dive" => "DIVE",
+            "brainstorm" => "BRAIN",
+            other => return Err(GateError::InvalidArtifactType(other.to_string())),
+        };
+        let doc_id = format!("{}-{}", prefix, params.slug);
+
+        let derives_str = match params.derives_from {
+            Some(ref list) => {
+                let items: Vec<String> = list.iter().map(|s| format!("\"{}\"", s)).collect();
+                format!("[{}]", items.join(", "))
+            }
+            None => "[]".to_string(),
+        };
+
+        let body = params.content.unwrap_or_default();
+
+        let full_doc = format!(
+            "---\nid: {}\ntype: {}\naico_version: \"0.1.0\"\nepic: {}\ntitle: {}\nstatus: \"Draft\"\nderives_from: {}\ncreated_at: \"2026-10-05T20:00:00Z\"\n---\n\n{}",
+            doc_id, params.artifact_type, params.epic_slug, params.title, derives_str, body
+        );
+
+        fs::write(&target_path, full_doc)?;
+        Ok(target_path)
+    }
+}

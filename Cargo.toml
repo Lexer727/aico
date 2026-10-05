@@ -5,6 +5,7 @@ members = [
     "crates/aico-security",
     "crates/aico-server",
     "crates/aico-mcp",
+    "crates/aico-storage",
 ]
 
 [workspace.package]

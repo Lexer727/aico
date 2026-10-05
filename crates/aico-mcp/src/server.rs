@@ -105,13 +105,58 @@ impl McpServerManager {
                     Err(e) => Err(ToolError::ExecutionFailed(e.to_string())),
                 }
             }
-            "create_sdd_artifact" | "verify_task" => {
-                // Returns successful acknowledgement payload
-                Ok(serde_json::json!({
-                    "status": "gate_validated",
-                    "tool": name,
-                    "params": params
-                }))
+            "create_sdd_artifact" => {
+                let parsed: crate::gate::CreateArtifactParams = serde_json::from_value(params)
+                    .map_err(|e| ToolError::InvalidParameters(name.to_string(), e.to_string()))?;
+                match crate::gate::ArtifactToolGate::create_artifact(parsed) {
+                    Ok(path) => Ok(serde_json::json!({
+                        "status": "created",
+                        "path": path.to_string_lossy()
+                    })),
+                    Err(crate::gate::GateError::CustomPathProhibited(msg)) => {
+                        Err(ToolError::ExecutionFailed(format!("Custom file path is strictly prohibited: {}", msg)))
+                    }
+                    Err(crate::gate::GateError::DuplicateArtifactId(msg)) => {
+                        Err(ToolError::ExecutionFailed(format!("DuplicateArtifactId: Artifact file already exists at {}", msg)))
+                    }
+                    Err(e) => Err(ToolError::ExecutionFailed(e.to_string())),
+                }
+            }
+            "verify_task" => {
+                let task_id = params
+                    .get("task_id")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| ToolError::InvalidParameters(name.to_string(), "Missing 'task_id'".to_string()))?;
+                let req_id = params
+                    .get("requirement_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let test_name = params
+                    .get("test_name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("test_seam");
+                let symbol_name = params
+                    .get("symbol_name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("symbol");
+                let test_status_str = params
+                    .get("test_status")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("passed");
+
+                let status = match test_status_str {
+                    "passed" => crate::traceability::VerificationStatus::Passed,
+                    _ => crate::traceability::VerificationStatus::Failed,
+                };
+
+                let mut tracker = crate::traceability::TraceabilityTracker::new();
+                tracker.record_verifies_edge(test_name, req_id, status);
+                tracker.record_implements_edge(symbol_name, req_id);
+
+                match tracker.verify_task(task_id, req_id) {
+                    Ok(report) => Ok(serde_json::to_value(report).unwrap()),
+                    Err(e) => Err(ToolError::ExecutionFailed(e.to_string())),
+                }
             }
             _ => Err(ToolError::UnknownTool(name.to_string())),
         }
