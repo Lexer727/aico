@@ -1,5 +1,4 @@
 use aico_server::{HostServer, ServerConfig, HealthResponse};
-use std::net::SocketAddr;
 
 // @verifies SPEC-CORE-001::REQ-001
 #[tokio::test]
@@ -18,14 +17,14 @@ async fn test_server_binds_to_available_port() {
 #[tokio::test]
 async fn test_health_check_endpoint() {
     let mut config = ServerConfig::default();
-    config.base_port = 4243;
+    config.base_port = 4244;
 
     let mut server = HostServer::new(config);
     let addr = server.bind().await.expect("Server should bind successfully");
 
     // Spawn server background task
     let server_task = tokio::spawn(async move {
-        // Run loop stub
+        server.serve().await.expect("Server should run cleanly");
     });
 
     let client = reqwest::Client::new();
