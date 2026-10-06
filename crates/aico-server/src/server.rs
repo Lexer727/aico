@@ -1,7 +1,7 @@
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        State,
+        Path, Query, State,
     },
     http::StatusCode,
     response::IntoResponse,
@@ -158,9 +158,13 @@ impl HostServer {
             .route("/api/v1/projects", get(list_projects_handler))
             .route("/api/v1/projects/active", post(set_active_project_handler))
             .route("/api/v1/epics", get(list_epics_handler))
+            .route("/api/v1/epics/:id", get(get_epic_handler))
             .route("/api/v1/features", get(list_features_handler))
+            .route("/api/v1/features/:id", get(get_feature_handler))
             .route("/api/v1/adrs", get(list_adrs_handler))
+            .route("/api/v1/adrs/:id", get(get_adr_handler))
             .route("/api/v1/stats", get(get_stats_handler))
+            .route("/api/v1/raw", get(get_raw_file_handler))
             .route("/ws", get(ws_handler))
             .fallback(crate::assets::static_asset_handler)
             .with_state(state)
@@ -242,6 +246,44 @@ async fn set_active_project_handler(
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FeatureRequirementInfo {
+    pub id: String,
+    pub pattern: String,
+    pub statement: String,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seam: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FeatureTaskInfo {
+    pub id: String,
+    pub title: String,
+    pub status: String,
+    #[serde(default)]
+    pub addresses: Vec<String>,
+    #[serde(default)]
+    pub blocked_by: Vec<String>,
+    #[serde(default)]
+    pub deliverables: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seam: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TestSeamInfo {
+    pub id: String,
+    pub path: String,
+    pub description: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TermInfo {
+    pub term: String,
+    pub definition: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DiscoveredEpic {
     pub id: String,
     pub title: String,
@@ -251,6 +293,12 @@ pub struct DiscoveredEpic {
     pub features: Vec<DiscoveredFeatureInfo>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub order: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub executive_summary: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub brainstorm_content: Option<String>,
+    #[serde(default)]
+    pub ubiquitous_language: Vec<TermInfo>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -267,6 +315,24 @@ pub struct DiscoveredFeatureInfo {
     pub order: Option<u32>,
     #[serde(default)]
     pub is_standalone: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub in_scope: Vec<String>,
+    #[serde(default)]
+    pub out_of_scope: Vec<String>,
+    #[serde(default)]
+    pub requirements: Vec<FeatureRequirementInfo>,
+    #[serde(default)]
+    pub test_seams: Vec<TestSeamInfo>,
+    #[serde(default)]
+    pub adrs: Vec<String>,
+    #[serde(default)]
+    pub tasks: Vec<FeatureTaskInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_spec_content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_plan_content: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -277,6 +343,8 @@ pub struct DiscoveredSpecInfo {
     pub path: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub order: Option<u32>,
+    #[serde(default)]
+    pub requirements_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -285,6 +353,12 @@ pub struct DiscoveredAdrInfo {
     pub title: String,
     pub status: String,
     pub path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub decision: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub consequences: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -295,19 +369,24 @@ pub struct SystemStats {
     pub uptime_seconds: u64,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct RawFileQuery {
+    pub path: String,
+}
+
 /// Helper function to parse YAML frontmatter strictly between `---` markers
-pub fn parse_frontmatter(content: &str) -> (Option<String>, Option<String>, Option<String>, Option<u32>) {
+pub fn parse_frontmatter_full(content: &str) -> (Option<String>, Option<String>, Option<String>, Option<u32>, Vec<String>) {
     let mut id = None;
     let mut title = None;
     let mut status = None;
     let mut order = None;
+    let mut derives_from = Vec::new();
     let mut in_frontmatter = false;
 
     for line in content.lines() {
         let trimmed = line.trim();
         if trimmed == "---" {
             if in_frontmatter {
-                // End of frontmatter block; stop parsing to prevent body examples from overwriting
                 break;
             } else {
                 in_frontmatter = true;
@@ -324,11 +403,470 @@ pub fn parse_frontmatter(content: &str) -> (Option<String>, Option<String>, Opti
                 status = Some(rest.trim().trim_matches('"').to_string());
             } else if let Some(rest) = trimmed.strip_prefix("order:") {
                 order = rest.trim().trim_matches('"').parse::<u32>().ok();
+            } else if let Some(rest) = trimmed.strip_prefix("derives_from:") {
+                let val = rest.trim();
+                if val.starts_with('[') && val.ends_with(']') {
+                    let inner = &val[1..val.len() - 1];
+                    for item in inner.split(',') {
+                        let cleaned = item.trim().trim_matches('"').trim_matches('\'').trim();
+                        if !cleaned.is_empty() {
+                            derives_from.push(cleaned.to_string());
+                        }
+                    }
+                }
             }
         }
     }
 
+    (id, title, status, order, derives_from)
+}
+
+pub fn parse_frontmatter(content: &str) -> (Option<String>, Option<String>, Option<String>, Option<u32>) {
+    let (id, title, status, order, _) = parse_frontmatter_full(content);
     (id, title, status, order)
+}
+
+/// Parse specification markdown content into structured fields
+pub fn parse_spec_details(content: &str) -> (Option<String>, Vec<String>, Vec<String>, Vec<FeatureRequirementInfo>, Vec<TestSeamInfo>) {
+    let mut description_lines = Vec::new();
+    let mut in_scope = Vec::new();
+    let mut out_of_scope = Vec::new();
+    let mut requirements = Vec::new();
+    let mut test_seams = Vec::new();
+
+    let mut current_section = "";
+    let mut current_pattern = "Ubiquitous".to_string();
+    let mut in_frontmatter = false;
+    let mut frontmatter_ended = false;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed == "---" {
+            if !in_frontmatter {
+                in_frontmatter = true;
+                continue;
+            } else {
+                in_frontmatter = false;
+                frontmatter_ended = true;
+                continue;
+            }
+        }
+        if !frontmatter_ended {
+            continue;
+        }
+
+        if trimmed.starts_with("## ") {
+            let heading = trimmed.trim_start_matches("## ").trim();
+            let heading_lower = heading.to_lowercase();
+            if heading_lower.contains("problem statement") || heading_lower.contains("purpose") || heading_lower.contains("user value") {
+                current_section = "purpose";
+            } else if heading_lower.contains("in-scope") || heading_lower.contains("in scope") {
+                current_section = "in_scope";
+            } else if heading_lower.contains("out-of-scope") || heading_lower.contains("out of scope") {
+                current_section = "out_of_scope";
+            } else if heading_lower.contains("requirement") || heading_lower.contains("ears") {
+                current_section = "requirements";
+            } else if heading_lower.contains("seam") {
+                current_section = "seams";
+            } else {
+                current_section = "";
+            }
+            continue;
+        }
+
+        if trimmed.starts_with("### ") {
+            let sub = trimmed.trim_start_matches("### ").trim();
+            let sub_lower = sub.to_lowercase();
+            if current_section == "requirements" {
+                if sub_lower.contains("ubiquitous") {
+                    current_pattern = "Ubiquitous".to_string();
+                } else if sub_lower.contains("event-driven") || sub_lower.contains("event driven") {
+                    current_pattern = "Event-Driven".to_string();
+                } else if sub_lower.contains("state-driven") || sub_lower.contains("state driven") {
+                    current_pattern = "State-Driven".to_string();
+                } else if sub_lower.contains("unwanted") {
+                    current_pattern = "Unwanted Behavior".to_string();
+                } else if sub_lower.contains("optional") {
+                    current_pattern = "Optional Feature".to_string();
+                }
+            }
+
+            if sub.starts_with("REQ-") {
+                let parts: Vec<&str> = sub.splitn(2, ':').collect();
+                let req_id = parts[0].trim().to_string();
+                let rest = parts.get(1).map(|s| s.trim()).unwrap_or("");
+                let pattern = if rest.to_lowercase().contains("event") {
+                    "Event-Driven".to_string()
+                } else if rest.to_lowercase().contains("state") {
+                    "State-Driven".to_string()
+                } else if rest.to_lowercase().contains("unwanted") {
+                    "Unwanted Behavior".to_string()
+                } else if rest.to_lowercase().contains("optional") {
+                    "Optional Feature".to_string()
+                } else {
+                    current_pattern.clone()
+                };
+                requirements.push(FeatureRequirementInfo {
+                    id: req_id,
+                    pattern,
+                    statement: rest.to_string(),
+                    status: "Verified".to_string(),
+                    seam: None,
+                });
+            }
+            continue;
+        }
+
+        match current_section {
+            "purpose" => {
+                if !trimmed.is_empty() && !trimmed.starts_with('#') && trimmed != "---" {
+                    description_lines.push(trimmed);
+                }
+            }
+            "in_scope" => {
+                if let Some(item) = trimmed.strip_prefix("- ").or_else(|| trimmed.strip_prefix("* ")) {
+                    in_scope.push(item.trim().to_string());
+                }
+            }
+            "out_of_scope" => {
+                if let Some(item) = trimmed.strip_prefix("- ").or_else(|| trimmed.strip_prefix("* ")) {
+                    out_of_scope.push(item.trim().to_string());
+                }
+            }
+            "requirements" => {
+                if trimmed.starts_with("- **REQ-") {
+                    if let Some(colon_pos) = trimmed.find("**:") {
+                        let id = trimmed[4..colon_pos].trim().to_string();
+                        let statement = trimmed[colon_pos + 3..].trim().to_string();
+                        requirements.push(FeatureRequirementInfo {
+                            id,
+                            pattern: current_pattern.clone(),
+                            statement,
+                            status: "Verified".to_string(),
+                            seam: None,
+                        });
+                    }
+                }
+            }
+            "seams" => {
+                if (trimmed.starts_with("1. ") || trimmed.starts_with("2. ") || trimmed.starts_with("3. ") || trimmed.starts_with("4. ") || trimmed.starts_with("- ")) && trimmed.contains("**") {
+                    let seam_id = format!("SEAM-00{}", test_seams.len() + 1);
+                    test_seams.push(TestSeamInfo {
+                        id: seam_id,
+                        path: trimmed.to_string(),
+                        description: trimmed.to_string(),
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let description = if description_lines.is_empty() {
+        None
+    } else {
+        Some(description_lines.join(" "))
+    };
+
+    (description, in_scope, out_of_scope, requirements, test_seams)
+}
+
+/// Parse task plan markdown content into structured DAG tasks (no execution waves)
+pub fn parse_plan_tasks(content: &str) -> Vec<FeatureTaskInfo> {
+    let mut tasks = Vec::new();
+    let mut current_task: Option<FeatureTaskInfo> = None;
+    let mut in_deliverables = false;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+
+        if trimmed.starts_with("- **TASK-") {
+            if let Some(task) = current_task.take() {
+                tasks.push(task);
+            }
+            in_deliverables = false;
+
+            if let Some(colon_pos) = trimmed.find("**:") {
+                let id = trimmed[4..colon_pos].trim().to_string();
+                let title = trimmed[colon_pos + 3..].trim().to_string();
+                current_task = Some(FeatureTaskInfo {
+                    id,
+                    title,
+                    status: "Done".to_string(),
+                    addresses: Vec::new(),
+                    blocked_by: Vec::new(),
+                    deliverables: Vec::new(),
+                    seam: None,
+                });
+            }
+            continue;
+        }
+
+        if let Some(ref mut task) = current_task {
+            if let Some(status_str) = trimmed.strip_prefix("- **Status**:") {
+                let s = status_str.trim();
+                let clean_status = s.split('#').next().unwrap_or(s).trim();
+                task.status = clean_status.to_string();
+                in_deliverables = false;
+            } else if let Some(addr_str) = trimmed.strip_prefix("- **Addresses**:") {
+                let clean = addr_str.trim().replace('`', "");
+                task.addresses = clean.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+                in_deliverables = false;
+            } else if let Some(block_str) = trimmed.strip_prefix("- **Blocked by**:") {
+                let clean = block_str.trim().replace('`', "");
+                if clean.to_lowercase() != "none" && !clean.to_lowercase().starts_with("none") {
+                    task.blocked_by = clean.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+                }
+                in_deliverables = false;
+            } else if let Some(seam_str) = trimmed.strip_prefix("- **Verification Seam**:") {
+                let clean = seam_str.trim().replace('`', "");
+                task.seam = Some(clean);
+                in_deliverables = false;
+            } else if trimmed.starts_with("- **What it delivers**:") {
+                in_deliverables = true;
+            } else if in_deliverables && (trimmed.starts_with("- ") || trimmed.starts_with("* ")) {
+                let item = trimmed[2..].trim().to_string();
+                task.deliverables.push(item);
+            } else if trimmed.starts_with("- **") {
+                in_deliverables = false;
+            }
+        }
+    }
+
+    if let Some(task) = current_task {
+        tasks.push(task);
+    }
+
+    tasks
+}
+
+/// Parse ADR markdown content into context, decision, consequences
+pub fn parse_adr_details(content: &str) -> (Option<String>, Option<String>, Option<String>) {
+    let mut context_lines = Vec::new();
+    let mut decision_lines = Vec::new();
+    let mut consequences_lines = Vec::new();
+    let mut current_sec = "";
+    let mut frontmatter_ended = false;
+    let mut in_frontmatter = false;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed == "---" {
+            if !in_frontmatter {
+                in_frontmatter = true;
+                continue;
+            } else {
+                in_frontmatter = false;
+                frontmatter_ended = true;
+                continue;
+            }
+        }
+        if !frontmatter_ended {
+            continue;
+        }
+
+        if trimmed.starts_with("## ") {
+            let h = trimmed.trim_start_matches("## ").trim().to_lowercase();
+            if h.contains("context") {
+                current_sec = "context";
+            } else if h.contains("decision") {
+                current_sec = "decision";
+            } else if h.contains("consequence") {
+                current_sec = "consequences";
+            } else {
+                current_sec = "";
+            }
+            continue;
+        }
+
+        if trimmed.starts_with("### ") && current_sec == "consequences" {
+            continue;
+        }
+
+        if !trimmed.is_empty() && !trimmed.starts_with('#') {
+            match current_sec {
+                "context" => context_lines.push(trimmed),
+                "decision" => decision_lines.push(trimmed),
+                "consequences" => consequences_lines.push(trimmed),
+                _ => {}
+            }
+        }
+    }
+
+    (
+        if context_lines.is_empty() { None } else { Some(context_lines.join(" ")) },
+        if decision_lines.is_empty() { None } else { Some(decision_lines.join(" ")) },
+        if consequences_lines.is_empty() { None } else { Some(consequences_lines.join(" ")) },
+    )
+}
+
+/// Parse executive summary from brain-*.md
+pub fn parse_epic_brainstorm(content: &str) -> Option<String> {
+    let mut summary_lines = Vec::new();
+    let mut in_summary = false;
+    let mut frontmatter_ended = false;
+    let mut in_frontmatter = false;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed == "---" {
+            if !in_frontmatter {
+                in_frontmatter = true;
+                continue;
+            } else {
+                in_frontmatter = false;
+                frontmatter_ended = true;
+                continue;
+            }
+        }
+        if !frontmatter_ended {
+            continue;
+        }
+
+        if trimmed.starts_with("## ") {
+            let h = trimmed.trim_start_matches("## ").trim().to_lowercase();
+            if h.contains("executive summary") || h.contains("problem statement") || h.contains("overview") {
+                in_summary = true;
+            } else {
+                if in_summary && !summary_lines.is_empty() {
+                    break;
+                }
+                in_summary = false;
+            }
+            continue;
+        }
+
+        if in_summary && !trimmed.is_empty() && !trimmed.starts_with('#') {
+            summary_lines.push(trimmed);
+        }
+    }
+
+    if summary_lines.is_empty() {
+        None
+    } else {
+        Some(summary_lines.join(" "))
+    }
+}
+
+/// Parse glossary definitions from GLOSSARY.md
+pub fn parse_glossary_terms(content: &str) -> Vec<TermInfo> {
+    let mut terms = Vec::new();
+    let mut current_term: Option<String> = None;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("### ") {
+            current_term = Some(trimmed.trim_start_matches("### ").trim().to_string());
+            continue;
+        }
+
+        if let Some(ref term) = current_term {
+            if let Some(def) = trimmed.strip_prefix("- **Definition**:") {
+                terms.push(TermInfo {
+                    term: term.clone(),
+                    definition: def.trim().to_string(),
+                });
+                current_term = None;
+            }
+        }
+    }
+
+    terms
+}
+
+/// Helper function to scan a feature directory and build a complete DiscoveredFeatureInfo
+pub fn scan_feature_dir(feat_path: &std::path::Path, epic_id: &str, is_standalone: bool) -> Option<DiscoveredFeatureInfo> {
+    if !feat_path.is_dir() {
+        return None;
+    }
+
+    let feat_id = feat_path.file_name()?.to_string_lossy().to_string().to_lowercase();
+    let mut feat_spec_id = None;
+    let mut feat_spec_title = None;
+    let mut feat_plan_id = None;
+    let mut feat_plan_title = None;
+    let mut feat_status = "In Progress".to_string();
+    let mut feat_order = None;
+    let mut description = None;
+    let mut in_scope = Vec::new();
+    let mut out_of_scope = Vec::new();
+    let mut requirements = Vec::new();
+    let mut test_seams = Vec::new();
+    let mut adrs = Vec::new();
+    let mut tasks = Vec::new();
+    let mut raw_spec_content = None;
+    let mut raw_plan_content = None;
+
+    if let Ok(files) = std::fs::read_dir(feat_path) {
+        for f in files.flatten() {
+            let fname = f.file_name().to_string_lossy().to_string();
+            let fname_lower = fname.to_lowercase();
+            if fname_lower.starts_with("spec-") && fname_lower.ends_with(".md") {
+                let mut s_id = fname.trim_end_matches(".md").to_string().to_lowercase();
+                let mut s_title = s_id.clone();
+                let mut s_status = "In Progress".to_string();
+
+                if let Ok(scontent) = std::fs::read_to_string(f.path()) {
+                    let (fm_id, fm_title, fm_status, fm_order, derives_from) = parse_frontmatter_full(&scontent);
+                    if let Some(fid) = fm_id { s_id = fid.to_lowercase(); }
+                    if let Some(ftitle) = fm_title { s_title = ftitle; }
+                    if let Some(fstatus) = fm_status { s_status = fstatus; }
+                    if let Some(forder) = fm_order { feat_order = Some(forder); }
+                    adrs = derives_from;
+
+                    let (desc, in_s, out_s, reqs, seams) = parse_spec_details(&scontent);
+                    description = desc;
+                    in_scope = in_s;
+                    out_of_scope = out_s;
+                    requirements = reqs;
+                    test_seams = seams;
+                    raw_spec_content = Some(scontent);
+                }
+
+                feat_spec_id = Some(s_id);
+                feat_spec_title = Some(s_title);
+                feat_status = s_status;
+            } else if fname_lower.starts_with("plan-") && fname_lower.ends_with(".md") {
+                let mut p_id = fname.trim_end_matches(".md").to_string().to_lowercase();
+                let mut p_title = p_id.clone();
+                if let Ok(pcontent) = std::fs::read_to_string(f.path()) {
+                    let (fm_id, fm_title, _, fm_order, _) = parse_frontmatter_full(&pcontent);
+                    if let Some(fid) = fm_id { p_id = fid.to_lowercase(); }
+                    if let Some(ftitle) = fm_title { p_title = ftitle; }
+                    if feat_order.is_none() && fm_order.is_some() { feat_order = fm_order; }
+
+                    tasks = parse_plan_tasks(&pcontent);
+                    raw_plan_content = Some(pcontent);
+                }
+                feat_plan_id = Some(p_id);
+                feat_plan_title = Some(p_title);
+            }
+        }
+    }
+
+    let feat_display_name = feat_spec_title.clone().unwrap_or_else(|| feat_id.clone());
+
+    Some(DiscoveredFeatureInfo {
+        id: feat_id,
+        name: feat_display_name,
+        epic_id: epic_id.to_string(),
+        spec_id: feat_spec_id,
+        spec_title: feat_spec_title,
+        plan_id: feat_plan_id,
+        plan_title: feat_plan_title,
+        status: feat_status,
+        order: feat_order,
+        is_standalone,
+        description,
+        in_scope,
+        out_of_scope,
+        requirements,
+        test_seams,
+        adrs,
+        tasks,
+        raw_spec_content,
+        raw_plan_content,
+    })
 }
 
 // Function to scan active project's epics
@@ -338,6 +876,15 @@ pub fn scan_epics_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredEpi
         return Vec::new();
     }
 
+    let glossary_path = specs_path.join("GLOSSARY.md");
+    let ubiquitous_language = if glossary_path.exists() {
+        std::fs::read_to_string(&glossary_path)
+            .map(|c| parse_glossary_terms(&c))
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+
     let mut epics = Vec::new();
     if let Ok(entries) = std::fs::read_dir(epics_dir) {
         let mut sorted_entries: Vec<_> = entries.flatten().collect();
@@ -346,12 +893,14 @@ pub fn scan_epics_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredEpi
         for entry in sorted_entries {
             let path = entry.path();
             if path.is_dir() {
-                let epic_id = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                let epic_id = path.file_name().unwrap_or_default().to_string_lossy().to_string().to_lowercase();
                 let mut title = epic_id.clone();
                 let mut status = "In Progress".to_string();
                 let mut epic_order = None;
+                let mut executive_summary = None;
+                let mut brainstorm_content = None;
 
-                // Look for brain-*.md or BRAIN-*.md
+                // Look for brain-*.md
                 if let Ok(files) = std::fs::read_dir(&path) {
                     for f in files.flatten() {
                         let fname = f.file_name().to_string_lossy().to_string();
@@ -368,6 +917,8 @@ pub fn scan_epics_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredEpi
                                 if let Some(o) = fm_order {
                                     epic_order = Some(o);
                                 }
+                                executive_summary = parse_epic_brainstorm(&content);
+                                brainstorm_content = Some(content);
                             }
                         }
                     }
@@ -392,95 +943,24 @@ pub fn scan_epics_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredEpi
                         for feat_entry in sorted_features {
                             let feat_path = feat_entry.path();
                             if feat_path.is_dir() {
-                                let feat_id = feat_path.file_name().unwrap_or_default().to_string_lossy().to_string().to_lowercase();
-                                let mut feat_spec_id = None;
-                                let mut feat_spec_title = None;
-                                let mut feat_plan_id = None;
-                                let mut feat_plan_title = None;
-                                let mut feat_status = "In Progress".to_string();
-                                let mut feat_order = None;
-
-                                if let Ok(sfiles) = std::fs::read_dir(&feat_path) {
-                                    for sf in sfiles.flatten() {
-                                        let sfname = sf.file_name().to_string_lossy().to_string();
-                                        let sfname_lower = sfname.to_lowercase();
-                                        if sfname_lower.starts_with("spec-") && sfname_lower.ends_with(".md") {
-                                            let mut s_id = sfname.trim_end_matches(".md").to_string().to_lowercase();
-                                            let mut s_title = s_id.clone();
-                                            let mut s_status = "In Progress".to_string();
-
-                                            if let Ok(scontent) = std::fs::read_to_string(sf.path()) {
-                                                let (fm_id, fm_title, fm_status, fm_order) = parse_frontmatter(&scontent);
-                                                if let Some(fid) = fm_id {
-                                                    s_id = fid.to_lowercase();
-                                                }
-                                                if let Some(ftitle) = fm_title {
-                                                    s_title = ftitle;
-                                                }
-                                                if let Some(fstatus) = fm_status {
-                                                    s_status = fstatus;
-                                                }
-                                                if let Some(forder) = fm_order {
-                                                    feat_order = Some(forder);
-                                                }
-                                            }
-
-                                            feat_spec_id = Some(s_id.clone());
-                                            feat_spec_title = Some(s_title.clone());
-                                            feat_status = s_status.clone();
-
-                                            specs.push(DiscoveredSpecInfo {
-                                                id: s_id,
-                                                title: s_title,
-                                                status: s_status,
-                                                path: sf.path().to_string_lossy().to_string(),
-                                                order: feat_order,
-                                            });
-                                        } else if sfname_lower.starts_with("plan-") && sfname_lower.ends_with(".md") {
-                                            let mut p_id = sfname.trim_end_matches(".md").to_string().to_lowercase();
-                                            let mut p_title = p_id.clone();
-
-                                            if let Ok(pcontent) = std::fs::read_to_string(sf.path()) {
-                                                let (fm_id, fm_title, _, fm_order) = parse_frontmatter(&pcontent);
-                                                if let Some(fid) = fm_id {
-                                                    p_id = fid.to_lowercase();
-                                                }
-                                                if let Some(ftitle) = fm_title {
-                                                    p_title = ftitle;
-                                                }
-                                                if feat_order.is_none() && fm_order.is_some() {
-                                                    feat_order = fm_order;
-                                                }
-                                            }
-
-                                            feat_plan_id = Some(p_id);
-                                            feat_plan_title = Some(p_title);
-                                        }
+                                if let Some(feat_info) = scan_feature_dir(&feat_path, &epic_id, false) {
+                                    if let Some(ref sid) = feat_info.spec_id {
+                                        specs.push(DiscoveredSpecInfo {
+                                            id: sid.clone(),
+                                            title: feat_info.spec_title.clone().unwrap_or_else(|| sid.clone()),
+                                            status: feat_info.status.clone(),
+                                            path: feat_path.join(format!("{}.md", sid)).to_string_lossy().to_string(),
+                                            order: feat_info.order,
+                                            requirements_count: feat_info.requirements.len(),
+                                        });
                                     }
+                                    features.push(feat_info);
                                 }
-
-                                let feat_display_name = feat_spec_title
-                                    .clone()
-                                    .unwrap_or_else(|| feat_id.clone());
-
-                                features.push(DiscoveredFeatureInfo {
-                                    id: feat_id,
-                                    name: feat_display_name,
-                                    epic_id: epic_id.clone(),
-                                    spec_id: feat_spec_id,
-                                    spec_title: feat_spec_title,
-                                    plan_id: feat_plan_id,
-                                    plan_title: feat_plan_title,
-                                    status: feat_status,
-                                    order: feat_order,
-                                    is_standalone: false,
-                                });
                             }
                         }
                     }
                 }
 
-                // Sort specs and features by order if present
                 specs.sort_by_key(|s| (s.order.unwrap_or(9999), s.id.clone()));
                 features.sort_by_key(|f| (f.order.unwrap_or(9999), f.id.clone()));
 
@@ -492,6 +972,9 @@ pub fn scan_epics_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredEpi
                     specs,
                     features,
                     order: epic_order,
+                    executive_summary,
+                    brainstorm_content,
+                    ubiquitous_language: ubiquitous_language.clone(),
                 });
             }
         }
@@ -516,61 +999,9 @@ pub fn scan_standalone_features_for_project(specs_path: &std::path::Path) -> Vec
         for entry in sorted {
             let path = entry.path();
             if path.is_dir() {
-                let feat_id = path.file_name().unwrap_or_default().to_string_lossy().to_string().to_lowercase();
-                let mut feat_spec_id = None;
-                let mut feat_spec_title = None;
-                let mut feat_plan_id = None;
-                let mut feat_plan_title = None;
-                let mut feat_status = "In Progress".to_string();
-                let mut feat_order = None;
-
-                if let Ok(files) = std::fs::read_dir(&path) {
-                    for f in files.flatten() {
-                        let fname = f.file_name().to_string_lossy().to_string();
-                        let fname_lower = fname.to_lowercase();
-                        if fname_lower.starts_with("spec-") && fname_lower.ends_with(".md") {
-                            let mut s_id = fname.trim_end_matches(".md").to_string().to_lowercase();
-                            let mut s_title = s_id.clone();
-                            let mut s_status = "In Progress".to_string();
-
-                            if let Ok(scontent) = std::fs::read_to_string(f.path()) {
-                                let (fm_id, fm_title, fm_status, fm_order) = parse_frontmatter(&scontent);
-                                if let Some(fid) = fm_id { s_id = fid.to_lowercase(); }
-                                if let Some(ftitle) = fm_title { s_title = ftitle; }
-                                if let Some(fstatus) = fm_status { s_status = fstatus; }
-                                if let Some(forder) = fm_order { feat_order = Some(forder); }
-                            }
-                            feat_spec_id = Some(s_id);
-                            feat_spec_title = Some(s_title);
-                            feat_status = s_status;
-                        } else if fname_lower.starts_with("plan-") && fname_lower.ends_with(".md") {
-                            let mut p_id = fname.trim_end_matches(".md").to_string().to_lowercase();
-                            let mut p_title = p_id.clone();
-                            if let Ok(pcontent) = std::fs::read_to_string(f.path()) {
-                                let (fm_id, fm_title, _, fm_order) = parse_frontmatter(&pcontent);
-                                if let Some(fid) = fm_id { p_id = fid.to_lowercase(); }
-                                if let Some(ftitle) = fm_title { p_title = ftitle; }
-                                if feat_order.is_none() && fm_order.is_some() { feat_order = fm_order; }
-                            }
-                            feat_plan_id = Some(p_id);
-                            feat_plan_title = Some(p_title);
-                        }
-                    }
+                if let Some(feat_info) = scan_feature_dir(&path, "", true) {
+                    standalone.push(feat_info);
                 }
-
-                let feat_display_name = feat_spec_title.clone().unwrap_or_else(|| feat_id.clone());
-                standalone.push(DiscoveredFeatureInfo {
-                    id: feat_id,
-                    name: feat_display_name,
-                    epic_id: "".to_string(),
-                    spec_id: feat_spec_id,
-                    spec_title: feat_spec_title,
-                    plan_id: feat_plan_id,
-                    plan_title: feat_plan_title,
-                    status: feat_status,
-                    order: feat_order,
-                    is_standalone: true,
-                });
             }
         }
     }
@@ -615,6 +1046,9 @@ pub fn scan_adrs_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredAdrI
 
                 let mut title = fname.replace('-', " ");
                 let mut status = "Accepted".to_string();
+                let mut context = None;
+                let mut decision = None;
+                let mut consequences = None;
 
                 if let Ok(content) = std::fs::read_to_string(&path) {
                     let (_, fm_title, fm_status, _) = parse_frontmatter(&content);
@@ -624,6 +1058,10 @@ pub fn scan_adrs_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredAdrI
                     if let Some(s) = fm_status {
                         status = s;
                     }
+                    let (ctx, dec, con) = parse_adr_details(&content);
+                    context = ctx;
+                    decision = dec;
+                    consequences = con;
                 }
 
                 adrs.push(DiscoveredAdrInfo {
@@ -631,6 +1069,9 @@ pub fn scan_adrs_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredAdrI
                     title,
                     status,
                     path: path.to_string_lossy().to_string(),
+                    context,
+                    decision,
+                    consequences,
                 });
             }
         }
@@ -660,6 +1101,33 @@ async fn list_epics_handler(
 }
 
 // @implements SPEC-CORE-007::REQ-001
+async fn get_epic_handler(
+    Path(id): Path<String>,
+    State(state): State<AppState>,
+) -> Result<Json<DiscoveredEpic>, StatusCode> {
+    let registry = state.registry.read().await;
+    let active_project = registry.get_active();
+
+    let target_path = if let Some(proj) = active_project {
+        if proj.specs_path.exists() {
+            proj.specs_path.clone()
+        } else {
+            std::path::PathBuf::from("d:/aico/aico-specs")
+        }
+    } else {
+        std::path::PathBuf::from("d:/aico/aico-specs")
+    };
+
+    let epics = scan_epics_for_project(&target_path);
+    let id_lower = id.to_lowercase();
+    if let Some(epic) = epics.into_iter().find(|e| e.id.to_lowercase() == id_lower) {
+        Ok(Json(epic))
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
+}
+
+// @implements SPEC-CORE-007::REQ-001
 async fn list_features_handler(
     State(state): State<AppState>,
 ) -> Json<Vec<DiscoveredFeatureInfo>> {
@@ -677,6 +1145,33 @@ async fn list_features_handler(
     };
 
     Json(scan_all_features_for_project(&target_path))
+}
+
+// @implements SPEC-CORE-007::REQ-001
+async fn get_feature_handler(
+    Path(id): Path<String>,
+    State(state): State<AppState>,
+) -> Result<Json<DiscoveredFeatureInfo>, StatusCode> {
+    let registry = state.registry.read().await;
+    let active_project = registry.get_active();
+
+    let target_path = if let Some(proj) = active_project {
+        if proj.specs_path.exists() {
+            proj.specs_path.clone()
+        } else {
+            std::path::PathBuf::from("d:/aico/aico-specs")
+        }
+    } else {
+        std::path::PathBuf::from("d:/aico/aico-specs")
+    };
+
+    let all_features = scan_all_features_for_project(&target_path);
+    let id_lower = id.to_lowercase();
+    if let Some(feature) = all_features.into_iter().find(|f| f.id.to_lowercase() == id_lower) {
+        Ok(Json(feature))
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
 }
 
 // @implements SPEC-CORE-007::REQ-008
@@ -697,6 +1192,69 @@ async fn list_adrs_handler(
     };
 
     Json(scan_adrs_for_project(&target_path))
+}
+
+// @implements SPEC-CORE-007::REQ-008
+async fn get_adr_handler(
+    Path(id): Path<String>,
+    State(state): State<AppState>,
+) -> Result<Json<DiscoveredAdrInfo>, StatusCode> {
+    let registry = state.registry.read().await;
+    let active_project = registry.get_active();
+
+    let target_path = if let Some(proj) = active_project {
+        if proj.specs_path.exists() {
+            proj.specs_path.clone()
+        } else {
+            std::path::PathBuf::from("d:/aico/aico-specs")
+        }
+    } else {
+        std::path::PathBuf::from("d:/aico/aico-specs")
+    };
+
+    let adrs = scan_adrs_for_project(&target_path);
+    let id_lower = id.to_lowercase();
+    if let Some(adr) = adrs.into_iter().find(|a| a.id.to_lowercase() == id_lower || a.title.to_lowercase() == id_lower) {
+        Ok(Json(adr))
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
+}
+
+// @implements SPEC-CORE-007::REQ-001
+async fn get_raw_file_handler(
+    Query(query): Query<RawFileQuery>,
+    State(state): State<AppState>,
+) -> Result<String, StatusCode> {
+    let path = std::path::PathBuf::from(&query.path);
+    if path.exists() && path.is_file() {
+        return match std::fs::read_to_string(&path) {
+            Ok(content) => Ok(content),
+            Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+        };
+    }
+
+    let registry = state.registry.read().await;
+    let active_project = registry.get_active();
+    let target_path = if let Some(proj) = active_project {
+        if proj.specs_path.exists() {
+            proj.specs_path.clone()
+        } else {
+            std::path::PathBuf::from("d:/aico/aico-specs")
+        }
+    } else {
+        std::path::PathBuf::from("d:/aico/aico-specs")
+    };
+
+    let rel_path = target_path.join(&query.path);
+    if rel_path.exists() && rel_path.is_file() {
+        match std::fs::read_to_string(&rel_path) {
+            Ok(content) => Ok(content),
+            Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+        }
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
 }
 
 // @implements SPEC-CORE-006::REQ-012

@@ -105,5 +105,51 @@ async fn test_project_management_rest_api() {
     assert!(features.iter().any(|f| f["id"] == "ft-specs-blueprint-standards" || f["id"] == "specs-blueprint-standards"));
     assert!(features.iter().any(|f| f["id"] == "ft-fast-trace" || f["id"] == "fast-trace"));
 
+    // 7. GET /api/v1/epics/ec-core
+    let single_epic_res = client
+        .get(format!("http://{}/api/v1/epics/ec-core", addr))
+        .send()
+        .await
+        .expect("Single epic request should succeed");
+    assert_eq!(single_epic_res.status(), 200);
+    let epic_obj: serde_json::Value = single_epic_res.json().await.expect("Should parse as JSON");
+    assert_eq!(epic_obj["id"], "ec-core");
+    assert!(epic_obj["executive_summary"].is_string());
+    assert!(!epic_obj["ubiquitous_language"].as_array().unwrap().is_empty());
+
+    // 8. GET /api/v1/features/ft-fast-trace
+    let single_feat_res = client
+        .get(format!("http://{}/api/v1/features/ft-fast-trace", addr))
+        .send()
+        .await
+        .expect("Single feature request should succeed");
+    assert_eq!(single_feat_res.status(), 200);
+    let feat_obj: serde_json::Value = single_feat_res.json().await.expect("Should parse as JSON");
+    assert_eq!(feat_obj["id"], "ft-fast-trace");
+    assert!(feat_obj["description"].is_string());
+    assert!(!feat_obj["requirements"].as_array().unwrap().is_empty());
+    assert!(!feat_obj["tasks"].as_array().unwrap().is_empty());
+
+    // 9. GET /api/v1/adrs/ADR-0001
+    let single_adr_res = client
+        .get(format!("http://{}/api/v1/adrs/ADR-0001", addr))
+        .send()
+        .await
+        .expect("Single adr request should succeed");
+    assert_eq!(single_adr_res.status(), 200);
+    let adr_obj: serde_json::Value = single_adr_res.json().await.expect("Should parse as JSON");
+    assert_eq!(adr_obj["id"], "ADR-0001");
+    assert!(adr_obj["context"].is_string());
+
+    // 10. GET /api/v1/raw
+    let raw_res = client
+        .get(format!("http://{}/api/v1/raw?path=features/ft-fast-trace/spec-ft-fast-trace.md", addr))
+        .send()
+        .await
+        .expect("Raw request should succeed");
+    assert_eq!(raw_res.status(), 200);
+    let raw_text = raw_res.text().await.expect("Should read text");
+    assert!(raw_text.contains("spec-ft-fast-trace"));
+
     server_task.abort();
 }

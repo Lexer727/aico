@@ -9,7 +9,7 @@ import { TerminalConsole } from './components/terminal/TerminalConsole';
 import { DashboardView } from './features/dashboard/DashboardView';
 import { EpicHubView, type EpicData } from './features/epic-hub/EpicHubView';
 import { FeatureViewer, type FeatureData } from './features/feature-viewer/FeatureViewer';
-import { getFeatureDefinition } from './features/feature-task-data';
+import { type DiscoveredEpic, type DiscoveredFeature } from './features/feature-task-data';
 import { SpecViewer } from './features/spec-viewer/SpecViewer';
 import { CodeViewer } from './features/code-viewer/CodeViewer';
 import { AdrViewer } from './features/adr-viewer/AdrViewer';
@@ -22,41 +22,6 @@ const mockProjects = [
   { id: 'aico-core', name: 'AICO Core SDD' },
   { id: 'aico-specs', name: 'AICO Specs' },
 ];
-
-const mockEpicsData: Record<string, EpicData> = {
-  'ec-core': {
-    id: 'ec-core',
-    title: 'AICO Core SDD Platform',
-    status: 'In Progress',
-    verifiedCount: 48,
-    totalCount: 48,
-    sections: {
-      overview: 'Autonomous Intelligent Code Orchestrator (AICO) host runtime and embedded databases.',
-      brainstorm: 'Local-first architecture, LanceDB + Kùzu embedded engines, zero external services.',
-      specifications: '7 Approved EARS Specifications: Host Runtime, Security, Storage, Discovery, MCP, WebUI, Epic Hub.',
-      deepDive: 'Dependency graph traversal and module boundary designations.',
-      taskPlan: 'DAG of vertical tracer-bullet tasks advancing active frontiers across 7 waves.',
-      assets: 'Multi-modal reference designs, mockups, and assets.',
-    },
-  },
-  'ec-specs': {
-    id: 'ec-specs',
-    title: 'AICO SDD Blueprints & Migration',
-    status: 'Completed',
-    verifiedCount: 12,
-    totalCount: 12,
-    sections: {
-      overview: 'Standardization of SDD artifacts to v0.1.2, universal line-1 frontmatter, and 6-state DAG tracking.',
-      brainstorm: 'Non-destructive migration engine, AST YAML validation, zero amnesia across revisions.',
-      specifications: '3 Approved EARS Specifications: Blueprint Standards, Skills Evolution, Migration Engine.',
-      deepDive: 'File traversal boundaries, regex/AST frontmatter transformations, backward compatibility.',
-      taskPlan: 'DAG task breakdown for blueprint normalization, skill authoring, and migration toolchain.',
-      assets: 'SDD blueprint reference templates and migration validation reports.',
-    },
-  },
-};
-
-
 
 const mockNodes: GraphNode[] = [
   { id: 'epic-1', type: 'epic', label: 'Epic 001', isFrontier: false },
@@ -83,7 +48,9 @@ const MainWorkspace: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [projects, setProjects] = useState(mockProjects);
   const [discoveredEpics, setDiscoveredEpics] = useState<DiscoveredEpicNav[]>([]);
+  const [fullEpics, setFullEpics] = useState<DiscoveredEpic[]>([]);
   const [discoveredFeatures, setDiscoveredFeatures] = useState<DiscoveredFeatureNav[]>([]);
+  const [fullFeatures, setFullFeatures] = useState<DiscoveredFeature[]>([]);
   const [discoveredAdrs, setDiscoveredAdrs] = useState<DiscoveredAdrNav[]>([]);
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
   const { openTab, activeProjectId, setActiveProject, activeTabId, getProjectTabs } = useTabStore();
@@ -96,18 +63,13 @@ const MainWorkspace: React.FC = () => {
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
-          const mapped: DiscoveredEpicNav[] = data.map((e: {
-            id: string;
-            title: string;
-            status: string;
-            specs?: Array<{ id: string; title: string; status?: string }>;
-            features?: Array<{ id: string; name: string }>;
-          }) => ({
+          setFullEpics(data);
+          const mapped: DiscoveredEpicNav[] = data.map((e: DiscoveredEpic) => ({
             id: e.id,
             title: e.title,
             status: e.status,
             specs: e.specs || [],
-            features: e.features || [],
+            features: (e.features || []).map((f) => ({ id: f.id, name: f.name })),
           }));
           setDiscoveredEpics(mapped);
         }
@@ -123,14 +85,8 @@ const MainWorkspace: React.FC = () => {
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
-          const mapped: DiscoveredFeatureNav[] = data.map((f: {
-            id: string;
-            name: string;
-            epic_id?: string;
-            epicId?: string;
-            is_standalone?: boolean;
-            isStandalone?: boolean;
-          }) => ({
+          setFullFeatures(data);
+          const mapped: DiscoveredFeatureNav[] = data.map((f: DiscoveredFeature) => ({
             id: f.id,
             name: f.name || f.id,
             epicId: f.epic_id || f.epicId || '',
@@ -261,21 +217,24 @@ const MainWorkspace: React.FC = () => {
     }
 
     if (activeTab.type === 'epic') {
-      const currentEpicData = mockEpicsData[activeTab.id] || {
-        id: activeTab.id,
-        title: activeTab.title,
-        status: 'In Progress',
-        verifiedCount: 10,
-        totalCount: 10,
-        sections: {
-          overview: `Overview of ${activeTab.title}`,
-          brainstorm: `Brainstorm exploration for ${activeTab.title}`,
-          specifications: `Specifications for ${activeTab.title}`,
-          deepDive: `Deep dive boundaries for ${activeTab.title}`,
-          taskPlan: `DAG tasks for ${activeTab.title}`,
-          assets: `Assets for ${activeTab.title}`,
-        },
-      };
+      const foundEpic = fullEpics.find((e) => e.id.toLowerCase() === activeTab.id.toLowerCase());
+      const currentEpicData: EpicData = foundEpic
+        ? {
+            id: foundEpic.id,
+            title: foundEpic.title,
+            status: foundEpic.status,
+            order: foundEpic.order,
+            executiveSummary: foundEpic.executive_summary || foundEpic.executiveSummary,
+            brainstormContent: foundEpic.brainstorm_content || foundEpic.brainstormContent,
+            ubiquitousLanguage: foundEpic.ubiquitous_language || foundEpic.ubiquitousLanguage,
+            features: foundEpic.features,
+            specs: foundEpic.specs,
+          }
+        : {
+            id: activeTab.id,
+            title: activeTab.title,
+            status: 'In Progress',
+          };
 
       return (
         <div className="space-y-8">
@@ -307,37 +266,33 @@ const MainWorkspace: React.FC = () => {
     }
 
     if (activeTab.type === 'feature') {
-      const def = getFeatureDefinition(activeTab.id);
-      const disc = discoveredFeatures.find((f) => f.id === activeTab.id || f.id === def?.id);
-      const isStandalone = Boolean(
-        def?.isStandalone || disc?.isStandalone || activeTab.id.includes('fast-trace')
-      );
-      const featData: FeatureData = def
+      const foundFeat = fullFeatures.find((f) => f.id.toLowerCase() === activeTab.id.toLowerCase());
+      const featData: FeatureData = foundFeat
         ? {
-            id: def.id,
-            name: def.name,
-            epicId: isStandalone ? undefined : def.epicId,
-            isStandalone,
-            status: def.status,
-            specId: def.specId,
-            specTitle: def.specTitle,
-            planId: def.planId,
-            planTitle: def.planTitle,
-            description: def.description,
-            tasks: def.tasks as any,
+            id: foundFeat.id,
+            name: foundFeat.name,
+            epicId: foundFeat.is_standalone ? undefined : foundFeat.epic_id,
+            isStandalone: foundFeat.is_standalone,
+            status: foundFeat.status,
+            order: foundFeat.order,
+            specId: foundFeat.spec_id,
+            specTitle: foundFeat.spec_title,
+            planId: foundFeat.plan_id,
+            planTitle: foundFeat.plan_title,
+            description: foundFeat.description,
+            in_scope: foundFeat.in_scope,
+            out_of_scope: foundFeat.out_of_scope,
+            requirements: foundFeat.requirements,
+            test_seams: foundFeat.test_seams,
+            adrs: foundFeat.adrs,
+            tasks: foundFeat.tasks,
           }
         : {
             id: activeTab.id,
             name: activeTab.title,
-            epicId: isStandalone ? undefined : (disc?.epicId || 'ec-core'),
-            isStandalone,
             status: 'In Progress',
+            isStandalone: activeTab.id.includes('fast-trace'),
           };
-
-      if (isStandalone) {
-        featData.isStandalone = true;
-        featData.epicId = undefined;
-      }
 
       return (
         <FeatureViewer
@@ -375,6 +330,13 @@ const MainWorkspace: React.FC = () => {
     );
   };
 
+  const contentAreaRef = React.useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (contentAreaRef.current) {
+      contentAreaRef.current.scrollTop = 0;
+    }
+  }, [activeTabId]);
+
   return (
     <ShellLayout
       epics={discoveredEpics.length > 0 ? discoveredEpics : undefined}
@@ -387,7 +349,7 @@ const MainWorkspace: React.FC = () => {
       onSelectAdr={handleOpenAdr}
       onOpenSettings={() => setIsSettingsOpen(true)}
     >
-      {/* Top Application Bar (Search removed per user request) */}
+      {/* Top Application Bar */}
       <header className="h-12 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between px-4 gap-4">
         <div className="flex items-center gap-3">
           <ProjectSwitcher projects={projects} />
@@ -408,7 +370,7 @@ const MainWorkspace: React.FC = () => {
         }`}
       >
         {/* Central Content Area */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 min-w-0 min-h-0">
+        <div ref={contentAreaRef} className="flex-1 overflow-y-auto p-6 space-y-6 min-w-0 min-h-0">
           {renderActiveContent()}
         </div>
 
