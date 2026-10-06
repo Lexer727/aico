@@ -46,4 +46,37 @@ describe('EpicHubView Component', () => {
     fireEvent.click(popoutBtn);
     expect(onPopOut).toHaveBeenCalledWith('001-aico-core', 'specifications');
   });
+
+  it('renders overall Task Execution Progress bar in the Task Plan handle even when collapsed', () => {
+    const epicWithFeatures = {
+      ...mockEpic,
+      features: [
+        {
+          id: 'ft-01',
+          name: 'Feature 1',
+          tasks: [
+            { id: 'TASK-01', title: 'Task 1', status: 'Done' },
+            { id: 'TASK-02', title: 'Task 2', status: 'In Progress' },
+          ],
+        },
+      ],
+    };
+
+    render(<EpicHubView epic={epicWithFeatures} />);
+
+    // Check handle has progress text
+    const handleProgress = screen.getByTestId('task-plan-handle-progress');
+    expect(handleProgress).toHaveTextContent('1/2');
+    expect(handleProgress).toHaveTextContent('Done (50%)');
+
+    // Collapse Task Plan by clicking handle
+    const taskPlanHeader = screen.getByText('Task Plan');
+    fireEvent.click(taskPlanHeader);
+
+    // After collapsing, progress in handle is still visible!
+    const collapsedHandleProgress = screen.getByTestId('task-plan-handle-progress');
+    expect(collapsedHandleProgress).toBeInTheDocument();
+    expect(collapsedHandleProgress).toHaveTextContent('1/2');
+    expect(collapsedHandleProgress).toHaveTextContent('Done (50%)');
+  });
 });

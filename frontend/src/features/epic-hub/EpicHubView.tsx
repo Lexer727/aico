@@ -565,9 +565,9 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
         <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50 flex flex-col">
           <div
             onClick={() => toggleSection('taskPlan')}
-            className="flex items-center justify-between px-4 py-3 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors"
+            className="flex items-center justify-between px-4 py-2.5 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors gap-3"
           >
-            <div className="flex items-center gap-2.5 flex-1 min-w-0">
+            <div className="flex items-center gap-2.5 shrink-0">
               {collapsedSections.taskPlan ? (
                 <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
               ) : (
@@ -575,12 +575,21 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
               )}
               <CheckSquare className="w-4 h-4 text-emerald-400 flex-shrink-0" />
               <span className="font-semibold text-sm text-zinc-200">Task Plan</span>
-              {collapsedSections.taskPlan && (
-                <span className="text-xs text-zinc-500 truncate ml-2 italic">
-                  — {epic.sections?.taskPlan || 'Directed Acyclic Graph of vertical tracer-bullet tasks'}
-                </span>
-              )}
             </div>
+
+            {/* Overall Task Execution Progress Bar in Handle (Visible both expanded & collapsed) */}
+            <div data-testid="task-plan-handle-progress" className="flex items-center gap-3 flex-1 max-w-xs sm:max-w-sm justify-end ml-auto">
+              <span className="font-mono text-[11px] text-zinc-400 whitespace-nowrap">
+                <span className="text-emerald-400 font-semibold">{doneTasks}/{totalTasks}</span> Done ({overallPercentage}%)
+              </span>
+              <div className="w-24 sm:w-32 bg-zinc-950 rounded-full h-2 overflow-hidden border border-zinc-800 shrink-0">
+                <div
+                  className="bg-emerald-500 h-full rounded-full transition-all duration-300"
+                  style={{ width: `${overallPercentage}%` }}
+                />
+              </div>
+            </div>
+
             <button
               data-testid="popout-taskPlan"
               onClick={(e) => {
@@ -588,30 +597,14 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
                 onPopOut?.(epic.id, 'taskPlan');
               }}
               title="Open in separate tab"
-              className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+              className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors shrink-0"
             >
               <ExternalLink className="w-3.5 h-3.5" />
             </button>
           </div>
 
           {!collapsedSections.taskPlan && (
-            <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-5">
-              {/* Overall Progress Track Bar */}
-              <div className="p-3.5 bg-zinc-950/80 rounded-xl border border-zinc-800 space-y-2">
-                <div className="flex items-center justify-between text-xs font-semibold">
-                  <span className="text-zinc-200">Overall Task Plan Progress</span>
-                  <span className="font-mono text-emerald-400">
-                    {doneTasks} / {totalTasks} Tasks Done ({overallPercentage}%)
-                  </span>
-                </div>
-                <div className="w-full bg-zinc-900 rounded-full h-2.5 overflow-hidden border border-zinc-800">
-                  <div
-                    className="bg-emerald-500 h-full rounded-full transition-all duration-300"
-                    style={{ width: `${overallPercentage}%` }}
-                  />
-                </div>
-              </div>
-
+            <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-4">
               {/* Sequential Feature Groups with Dedicated Task DAGs */}
               <div className="space-y-4 max-h-[700px] overflow-y-auto pr-1">
                 {currentFeaturesList.map((feat) => {

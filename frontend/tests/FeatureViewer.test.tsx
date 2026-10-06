@@ -30,13 +30,40 @@ describe('FeatureViewer Component', () => {
     );
 
     expect(screen.getByText('FEATURE: 01-host-runtime')).toBeInTheDocument();
-    expect(screen.getByText('Host Runtime & Local Server')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Host Runtime & Local Server' })).toBeInTheDocument();
     expect(screen.getByText('SPEC-CORE-001')).toBeInTheDocument();
     expect(screen.getByText('PLAN-CORE-001')).toBeInTheDocument();
 
     const openSpecBtn = screen.getByText('Open Spec Document');
     fireEvent.click(openSpecBtn);
     expect(onOpenSpec).toHaveBeenCalledWith('SPEC-CORE-001', 'Host Runtime & Local HTTP/WebSocket Server');
+  });
+
+  it('renders Task Execution Progress bar in the handle of Task Plan even when collapsed', () => {
+    const featureWithTasks = {
+      ...mockFeature,
+      tasks: [
+        { id: 'TASK-01', title: 'Task 1', status: 'Done', blocked_by: [] },
+        { id: 'TASK-02', title: 'Task 2', status: 'In Progress', blocked_by: ['TASK-01'] },
+      ],
+    };
+
+    render(<FeatureViewer feature={featureWithTasks} />);
+
+    // Check handle has progress text
+    const handleProgress = screen.getByTestId('task-plan-handle-progress');
+    expect(handleProgress).toHaveTextContent('1/2');
+    expect(handleProgress).toHaveTextContent('Done (50%)');
+
+    // Collapse Task Plan by clicking handle
+    const taskPlanHeader = screen.getByText('Task Plan');
+    fireEvent.click(taskPlanHeader);
+
+    // After collapsing, progress in handle is still visible!
+    const collapsedHandleProgress = screen.getByTestId('task-plan-handle-progress');
+    expect(collapsedHandleProgress).toBeInTheDocument();
+    expect(collapsedHandleProgress).toHaveTextContent('1/2');
+    expect(collapsedHandleProgress).toHaveTextContent('Done (50%)');
   });
 
   it('renders Scope Boundaries on left accordion and Executive Summary in overview', () => {

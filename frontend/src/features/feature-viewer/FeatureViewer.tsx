@@ -642,9 +642,9 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
         <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50 flex flex-col">
           <div
             onClick={() => toggleSection('taskPlan')}
-            className="flex items-center justify-between px-4 py-3 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors"
+            className="flex items-center justify-between px-4 py-2.5 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors gap-3"
           >
-            <div className="flex items-center gap-2.5 flex-1 min-w-0">
+            <div className="flex items-center gap-2.5 shrink-0">
               {collapsedSections.taskPlan ? (
                 <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
               ) : (
@@ -652,12 +652,21 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
               )}
               <CheckSquare className="w-4 h-4 text-emerald-400 flex-shrink-0" />
               <span className="font-semibold text-sm text-zinc-200">Task Plan</span>
-              {collapsedSections.taskPlan && (
-                <span className="text-xs text-zinc-500 truncate ml-2 italic">
-                  — Vertical tracer-bullet DAG task execution
-                </span>
-              )}
             </div>
+
+            {/* Task Execution Progress Bar in Handle (Visible both expanded & collapsed) */}
+            <div data-testid="task-plan-handle-progress" className="flex items-center gap-3 flex-1 max-w-xs sm:max-w-sm justify-end ml-auto">
+              <span className="font-mono text-[11px] text-zinc-400 whitespace-nowrap">
+                <span className="text-emerald-400 font-semibold">{doneTasks}/{totalTasks}</span> Done ({taskProgressPct}%)
+              </span>
+              <div className="w-24 sm:w-32 bg-zinc-950 rounded-full h-2 overflow-hidden border border-zinc-800 shrink-0">
+                <div
+                  className="bg-emerald-500 h-full rounded-full transition-all duration-300"
+                  style={{ width: `${taskProgressPct}%` }}
+                />
+              </div>
+            </div>
+
             <button
               data-testid="popout-taskPlan"
               onClick={(e) => {
@@ -665,7 +674,7 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
                 onPopOut?.(feature.id, 'taskPlan');
               }}
               title="Open in separate tab"
-              className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+              className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors shrink-0"
             >
               <ExternalLink className="w-3.5 h-3.5" />
             </button>
@@ -673,107 +682,133 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
 
           {!collapsedSections.taskPlan && (
             <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-4">
-              {/* Feature Task Progress Bar */}
-              <div className="p-3.5 bg-zinc-950/80 rounded-xl border border-zinc-800 space-y-2">
-                <div className="flex items-center justify-between text-xs font-semibold">
-                  <span className="text-zinc-200">Task Execution Progress</span>
-                  <span className="font-mono text-emerald-400">
-                    {doneTasks} / {totalTasks} Tasks Done ({taskProgressPct}%)
-                  </span>
-                </div>
-                <div className="w-full bg-zinc-900 rounded-full h-2.5 overflow-hidden border border-zinc-800">
-                  <div
-                    className="bg-emerald-500 h-full rounded-full transition-all duration-300"
-                    style={{ width: `${taskProgressPct}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* Vertical DAG Task Cards */}
-              <div className="space-y-3.5">
-                {tasksList.map((task) => {
-                  const blockedList = task.blocked_by || task.blockedBy || [];
-                  const addressesList = task.addresses || [];
-                  const deliverablesList = task.deliverables || [];
-
-                  return (
-                    <div
-                      key={task.id}
-                      className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/60 p-4 space-y-2.5"
-                    >
-                      {/* Task Card Header */}
-                      <div className="flex items-center justify-between pb-1 border-b border-zinc-800/60">
-                        <span className="font-mono text-xs font-bold text-indigo-400">
-                          {task.id}
+              <div className="space-y-4 max-h-[700px] overflow-y-auto pr-1">
+                <div className="p-4 bg-zinc-900/70 rounded-xl border border-zinc-800/90 space-y-3.5">
+                  {/* Feature Task Header & Progress Bar */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-zinc-800 text-indigo-400 shrink-0">
+                          {feature.id}
                         </span>
-                        <span
-                          className={`text-[10px] font-mono px-2 py-0.5 rounded font-semibold ${
-                            task.status === 'Done'
-                              ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                              : task.status === 'In Progress'
-                              ? 'bg-amber-950 text-amber-400 border border-amber-800'
-                              : task.status === 'Blocked'
-                              ? 'bg-rose-950 text-rose-400 border border-rose-800'
-                              : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
-                          }`}
-                        >
-                          {task.status}
+                        <span className="font-semibold text-xs text-zinc-200 truncate">
+                          {feature.name}
                         </span>
                       </div>
-
-                      <div className="text-xs font-semibold text-zinc-100">{task.title}</div>
-
-                      {/* Seam, Addresses & Blocked-By Metadata */}
-                      <div className="space-y-1 text-[11px] font-mono text-zinc-400">
-                        {task.seam && (
-                          <div className="text-zinc-500">
-                            Seam: <span className="text-emerald-400">{task.seam}</span>
-                          </div>
-                        )}
-                        {addressesList.length > 0 && (
-                          <div className="text-zinc-500 flex items-center gap-1.5 flex-wrap">
-                            <span>Addresses:</span>
-                            {addressesList.map((addr) => (
-                              <span
-                                key={addr}
-                                className="px-1.5 py-0.2 rounded bg-sky-950/80 text-sky-400 border border-sky-800/60 text-[10px]"
-                              >
-                                {addr}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        {blockedList.length > 0 && (
-                          <div className="text-zinc-500 flex items-center gap-1.5 flex-wrap">
-                            <span>Blocked by:</span>
-                            {blockedList.map((dep) => (
-                              <span
-                                key={dep}
-                                className="px-1.5 py-0.2 rounded bg-amber-950/80 text-amber-400 border border-amber-800/60 text-[10px]"
-                              >
-                                {dep}
-                              </span>
-                            ))}
-                          </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="font-mono text-[11px] text-zinc-400">
+                          {doneTasks}/{totalTasks} Done ({taskProgressPct}%)
+                        </span>
+                        {onOpenPlan && (
+                          <button
+                            onClick={() => onOpenPlan(planIdentifier, planDisplayName)}
+                            className="text-[10px] px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors"
+                          >
+                            Open Plan
+                          </button>
                         )}
                       </div>
-
-                      {/* Deliverables List */}
-                      {deliverablesList.length > 0 && (
-                        <div className="pt-2 border-t border-zinc-800/50">
-                          <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider block mb-1">
-                            Deliverables
-                          </span>
-                          <ul className="list-disc list-inside text-zinc-300 text-[11px] leading-relaxed space-y-0.5">
-                            {deliverablesList.map((deliv, idx) => (
-                              <li key={idx}>{deliv}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
                     </div>
-                  );
-                })}
+                    <div className="w-full bg-zinc-950 rounded-full h-1.5 overflow-hidden border border-zinc-800/60">
+                      <div
+                        className="bg-indigo-500 h-full rounded-full transition-all duration-200"
+                        style={{ width: `${taskProgressPct}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Pure Vertical DAG Tasks without waves */}
+                  <div className="space-y-2.5 pt-1">
+                    {tasksList.length > 0 ? (
+                      tasksList.map((task) => {
+                        const blockedList = task.blocked_by || task.blockedBy || [];
+                        const addressesList = task.addresses || [];
+                        const deliverablesList = task.deliverables || [];
+
+                        return (
+                          <div
+                            key={task.id}
+                            className="p-3 bg-zinc-950/70 rounded-lg border border-zinc-800/70 space-y-2"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="font-mono text-[11px] font-bold text-indigo-400 shrink-0">
+                                  {task.id}
+                                </span>
+                                <span className="text-xs text-zinc-200 font-medium truncate">
+                                  {task.title}
+                                </span>
+                              </div>
+                              <span
+                                className={`text-[9px] px-1.5 py-0.5 rounded font-mono shrink-0 font-semibold ${
+                                  task.status === 'Done'
+                                    ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                                    : task.status === 'In Progress'
+                                    ? 'bg-amber-950 text-amber-400 border border-amber-800'
+                                    : task.status === 'Blocked'
+                                    ? 'bg-rose-950 text-rose-400 border border-rose-800'
+                                    : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                                }`}
+                              >
+                                {task.status}
+                              </span>
+                            </div>
+
+                            {/* Seam, Addresses & Blocked-By */}
+                            <div className="space-y-0.5 text-[10px] font-mono text-zinc-400">
+                              {task.seam && (
+                                <div className="text-zinc-500">
+                                  Seam: <span className="text-emerald-400">{task.seam}</span>
+                                </div>
+                              )}
+                              {addressesList.length > 0 && (
+                                <div className="text-zinc-500 flex items-center gap-1 flex-wrap">
+                                  <span>Addresses:</span>
+                                  {addressesList.map((addr) => (
+                                    <span
+                                      key={addr}
+                                      className="px-1 py-0.2 rounded bg-sky-950/80 text-sky-400 border border-sky-800/60"
+                                    >
+                                      {addr}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              {blockedList.length > 0 && (
+                                <div className="text-zinc-500 flex items-center gap-1 flex-wrap">
+                                  <span>Blocked by:</span>
+                                  {blockedList.map((dep) => (
+                                    <span
+                                      key={dep}
+                                      className="px-1 py-0.2 rounded bg-amber-950/80 text-amber-400 border border-amber-800/60"
+                                    >
+                                      {dep}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Deliverables */}
+                            {deliverablesList.length > 0 && (
+                              <div className="pt-1.5 border-t border-zinc-800/50">
+                                <ul className="list-disc list-inside text-zinc-400 text-[10px] space-y-0.5">
+                                  {deliverablesList.map((deliv, idx) => (
+                                    <li key={idx}>{deliv}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <p className="text-zinc-500 text-xs italic py-2">
+                        No implementation tasks defined for this feature.
+                      </p>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           )}
