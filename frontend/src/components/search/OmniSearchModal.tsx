@@ -17,7 +17,7 @@ interface OmniSearchModalProps {
   mockResults?: SearchResultItem[];
 }
 
-// @implements SPEC-CORE-006::REQ-007
+// @implements spec-ft-core-webui-shell::REQ-007
 export const OmniSearchModal: React.FC<OmniSearchModalProps> = ({
   isOpen,
   onClose,

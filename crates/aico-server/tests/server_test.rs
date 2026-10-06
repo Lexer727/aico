@@ -1,6 +1,6 @@
 use aico_server::{HostServer, ServerConfig, HealthResponse};
 
-// @verifies SPEC-CORE-001::REQ-001
+// @verifies spec-ft-core-host-runtime::REQ-001
 #[tokio::test]
 async fn test_server_binds_to_available_port() {
     let mut config = ServerConfig::default();
@@ -13,7 +13,7 @@ async fn test_server_binds_to_available_port() {
     assert_eq!(server.bound_addr(), Some(addr));
 }
 
-// @verifies SPEC-CORE-001::REQ-006
+// @verifies spec-ft-core-host-runtime::REQ-006
 #[tokio::test]
 async fn test_health_check_endpoint() {
     let mut config = ServerConfig::default();

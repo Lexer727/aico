@@ -14,9 +14,9 @@ const initialHistory = [
   "Type 'help', 'status', 'epics', 'test', or any command below.",
 ];
 
-// @implements SPEC-CORE-006::REQ-009
-// @implements SPEC-CORE-006::REQ-010
-// @implements SPEC-CORE-006::REQ-011
+// @implements spec-ft-core-webui-shell::REQ-009
+// @implements spec-ft-core-webui-shell::REQ-010
+// @implements spec-ft-core-webui-shell::REQ-011
 export const TerminalConsole: React.FC = () => {
   const [tabs, setTabs] = useState<TerminalTab[]>([
     { id: 'term-1', name: 'Terminal 1', history: [...initialHistory] },

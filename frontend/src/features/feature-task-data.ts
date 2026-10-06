@@ -5,7 +5,7 @@
 export interface FeatureTask {
   id: string; // e.g. "TASK-CORE-001"
   title: string;
-  status: 'Done' | 'In Progress' | 'Pending' | 'Blocked' | 'Skipped/Canceled' | 'Rewritten';
+  status: 'Done' | 'Completed' | 'In Progress' | 'Pending' | 'Blocked' | 'Skipped/Canceled' | 'Rewritten';
   seam?: string;
   blocked_by?: string[];
   blockedBy?: string[];
@@ -63,6 +63,10 @@ export interface DiscoveredFeature {
   rawSpecContent?: string;
   raw_plan_content?: string;
   rawPlanContent?: string;
+  brainstorm_content?: string;
+  brainstormContent?: string;
+  deepdive_content?: string;
+  deepdiveContent?: string;
   ubiquitous_language?: TermInfo[];
   ubiquitousLanguage?: TermInfo[];
 }
@@ -78,6 +82,9 @@ export interface DiscoveredEpic {
   executiveSummary?: string;
   brainstorm_content?: string;
   brainstormContent?: string;
+  deepdive_content?: string;
+  deepdiveContent?: string;
+  adrs?: string[];
   ubiquitous_language?: TermInfo[];
   ubiquitousLanguage?: TermInfo[];
   features?: DiscoveredFeature[];
@@ -122,34 +129,165 @@ export function normalizeId(id: string): string {
 }
 
 /**
+ * Normalizes an ADR identifier to ADR-#### format
+ */
+export function normalizeAdrId(raw: string): string {
+  if (!raw) return '';
+  const trimmed = raw.trim();
+  const matchNum = trimmed.match(/(?:ADR-)?(\d{4})/i);
+  if (matchNum) {
+    return `ADR-${matchNum[1]}`;
+  }
+  return trimmed;
+}
+
+/**
+ * Fetch all ADRs from the Axum backend dynamically
+ */
+export async function fetchAllAdrs(): Promise<DiscoveredAdr[]> {
+  try {
+    const res = await fetch(getApiUrl('/api/v1/adrs'));
+    if (res.ok) {
+      const data: DiscoveredAdr[] = await res.json();
+      for (const a of data) {
+        adrCache.set(normalizeId(a.id), a);
+      }
+      return data;
+    }
+  } catch {
+    // Graceful offline fallback
+  }
+  return [];
+}
+
+/**
+ * Normalizes a feature identifier by stripping document prefixes/suffixes (e.g., spec-, plan-, -taskplan)
+ */
+export function normalizeFeatureId(id: string): string {
+  let norm = id.trim().toLowerCase();
+  if (norm.startsWith('spec-')) norm = norm.substring(5);
+  else if (norm.startsWith('plan-')) norm = norm.substring(5);
+  else if (norm.startsWith('brain-')) norm = norm.substring(6);
+  else if (norm.startsWith('deepdive-')) norm = norm.substring(9);
+
+  if (norm.endsWith('-specifications')) norm = norm.substring(0, norm.length - 15);
+  else if (norm.endsWith('-taskplan')) norm = norm.substring(0, norm.length - 9);
+  else if (norm.endsWith('-brainstorm')) norm = norm.substring(0, norm.length - 11);
+  else if (norm.endsWith('-deepdive')) norm = norm.substring(0, norm.length - 9);
+
+  return norm;
+}
+
+/**
+ * Extract canonical TASK-ID from a dependency string
+ * (e.g. "TASK-CORE-001-3 (WebSocket Hub)" -> "TASK-CORE-001-3")
+ */
+export function extractTaskId(dep: string): string | null {
+  if (!dep) return null;
+  const match = dep.match(/TASK-[A-Za-z0-9-]+/i);
+  return match ? match[0].toUpperCase() : null;
+}
+
+/**
+ * Computes the active task frontier dynamically from task statuses and DAG dependencies.
+ * A task is on the active frontier if it is 'Pending' or 'In Progress' and all of its
+ * blocking dependencies are 'Done' or 'Completed'.
+ */
+export function computeActiveFrontier(
+  tasks: FeatureTask[],
+  allWorkspaceTasks?: FeatureTask[]
+): FeatureTask[] {
+  if (!tasks || tasks.length === 0) return [];
+
+  const taskMap = new Map<string, FeatureTask>();
+  // If workspace-wide tasks are provided, index them first for cross-feature resolution
+  if (allWorkspaceTasks) {
+    for (const t of allWorkspaceTasks) {
+      taskMap.set(t.id.toUpperCase(), t);
+      taskMap.set(t.id.toLowerCase(), t);
+    }
+  }
+  for (const t of tasks) {
+    taskMap.set(t.id.toUpperCase(), t);
+    taskMap.set(t.id.toLowerCase(), t);
+  }
+
+  return tasks.filter((t) => {
+    if (t.status !== 'Pending' && t.status !== 'In Progress') {
+      return false;
+    }
+
+    const blockedList = t.blocked_by || t.blockedBy || [];
+    if (blockedList.length === 0) {
+      return true;
+    }
+
+    // Every blocker must be Done / Completed
+    return blockedList.every((dep) => {
+      const depNorm = dep.trim().toUpperCase();
+      if (!depNorm || depNorm === 'NONE' || depNorm.startsWith('NONE')) {
+        return true;
+      }
+      const taskId = extractTaskId(dep);
+      const blocker = taskId
+        ? taskMap.get(taskId) || taskMap.get(taskId.toLowerCase())
+        : taskMap.get(depNorm) || taskMap.get(dep.trim().toLowerCase());
+      return blocker && (blocker.status === 'Done' || blocker.status === 'Completed');
+    });
+  });
+}
+
+/**
+ * Fetch all features from the Axum backend dynamically
+ */
+export async function fetchAllFeatures(): Promise<DiscoveredFeature[]> {
+  try {
+    const res = await fetch(getApiUrl('/api/v1/features'));
+    if (res.ok) {
+      const data: DiscoveredFeature[] = await res.json();
+      if (Array.isArray(data)) {
+        return data;
+      }
+    }
+  } catch {
+    // Graceful offline fallback
+  }
+  return [];
+}
+
+/**
  * Fetch a single feature from the Axum backend dynamically
  */
 export async function fetchFeature(featureId: string): Promise<DiscoveredFeature | null> {
   const norm = normalizeId(featureId);
+  const cleanId = normalizeFeatureId(norm);
+
   if (featureCache.has(norm)) {
     return featureCache.get(norm)!;
   }
+  if (featureCache.has(cleanId)) {
+    return featureCache.get(cleanId)!;
+  }
 
-  try {
-    const res = await fetch(getApiUrl(`/api/v1/features/${encodeURIComponent(norm)}`));
-    if (res.ok) {
-      const data: DiscoveredFeature = await res.json();
-      featureCache.set(norm, data);
-      featureCache.set(normalizeId(data.id), data);
-      return data;
-    }
+  const candidateIds = Array.from(new Set([
+    norm,
+    cleanId,
+    cleanId.startsWith('ft-') ? cleanId.substring(3) : `ft-${cleanId}`,
+  ]));
 
-    // Try without or with ft- prefix
-    const alt = norm.startsWith('ft-') ? norm.substring(3) : `ft-${norm}`;
-    const altRes = await fetch(getApiUrl(`/api/v1/features/${encodeURIComponent(alt)}`));
-    if (altRes.ok) {
-      const data: DiscoveredFeature = await altRes.json();
-      featureCache.set(norm, data);
-      featureCache.set(alt, data);
-      return data;
+  for (const idToTry of candidateIds) {
+    try {
+      const res = await fetch(getApiUrl(`/api/v1/features/${encodeURIComponent(idToTry)}`));
+      if (res.ok) {
+        const data: DiscoveredFeature = await res.json();
+        featureCache.set(norm, data);
+        featureCache.set(cleanId, data);
+        featureCache.set(normalizeId(data.id), data);
+        return data;
+      }
+    } catch {
+      // Continue trying candidates
     }
-  } catch {
-    // Graceful offline fallback in testing environments
   }
 
   return null;

@@ -11,9 +11,9 @@ interface ProjectSwitcherProps {
   projects: ProjectInfo[];
 }
 
-// @implements SPEC-CORE-006::REQ-003
-// @implements SPEC-CORE-006::REQ-005
-// @implements SPEC-CORE-006::REQ-006
+// @implements spec-ft-core-webui-shell::REQ-003
+// @implements spec-ft-core-webui-shell::REQ-005
+// @implements spec-ft-core-webui-shell::REQ-006
 export const ProjectSwitcher: React.FC<ProjectSwitcherProps> = ({ projects }) => {
   const [isOpen, setIsOpen] = useState(false);
   const { activeProjectId, setActiveProject } = useTabStore();

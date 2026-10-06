@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { OmniSearchModal } from '../src/components/search/OmniSearchModal';
 
-// @verifies SPEC-CORE-006::REQ-007
+// @verifies spec-ft-core-webui-shell::REQ-007
 describe('OmniSearchModal Component', () => {
   it('opens on Ctrl+K and filters results by scope checkboxes', () => {
     const handleSelect = vi.fn();
@@ -15,7 +15,7 @@ describe('OmniSearchModal Component', () => {
         onSelect={handleSelect}
         mockResults={[
           { id: '1', title: 'Epic 001 - Core', scope: 'epics' },
-          { id: '2', title: 'SPEC-CORE-001', scope: 'specs' },
+          { id: '2', title: 'spec-ft-core-host-runtime', scope: 'specs' },
           { id: '3', title: 'server.rs', scope: 'code' },
           { id: '4', title: 'ADR-0001 Architecture', scope: 'adrs' },
         ]}

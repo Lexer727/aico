@@ -33,8 +33,8 @@ impl ProjectManifest {
     }
 
     /// Parse from a JSON string and validate required invariants
-    // @implements SPEC-CORE-004::REQ-002
-    // @implements SPEC-CORE-004::REQ-007
+    // @implements spec-ft-core-discovery::REQ-002
+    // @implements spec-ft-core-discovery::REQ-007
     pub fn from_json_str(json: &str) -> Result<Self, ManifestError> {
         let manifest: ProjectManifest = serde_json::from_str(json)
             .map_err(|e| ManifestError::JsonParseError(e.to_string()))?;
@@ -55,7 +55,7 @@ impl ProjectManifest {
     }
 
     /// Resolve codebase path relative to specs repository directory
-    // @implements SPEC-CORE-004::REQ-003
+    // @implements spec-ft-core-discovery::REQ-003
     pub fn resolve_codebase_path<P: AsRef<Path>>(&self, specs_dir: P) -> Result<PathBuf, ManifestError> {
         let raw_path = Path::new(&self.codebase_path);
         let resolved = if raw_path.is_absolute() {

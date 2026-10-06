@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   ExternalLink,
   ChevronDown,
@@ -10,18 +10,21 @@ import {
   ShieldCheck,
   FolderArchive,
   ArrowRight,
-  CheckCircle2,
   BookOpen,
   Crosshair,
 } from 'lucide-react';
 import { FileDropZone } from '../../components/common/FileDropZone';
+import { MarkdownView, stripDocumentHeader, extractExecutiveSummary } from '../../components/common/MarkdownView';
 import {
   fetchFeature,
-  fetchGlossary,
+  normalizeAdrId,
+  extractTaskId,
   type FeatureTask,
   type FeatureRequirement,
   type TestSeamInfo,
   type TermInfo,
+  type DiscoveredAdr,
+  type DiscoveredFeature,
 } from '../feature-task-data';
 
 export interface FeatureData {
@@ -51,12 +54,19 @@ export interface FeatureData {
   testSeams?: TestSeamInfo[];
   adrs?: string[];
   tasks?: FeatureTask[];
+  brainstorm_content?: string;
+  brainstormContent?: string;
+  deepdive_content?: string;
+  deepdiveContent?: string;
   ubiquitous_language?: TermInfo[];
   ubiquitousLanguage?: TermInfo[];
 }
 
 export interface FeatureViewerProps {
   feature: FeatureData;
+  allFeatures?: DiscoveredFeature[];
+  allAdrs?: DiscoveredAdr[];
+  onOpenEpic?: (epicId: string) => void;
   onPopOut?: (featureId: string, section: string) => void;
   onOpenSpec?: (specId: string, title: string) => void;
   onOpenPlan?: (planId: string, title: string) => void;
@@ -65,10 +75,13 @@ export interface FeatureViewerProps {
   onFileUpload?: (file: File) => void;
 }
 
-// @implements SPEC-CORE-007::REQ-001
-// @implements SPEC-CORE-007::REQ-004
+// @implements spec-ft-core-epic-hub::REQ-001
+// @implements spec-ft-core-epic-hub::REQ-004
 export const FeatureViewer: React.FC<FeatureViewerProps> = ({
   feature: initialFeature,
+  allFeatures,
+  allAdrs,
+  onOpenEpic,
   onPopOut,
   onOpenSpec,
   onOpenPlan,
@@ -91,7 +104,8 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
         !initialFeature.requirements ||
         initialFeature.requirements.length === 0 ||
         !initialFeature.tasks ||
-        initialFeature.tasks.length === 0
+        initialFeature.tasks.length === 0 ||
+        (!initialFeature.brainstorm_content && !initialFeature.brainstormContent)
       ) {
         const live = await fetchFeature(initialFeature.id);
         if (live && isMounted) {
@@ -105,7 +119,10 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
             tasks: live.tasks && live.tasks.length > 0 ? live.tasks : prev.tasks,
             test_seams: live.test_seams && live.test_seams.length > 0 ? live.test_seams : prev.test_seams,
             adrs: live.adrs && live.adrs.length > 0 ? live.adrs : prev.adrs,
-            ubiquitous_language: live.ubiquitous_language && live.ubiquitous_language.length > 0 ? live.ubiquitous_language : prev.ubiquitous_language,
+            brainstorm_content: live.brainstorm_content || prev.brainstorm_content,
+            brainstormContent: live.brainstormContent || live.brainstorm_content || prev.brainstormContent,
+            deepdive_content: live.deepdive_content || prev.deepdive_content,
+            deepdiveContent: live.deepdiveContent || live.deepdive_content || prev.deepdiveContent,
           }));
         }
       }
@@ -116,36 +133,14 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
     };
   }, [initialFeature.id]);
 
-  // Ubiquitous domain terminology state
-  const [termsList, setTermsList] = useState<TermInfo[]>(
-    feature.ubiquitous_language || feature.ubiquitousLanguage || []
-  );
-
-  useEffect(() => {
-    const featureTerms = feature.ubiquitous_language || feature.ubiquitousLanguage;
-    if (featureTerms && featureTerms.length > 0) {
-      setTermsList(featureTerms);
-    } else {
-      fetchGlossary().then((data) => {
-        if (data && data.length > 0) {
-          setTermsList(data);
-        }
-      });
-    }
-  }, [feature.id, feature.ubiquitous_language, feature.ubiquitousLanguage]);
-
   // Accordion state:
-  // Overview: open by default (false)
-  // Left column: closed by default (true)
+  // Left column (Brainstorm, ADRs, Deep Dive, Specs, Assets): closed by default (true)
   // Right column (Task Plan): open by default (false)
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
-    overview: false,
-    scopeBoundaries: true,
     brainstorm: true,
-    specifications: true,
+    adrs: true,
     deepDive: true,
-    lineage: true,
-    terminology: true,
+    specifications: true,
     assets: true,
     taskPlan: false,
   });
@@ -173,8 +168,25 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
 
   const tasksList: FeatureTask[] = feature.tasks || [];
   const totalTasks = tasksList.length;
-  const doneTasks = tasksList.filter((t) => t.status === 'Done').length;
+  const doneTasks = tasksList.filter((t) => t.status === 'Done' || t.status === 'Completed').length;
   const taskProgressPct = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 100;
+
+  const tasksMap = useMemo(() => {
+    const map: Record<string, FeatureTask> = {};
+    if (allFeatures && allFeatures.length > 0) {
+      allFeatures.forEach((f) => {
+        (f.tasks || []).forEach((t) => {
+          map[t.id.toUpperCase()] = t;
+          map[t.id.toLowerCase()] = t;
+        });
+      });
+    }
+    tasksList.forEach((t) => {
+      map[t.id.toUpperCase()] = t;
+      map[t.id.toLowerCase()] = t;
+    });
+    return map;
+  }, [allFeatures, tasksList]);
 
   const requirementsList: FeatureRequirement[] = feature.requirements || [];
   const inScopeList = feature.in_scope || feature.inScope || [];
@@ -182,33 +194,63 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
   const testSeamsList = feature.test_seams || feature.testSeams || [];
   const adrsList = feature.adrs || [];
 
+  const featureAdrs = useMemo(() => {
+    const set = new Set<string>();
+    if (feature.adrs) {
+      feature.adrs.forEach((a) => {
+        const norm = normalizeAdrId(a);
+        if (norm) set.add(norm);
+      });
+    }
+    const list = Array.from(set);
+    list.sort();
+    return list;
+  }, [feature.adrs]);
+
+  const adrLookupMap = useMemo(() => {
+    const map: Record<string, DiscoveredAdr> = {};
+    if (allAdrs) {
+      allAdrs.forEach((a) => {
+        map[a.id.toLowerCase()] = a;
+        const norm = normalizeAdrId(a.id);
+        if (norm) map[norm.toLowerCase()] = a;
+      });
+    }
+    return map;
+  }, [allAdrs]);
+
+  const rawBrainstorm = feature.brainstormContent || feature.brainstorm_content;
+  const execSummary =
+    feature.description ||
+    extractExecutiveSummary(rawBrainstorm) ||
+    'Autonomous Intelligent Code Orchestrator (AICO) feature module enforcing deterministic contract seams, vertical tracer-bullet DAG execution, and strict EARS behavioral invariants.';
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6 text-zinc-100">
       {/* 1. Feature Header Banner */}
       <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
         <div>
-          <div className="flex items-center gap-3 flex-wrap">
-            <span className="font-mono text-xs px-2.5 py-0.5 rounded bg-zinc-800 text-indigo-400 font-bold border border-zinc-700">
-              FEATURE: {feature.id}
-            </span>
-            <span
-              className={`text-[10px] px-2.5 py-0.5 rounded-full font-mono font-semibold ${
-                feature.status === 'Completed' || feature.status === 'Done'
-                  ? 'bg-emerald-950/70 text-emerald-400 border border-emerald-800'
-                  : 'bg-amber-950/70 text-amber-400 border border-amber-800'
-              }`}
-            >
-              {feature.status}
-            </span>
+          <div className="flex items-center gap-2.5 flex-wrap">
             {isStandalone ? (
               <span className="text-[10px] px-2.5 py-0.5 rounded-full font-mono font-semibold bg-purple-950/70 text-purple-400 border border-purple-800">
                 Standalone Feature
               </span>
             ) : (
-              <span className="text-[10px] px-2.5 py-0.5 rounded-full font-mono bg-zinc-800 text-zinc-400 border border-zinc-700">
-                Epic: <span className="text-indigo-400 font-semibold">{feature.epicId || feature.epic_id}</span>
-              </span>
+              <button
+                onClick={() => {
+                  const epic = feature.epicId || feature.epic_id;
+                  if (epic) onOpenEpic?.(epic);
+                }}
+                className="text-[10px] px-2.5 py-0.5 rounded-full font-mono bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-zinc-700 hover:text-white transition-colors cursor-pointer flex items-center gap-1"
+                title="Click to open parent Epic"
+              >
+                <span>Epic:</span>
+                <span className="text-indigo-400 font-semibold">{feature.epicId || feature.epic_id}</span>
+              </button>
             )}
+            <span className="font-mono text-xs px-2.5 py-0.5 rounded bg-zinc-800 text-indigo-400 font-bold border border-zinc-700">
+              FEATURE: {feature.id}
+            </span>
             {feature.order && (
               <span className="text-[10px] px-2 py-0.5 rounded font-mono bg-zinc-800/60 text-zinc-400 border border-zinc-700/60">
                 Order #{feature.order}
@@ -220,232 +262,248 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
             {feature.name}
           </h1>
 
-          {/* Quick Jump Spec / Plan Badges */}
+          {/* Quick Jump Spec / Plan Badges (Clickable) */}
           <div className="flex items-center gap-2 mt-2">
-            <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-sky-950/50 border border-sky-800/60 text-sky-400">
+            <span
+              data-testid="spec-badge-link"
+              onClick={() => onOpenSpec?.(specIdentifier, specDisplayName)}
+              className="font-mono text-[11px] px-2 py-0.5 rounded bg-sky-950/50 border border-sky-800/60 text-sky-400 hover:bg-sky-900/50 hover:border-sky-600 cursor-pointer transition-colors"
+              title="Click to open specification"
+            >
               {specIdentifier}
             </span>
-            <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-emerald-950/50 border border-emerald-800/60 text-emerald-400">
+            <span
+              data-testid="plan-badge-link"
+              onClick={() => onOpenPlan?.(planIdentifier, planDisplayName)}
+              className="font-mono text-[11px] px-2 py-0.5 rounded bg-emerald-950/50 border border-emerald-800/60 text-emerald-400 hover:bg-emerald-900/50 hover:border-emerald-600 cursor-pointer transition-colors"
+              title="Click to open implementation plan"
+            >
               {planIdentifier}
             </span>
-            {onOpenSpec && (
-              <button
-                onClick={() => onOpenSpec(specIdentifier, specDisplayName)}
-                className="flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors ml-1 font-medium"
-              >
-                <span>Open Spec Document</span>
-                <ArrowRight className="w-3 h-3 text-zinc-400" />
-              </button>
-            )}
-            {onOpenPlan && (
-              <button
-                onClick={() => onOpenPlan(planIdentifier, planDisplayName)}
-                className="flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors font-medium"
-              >
-                <span>Open Implementation Plan</span>
-                <ArrowRight className="w-3 h-3 text-zinc-400" />
-              </button>
-            )}
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => {
-              toggleSection('scopeBoundaries');
-              toggleSection('brainstorm');
-              toggleSection('specifications');
-              toggleSection('deepDive');
-              toggleSection('lineage');
-              toggleSection('terminology');
-              toggleSection('assets');
-            }}
-            className="text-xs px-3 py-1.5 rounded-lg border border-zinc-700 bg-zinc-800/60 hover:bg-zinc-800 text-zinc-300 transition-colors"
+        {/* Status and Progress on the right */}
+        <div className="flex flex-col items-end gap-1">
+          <span
+            className={`text-xs px-3 py-1 rounded-full font-mono font-semibold ${
+              feature.status === 'Completed' || feature.status === 'Done'
+                ? 'bg-emerald-950/70 text-emerald-400 border border-emerald-800'
+                : 'bg-amber-950/70 text-amber-400 border border-amber-800'
+            }`}
           >
-            Toggle Left Accordions
-          </button>
-          {/* Contract Seams Green KPI */}
-          <div className="text-right space-y-1">
-            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-950/60 border border-emerald-800/80 text-emerald-400 text-xs font-medium">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>Contract Seams Green</span>
-            </span>
-            <p className="text-[11px] font-mono text-zinc-400">
-              {doneTasks}/{totalTasks} Tasks Done ({taskProgressPct}%)
-            </p>
-          </div>
+            {feature.status}
+          </span>
+          <p className="text-[11px] font-mono text-zinc-400">
+            {doneTasks}/{totalTasks} Tasks Done ({taskProgressPct}%)
+          </p>
         </div>
       </div>
 
-      {/* TOP SECTION: Overview (Open by default across full width) */}
-      <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
-        <div
-          onClick={() => toggleSection('overview')}
-          className="flex items-center justify-between px-4 py-3 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors"
-        >
-          <div className="flex items-center gap-2.5 flex-1 min-w-0">
-            {collapsedSections.overview ? (
-              <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
-            ) : (
-              <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
-            )}
-            <FileText className="w-4 h-4 text-indigo-400 flex-shrink-0" />
-            <span className="font-semibold text-sm text-zinc-200">Overview</span>
-            {collapsedSections.overview && (
-              <span className="text-xs text-zinc-500 truncate ml-2 italic">
-                — {feature.description || 'Executive summary and domain invariants'}
-              </span>
-            )}
+      {/* TOP SECTION: Executive Summary Banner (Directly visible at top, no collapsible accordion) */}
+      {execSummary && (
+        <div className="p-4 bg-zinc-900/70 border border-zinc-800 rounded-xl space-y-2 shadow-sm">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-300">
+            <FileText className="w-4 h-4 text-emerald-400" />
+            <span>Executive Summary</span>
           </div>
-          <button
-            data-testid="popout-overview"
-            onClick={(e) => {
-              e.stopPropagation();
-              onPopOut?.(feature.id, 'overview');
-            }}
-            title="Open in separate tab"
-            className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-          </button>
+          <div className="text-zinc-300 text-xs sm:text-sm leading-relaxed">
+            <MarkdownView content={execSummary} />
+          </div>
         </div>
+      )}
 
-        {!collapsedSections.overview && (
-          <div className="p-5 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30">
-            {/* Executive Summary */}
-            <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800">
-              <h4 className="text-xs font-semibold text-zinc-200 mb-1">Executive Summary</h4>
-              <p className="text-zinc-400 text-xs leading-relaxed">
-                {feature.description || 'Autonomous Intelligent Code Orchestrator (AICO) feature module enforcing deterministic contract seams, vertical tracer-bullet DAG execution, and strict EARS behavioral invariants.'}
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* 2-COLUMN SECTION: Left = Scope Boundaries, Brainstorm, Specs, Deep Dive, Lineage, Assets | Right = Task Plan */}
+      {/* 2-COLUMN SECTION: Left = Brainstorm, ADRs, Deep Dive, Specs, Assets | Right = Task Plan */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-        {/* LEFT COLUMN (All Closed by Default) */}
+        {/* LEFT COLUMN: Brainstorm, ADRs, Deep Dive, Specs, Assets (Closed by default) */}
         <div className="space-y-3">
-          {/* Scope Boundaries Accordion (Closed by default) */}
+          {/* 1. Brainstorm Accordion */}
+          {(() => {
+            const displayBrainstorm = stripDocumentHeader(rawBrainstorm);
+            return (
+              <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
+                <div
+                  onClick={() => toggleSection('brainstorm')}
+                  className="flex items-center justify-between px-4 py-3 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors"
+                >
+                  <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                    {collapsedSections.brainstorm ? (
+                      <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                    )}
+                    <Layers className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+                    <span className="font-semibold text-sm text-zinc-200">Brainstorm</span>
+                    {collapsedSections.brainstorm && (
+                      <span className="text-xs text-zinc-500 truncate ml-2 italic">
+                        {rawBrainstorm ? '— Architectural trade-offs and decision matrix' : '— No brainstorm artifact defined'}
+                      </span>
+                    )}
+                  </div>
+                  {rawBrainstorm && (
+                    <button
+                      data-testid="popout-brainstorm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onPopOut?.(feature.id, 'brainstorm');
+                      }}
+                      title="Open in separate tab"
+                      className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                {!collapsedSections.brainstorm && (
+                  <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-3">
+                    {displayBrainstorm ? (
+                      <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800 space-y-2">
+                        <h4 className="text-xs font-semibold text-zinc-200">Feature Brainstorm & Exploration</h4>
+                        <MarkdownView content={displayBrainstorm} />
+                      </div>
+                    ) : rawBrainstorm ? (
+                      <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800 text-zinc-400 text-xs italic">
+                        Brainstorming details summarized in Executive Summary above.
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800 text-zinc-500 text-xs italic">
+                        No brainstorm artifact (brain-ft-*.md) created for this feature.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* 2. Architecture Decision Records (ADRs) Accordion */}
           <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
             <div
-              onClick={() => toggleSection('scopeBoundaries')}
+              onClick={() => toggleSection('adrs')}
               className="flex items-center justify-between px-4 py-3 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors"
             >
               <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                {collapsedSections.scopeBoundaries ? (
+                {collapsedSections.adrs ? (
                   <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
                 ) : (
                   <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
                 )}
-                <Crosshair className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+                <BookOpen className="w-4 h-4 text-amber-400 flex-shrink-0" />
                 <span className="font-semibold text-sm text-zinc-200">
-                  Scope Boundaries ({inScopeList.length + outOfScopeList.length})
+                  Architecture Decision Records ({featureAdrs.length})
                 </span>
-                {collapsedSections.scopeBoundaries && (
+                {collapsedSections.adrs && (
                   <span className="text-xs text-zinc-500 truncate ml-2 italic">
-                    — In-Scope and Out-of-Scope boundaries
+                    — Architectural governance records referenced by this feature
                   </span>
                 )}
               </div>
-              <button
-                data-testid="popout-scope-boundaries"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onPopOut?.(feature.id, 'scope-boundaries');
-                }}
-                title="Open in separate tab"
-                className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-              </button>
             </div>
-            {!collapsedSections.scopeBoundaries && (
-              <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-3">
-                <div className="grid grid-cols-1 gap-3">
-                  <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-lg space-y-1.5">
-                    <span className="font-semibold text-indigo-400 text-xs block">
-                      In-Scope Boundaries ({inScopeList.length})
-                    </span>
-                    {inScopeList.length > 0 ? (
-                      <ul className="list-disc list-inside text-zinc-400 text-[11px] leading-relaxed space-y-1">
-                        {inScopeList.map((item, idx) => (
-                          <li key={idx}>{item}</li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-zinc-500 text-[11px] italic">
-                        No explicit in-scope items defined in specification.
-                      </p>
-                    )}
+            {!collapsedSections.adrs && (
+              <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-2.5">
+                {featureAdrs.length > 0 ? (
+                  <div className="grid grid-cols-1 gap-2">
+                    {featureAdrs.map((adrId) => {
+                      const adrInfo = adrLookupMap[adrId.toLowerCase()];
+                      return (
+                        <div
+                          key={adrId}
+                          onClick={() => onOpenAdr?.(adrId)}
+                          className="p-3 bg-zinc-900/80 rounded border border-zinc-800 hover:border-amber-500/50 cursor-pointer transition-colors space-y-1.5 group"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-xs font-semibold text-amber-400 group-hover:text-amber-300">
+                                {adrId}
+                              </span>
+                              <span className="text-xs font-semibold text-zinc-200 group-hover:text-white truncate">
+                                {adrInfo?.title || `Architecture Decision Record ${adrId}`}
+                              </span>
+                            </div>
+                            <span className="text-[10px] px-2 py-0.5 rounded font-mono bg-emerald-950 text-emerald-400 border border-emerald-800/80">
+                              {adrInfo?.status || 'Accepted'}
+                            </span>
+                          </div>
+                          {adrInfo?.decision && (
+                            <p className="text-[11px] text-zinc-400 line-clamp-2">
+                              {adrInfo.decision}
+                            </p>
+                          )}
+                          <div className="flex items-center justify-between text-[10px] text-zinc-500 pt-1">
+                            <span>Click to view decision record</span>
+                            <span className="text-amber-400 group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
+                              Open ADR &rarr;
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-lg space-y-1.5">
-                    <span className="font-semibold text-amber-400 text-xs block">
-                      Out-of-Scope Boundaries ({outOfScopeList.length})
-                    </span>
-                    {outOfScopeList.length > 0 ? (
-                      <ul className="list-disc list-inside text-zinc-400 text-[11px] leading-relaxed space-y-1">
-                        {outOfScopeList.map((item, idx) => (
-                          <li key={idx}>{item}</li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-zinc-500 text-[11px] italic">
-                        No explicit out-of-scope items defined in specification.
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Brainstorm Accordion */}
-          <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
-            <div
-              onClick={() => toggleSection('brainstorm')}
-              className="flex items-center justify-between px-4 py-3 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors"
-            >
-              <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                {collapsedSections.brainstorm ? (
-                  <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
                 ) : (
-                  <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                  <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800 text-zinc-500 text-xs italic">
+                    No Architecture Decision Records (ADRs) associated with this feature.
+                  </div>
                 )}
-                <Layers className="w-4 h-4 text-indigo-400 flex-shrink-0" />
-                <span className="font-semibold text-sm text-zinc-200">Brainstorm</span>
-                {collapsedSections.brainstorm && (
-                  <span className="text-xs text-zinc-500 truncate ml-2 italic">
-                    — Architectural trade-offs and decision matrix
-                  </span>
-                )}
-              </div>
-              <button
-                data-testid="popout-brainstorm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onPopOut?.(feature.id, 'brainstorm');
-                }}
-                title="Open in separate tab"
-                className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-              </button>
-            </div>
-            {!collapsedSections.brainstorm && (
-              <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-3">
-                <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800 space-y-2">
-                  <h4 className="text-xs font-semibold text-zinc-200">Feature Brainstorm & Exploration</h4>
-                  <p className="text-zinc-400 text-xs leading-relaxed">
-                    Socratic problem framing and architectural alternatives evaluated for {feature.name}.
-                  </p>
-                </div>
               </div>
             )}
           </div>
 
-          {/* Specifications Accordion */}
+          {/* 3. Deep Dive Accordion */}
+          {(() => {
+            const featureDeepDive = feature.deepdiveContent || feature.deepdive_content;
+            return (
+              <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
+                <div
+                  onClick={() => toggleSection('deepDive')}
+                  className="flex items-center justify-between px-4 py-3 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors"
+                >
+                  <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                    {collapsedSections.deepDive ? (
+                      <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                    )}
+                    <GitFork className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+                    <span className="font-semibold text-sm text-zinc-200">Deep Dive</span>
+                    {collapsedSections.deepDive && (
+                      <span className="text-xs text-zinc-500 truncate ml-2 italic">
+                        {featureDeepDive ? '— System boundaries and designated seams' : '— No deep dive artifact defined'}
+                      </span>
+                    )}
+                  </div>
+                  {featureDeepDive && (
+                    <button
+                      data-testid="popout-deepDive"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onPopOut?.(feature.id, 'deepDive');
+                      }}
+                      title="Open in separate tab"
+                      className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                {!collapsedSections.deepDive && (
+                  <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-2">
+                    {featureDeepDive ? (
+                      <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800 space-y-2">
+                        <h4 className="text-xs font-semibold text-zinc-200">System Boundaries & Deep Dive Analysis</h4>
+                        <MarkdownView content={featureDeepDive} />
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800 text-zinc-500 text-xs italic">
+                        No deep dive artifact (deepdive-ft-*.md) created for this feature.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* 3. Specs Accordion */}
           <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
             <div
               onClick={() => toggleSection('specifications')}
@@ -459,11 +517,11 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
                 )}
                 <ShieldCheck className="w-4 h-4 text-sky-400 flex-shrink-0" />
                 <span className="font-semibold text-sm text-zinc-200">
-                  Specifications ({requirementsList.length} EARS Reqs)
+                  Specs ({requirementsList.length} Reqs • {testSeamsList.length} Seams)
                 </span>
                 {collapsedSections.specifications && (
                   <span className="text-xs text-zinc-500 truncate ml-2 italic">
-                    — Strict EARS requirement contracts
+                    — Scope boundaries, EARS requirements & contract seams
                   </span>
                 )}
               </div>
@@ -471,7 +529,7 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
                 data-testid="popout-specifications"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onPopOut?.(feature.id, 'specifications');
+                  onOpenSpec?.(specIdentifier, specDisplayName);
                 }}
                 title="Open in separate tab"
                 className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
@@ -480,90 +538,104 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
               </button>
             </div>
             {!collapsedSections.specifications && (
-              <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-3">
-                {requirementsList.length > 0 ? (
-                  <div className="space-y-2.5">
-                    {requirementsList.map((req) => (
-                      <div
-                        key={req.id}
-                        className="p-3 bg-zinc-900/80 rounded-lg border border-zinc-800 space-y-1.5"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-xs font-bold text-sky-400">
-                              {req.id}
-                            </span>
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono">
-                              {req.pattern}
-                            </span>
-                          </div>
-                          <span className="text-[10px] font-mono text-emerald-400 font-semibold">
-                            {req.status}
-                          </span>
-                        </div>
-                        <p className="text-zinc-300 text-xs leading-relaxed">{req.statement}</p>
-                        {req.seam && (
-                          <div className="text-[10px] text-zinc-500 font-mono">
-                            Seam: <span className="text-zinc-400">{req.seam}</span>
-                          </div>
-                        )}
-                      </div>
-                    ))}
+              <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-4">
+                {/* Scope Boundaries */}
+                <div className="space-y-2">
+                  <h4 className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
+                    <Crosshair className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Scope Boundaries</span>
+                  </h4>
+                  <div className="grid grid-cols-1 gap-2.5">
+                    <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-lg space-y-1.5">
+                      <span className="font-semibold text-indigo-400 text-xs block">
+                        In-Scope Boundaries ({inScopeList.length})
+                      </span>
+                      {inScopeList.length > 0 ? (
+                        <ul className="list-disc list-inside text-zinc-400 text-[11px] leading-relaxed space-y-1">
+                          {inScopeList.map((item, idx) => (
+                            <li key={idx}>{item}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-zinc-500 text-[11px] italic">
+                          No explicit in-scope items defined in specification.
+                        </p>
+                      )}
+                    </div>
+                    <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-lg space-y-1.5">
+                      <span className="font-semibold text-amber-400 text-xs block">
+                        Out-of-Scope Boundaries ({outOfScopeList.length})
+                      </span>
+                      {outOfScopeList.length > 0 ? (
+                        <ul className="list-disc list-inside text-zinc-400 text-[11px] leading-relaxed space-y-1">
+                          {outOfScopeList.map((item, idx) => (
+                            <li key={idx}>{item}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-zinc-500 text-[11px] italic">
+                          No explicit out-of-scope items defined in specification.
+                        </p>
+                      )}
+                    </div>
                   </div>
-                ) : (
-                  <p className="text-zinc-500 text-xs italic">
-                    No EARS requirements parsed yet for this specification.
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
+                </div>
 
-          {/* Deep Dive Accordion */}
-          <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
-            <div
-              onClick={() => toggleSection('deepDive')}
-              className="flex items-center justify-between px-4 py-3 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors"
-            >
-              <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                {collapsedSections.deepDive ? (
-                  <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
-                ) : (
-                  <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
-                )}
-                <GitFork className="w-4 h-4 text-indigo-400 flex-shrink-0" />
-                <span className="font-semibold text-sm text-zinc-200">
-                  Deep Dive ({testSeamsList.length} Seams)
-                </span>
-                {collapsedSections.deepDive && (
-                  <span className="text-xs text-zinc-500 truncate ml-2 italic">
-                    — Designated verification test seams
-                  </span>
-                )}
-              </div>
-              <button
-                data-testid="popout-deepDive"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onPopOut?.(feature.id, 'deepDive');
-                }}
-                title="Open in separate tab"
-                className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-              </button>
-            </div>
-            {!collapsedSections.deepDive && (
-              <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-2">
-                <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800 space-y-2">
-                  <h4 className="text-xs font-semibold text-zinc-200">Designated Contract Seams</h4>
+                {/* EARS Requirements */}
+                <div className="space-y-2 pt-2 border-t border-zinc-800/60">
+                  <h4 className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-sky-400" />
+                    <span>EARS Requirements ({requirementsList.length})</span>
+                  </h4>
+                  {requirementsList.length > 0 ? (
+                    <div className="space-y-2">
+                      {requirementsList.map((req) => (
+                        <div
+                          key={req.id}
+                          className="p-3 bg-zinc-900/80 rounded-lg border border-zinc-800 space-y-1.5"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-xs font-bold text-sky-400">
+                                {req.id}
+                              </span>
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono">
+                                {req.pattern}
+                              </span>
+                            </div>
+                            <span className="text-[10px] font-mono text-emerald-400 font-semibold">
+                              {req.status}
+                            </span>
+                          </div>
+                          <p className="text-zinc-300 text-xs leading-relaxed">{req.statement}</p>
+                          {req.seam && (
+                            <div className="text-[10px] text-zinc-500 font-mono">
+                              Seam: <span className="text-zinc-400">{req.seam}</span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-zinc-500 text-xs italic">
+                      No EARS requirements parsed yet for this specification.
+                    </p>
+                  )}
+                </div>
+
+                {/* Designated Public Test Seams */}
+                <div className="space-y-2 pt-2 border-t border-zinc-800/60">
+                  <h4 className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
+                    <GitFork className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Designated Public Test Seams ({testSeamsList.length})</span>
+                  </h4>
                   {testSeamsList.length > 0 ? (
                     <div className="space-y-1.5 text-[11px] font-mono text-zinc-400">
                       {testSeamsList.map((seam, idx) => (
-                        <div key={idx} className="p-2 bg-zinc-900 rounded border border-zinc-800">
+                        <div key={idx} className="p-2.5 bg-zinc-900 rounded border border-zinc-800">
                           <span className="text-emerald-400 font-semibold">{seam.path}</span>
                           {seam.description && seam.description !== seam.path && (
-                            <div className="text-zinc-500 text-[10px] mt-0.5">{seam.description}</div>
+                            <div className="text-zinc-400 text-[11px] mt-1 font-sans">{seam.description}</div>
                           )}
                         </div>
                       ))}
@@ -574,120 +646,35 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
                     </p>
                   )}
                 </div>
-              </div>
-            )}
-          </div>
 
-          {/* Lineage / ADRs Accordion */}
-          <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
-            <div
-              onClick={() => toggleSection('lineage')}
-              className="flex items-center justify-between px-4 py-3 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors"
-            >
-              <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                {collapsedSections.lineage ? (
-                  <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
-                ) : (
-                  <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
-                )}
-                <BookOpen className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                <span className="font-semibold text-sm text-zinc-200">
-                  Lineage ({adrsList.length} ADRs)
-                </span>
-                {collapsedSections.lineage && (
-                  <span className="text-xs text-zinc-500 truncate ml-2 italic">
-                    — Architecture Decision Records
-                  </span>
-                )}
-              </div>
-            </div>
-            {!collapsedSections.lineage && (
-              <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30">
-                {adrsList.length > 0 ? (
-                  <div className="grid grid-cols-1 gap-2">
-                    {adrsList.map((adrId) => (
-                      <div
-                        key={adrId}
-                        onClick={() => onOpenAdr?.(adrId)}
-                        className="p-2.5 rounded bg-zinc-900 border border-zinc-800 hover:border-indigo-500/50 cursor-pointer transition-colors flex items-center justify-between group"
-                      >
-                        <div className="space-y-0.5">
+                {/* Lineage / ADRs */}
+                {adrsList.length > 0 && (
+                  <div className="space-y-2 pt-2 border-t border-zinc-800/60">
+                    <h4 className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
+                      <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Lineage ({adrsList.length} ADRs)</span>
+                    </h4>
+                    <div className="grid grid-cols-1 gap-1.5">
+                      {adrsList.map((adrId) => (
+                        <div
+                          key={adrId}
+                          onClick={() => onOpenAdr?.(adrId)}
+                          className="p-2 rounded bg-zinc-900 border border-zinc-800 hover:border-indigo-500/50 cursor-pointer transition-colors flex items-center justify-between group"
+                        >
                           <span className="font-mono text-[11px] text-indigo-400 font-bold group-hover:text-indigo-300">
                             {adrId}
                           </span>
+                          <ArrowRight className="w-3.5 h-3.5 text-zinc-600 group-hover:text-zinc-300" />
                         </div>
-                        <ArrowRight className="w-3.5 h-3.5 text-zinc-600 group-hover:text-zinc-300" />
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                ) : (
-                  <p className="text-zinc-500 text-xs italic">
-                    No derived ADR references declared in frontmatter.
-                  </p>
                 )}
               </div>
             )}
           </div>
 
-          {/* Ubiquitous Domain Terminology Accordion */}
-          <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
-            <div
-              data-testid="toggle-feature-terminology"
-              onClick={() => toggleSection('terminology')}
-              className="flex items-center justify-between px-4 py-3 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors"
-            >
-              <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                {collapsedSections.terminology ? (
-                  <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
-                ) : (
-                  <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
-                )}
-                <BookOpen className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                <span className="font-semibold text-sm text-zinc-200">
-                  Ubiquitous Domain Terminology ({termsList.length})
-                </span>
-                {collapsedSections.terminology && (
-                  <span className="text-xs text-zinc-500 truncate ml-2 italic">
-                    — GLOSSARY.md domain language definitions
-                  </span>
-                )}
-              </div>
-              <button
-                data-testid="popout-terminology"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onPopOut?.(feature.id, 'terminology');
-                }}
-                title="Open in separate tab"
-                className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-              </button>
-            </div>
-            {!collapsedSections.terminology && (
-              <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-2.5">
-                {termsList.length > 0 ? (
-                  <div className="space-y-2">
-                    {termsList.map((t, idx) => (
-                      <div
-                        key={idx}
-                        className="p-3 bg-zinc-900/80 rounded-lg border border-zinc-800 space-y-1"
-                      >
-                        <span className="font-semibold text-amber-400 text-xs">{t.term}</span>
-                        <p className="text-zinc-400 text-[11px] leading-relaxed">{t.definition}</p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-zinc-500 text-xs italic">
-                    Glossary terms defined in GLOSSARY.md.
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Assets Accordion */}
+          {/* 4. Assets Accordion */}
           <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
             <div
               onClick={() => toggleSection('assets')}
@@ -769,7 +756,7 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
               data-testid="popout-taskPlan"
               onClick={(e) => {
                 e.stopPropagation();
-                onPopOut?.(feature.id, 'taskPlan');
+                onOpenPlan?.(planIdentifier, planDisplayName);
               }}
               title="Open in separate tab"
               className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors shrink-0"
@@ -797,14 +784,6 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
                         <span className="font-mono text-[11px] text-zinc-400">
                           {doneTasks}/{totalTasks} Done ({taskProgressPct}%)
                         </span>
-                        {onOpenPlan && (
-                          <button
-                            onClick={() => onOpenPlan(planIdentifier, planDisplayName)}
-                            className="text-[10px] px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors"
-                          >
-                            Open Plan
-                          </button>
-                        )}
                       </div>
                     </div>
                     <div className="w-full bg-zinc-950 rounded-full h-1.5 overflow-hidden border border-zinc-800/60">
@@ -822,6 +801,16 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
                         const blockedList = task.blocked_by || task.blockedBy || [];
                         const addressesList = task.addresses || [];
                         const deliverablesList = task.deliverables || [];
+
+                        const isAllResolved = blockedList.every((dep) => {
+                          const depUpper = dep.trim().toUpperCase();
+                          if (!depUpper || depUpper === 'NONE' || depUpper.startsWith('NONE')) return true;
+                          const taskId = extractTaskId(dep);
+                          const blocker = taskId
+                            ? tasksMap[taskId] || tasksMap[taskId.toLowerCase()]
+                            : tasksMap[depUpper] || tasksMap[dep.trim().toLowerCase()];
+                          return blocker && (blocker.status === 'Done' || blocker.status === 'Completed');
+                        });
 
                         return (
                           <div
@@ -873,16 +862,32 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
                                 </div>
                               )}
                               {blockedList.length > 0 && (
-                                <div className="text-zinc-500 flex items-center gap-1 flex-wrap">
-                                  <span>Blocked by:</span>
-                                  {blockedList.map((dep) => (
-                                    <span
-                                      key={dep}
-                                      className="px-1 py-0.2 rounded bg-amber-950/80 text-amber-400 border border-amber-800/60"
-                                    >
-                                      {dep}
-                                    </span>
-                                  ))}
+                                <div className="text-zinc-500 flex items-center gap-1.5 flex-wrap pt-0.5">
+                                  <span>{isAllResolved ? 'Depends on:' : 'Blocked by:'}</span>
+                                  {blockedList.map((dep) => {
+                                    const depUpper = dep.trim().toUpperCase();
+                                    const isNone = !depUpper || depUpper === 'NONE' || depUpper.startsWith('NONE');
+                                    const taskId = extractTaskId(dep);
+                                    const blocker = taskId
+                                      ? tasksMap[taskId] || tasksMap[taskId.toLowerCase()]
+                                      : tasksMap[depUpper] || tasksMap[dep.trim().toLowerCase()];
+                                    const isResolved =
+                                      isNone ||
+                                      (blocker && (blocker.status === 'Done' || blocker.status === 'Completed'));
+
+                                    return (
+                                      <span
+                                        key={dep}
+                                        className={`px-1.5 py-0.5 rounded font-mono text-[10px] ${
+                                          isResolved
+                                            ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/60'
+                                            : 'bg-rose-950/80 text-rose-400 border border-rose-800/60'
+                                        }`}
+                                      >
+                                        {dep} {isResolved ? '(Done)' : blocker?.status ? `(${blocker.status})` : '(Pending)'}
+                                      </span>
+                                    );
+                                  })}
                                 </div>
                               )}
                             </div>

@@ -19,8 +19,8 @@ pub struct AnnotationExtractor;
 
 impl AnnotationExtractor {
     /// Extracts all `// @verifies` and `// @implements` tags from source code content
-    // @implements SPEC-CORE-005::REQ-004
-    // @implements SPEC-CORE-005::REQ-005
+    // @implements spec-ft-core-mcp-tools::REQ-004
+    // @implements spec-ft-core-mcp-tools::REQ-005
     pub fn extract(source: &str) -> Vec<Annotation> {
         let verifies_re = Regex::new(r"//\s*@verifies\s+([A-Za-z0-9\-_]+)::([A-Za-z0-9\-_]+)").unwrap();
         let implements_re = Regex::new(r"//\s*@implements\s+([A-Za-z0-9\-_]+)::([A-Za-z0-9\-_]+)").unwrap();

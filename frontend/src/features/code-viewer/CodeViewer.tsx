@@ -9,8 +9,8 @@ const mockCodeSnippets: Record<string, { lang: string; lines: string[] }> = {
   'crates/aico-server/src/server.rs': {
     lang: 'rust',
     lines: [
-      '// @implements SPEC-CORE-001::REQ-001',
-      '// @implements SPEC-CORE-001::REQ-010',
+      '// @implements spec-ft-core-host-runtime::REQ-001',
+      '// @implements spec-ft-core-host-runtime::REQ-010',
       'pub async fn bind(&mut self) -> Result<SocketAddr, ServerError> {',
       '    for offset in 0..=self.config.max_port_attempts {',
       '        let port = self.config.base_port + offset;',
@@ -23,7 +23,7 @@ const mockCodeSnippets: Record<string, { lang: string; lines: string[] }> = {
       '    Err(ServerError::BindError("All ports occupied".into()))',
       '}',
       '',
-      '// @implements SPEC-CORE-007::REQ-001',
+      '// @implements spec-ft-core-epic-hub::REQ-001',
       'async fn list_epics_handler(State(state): State<AppState>) -> Json<Vec<DiscoveredEpic>> {',
       '    let registry = state.registry.read().await;',
       '    let active = registry.get_active();',
@@ -34,8 +34,8 @@ const mockCodeSnippets: Record<string, { lang: string; lines: string[] }> = {
   'frontend/src/components/layout/ShellLayout.tsx': {
     lang: 'typescript',
     lines: [
-      '// @implements SPEC-CORE-006::REQ-001',
-      '// @implements SPEC-CORE-006::REQ-008',
+      '// @implements spec-ft-core-webui-shell::REQ-001',
+      '// @implements spec-ft-core-webui-shell::REQ-008',
       'export const ShellLayout: React.FC<ShellLayoutProps> = ({ children }) => {',
       '  const [searchQuery, setSearchQuery] = useState("");',
       '  const [scopeFilters, setScopeFilters] = useState({ epics: true, specs: true, code: true, adrs: true });',
@@ -53,13 +53,13 @@ const mockCodeSnippets: Record<string, { lang: string; lines: string[] }> = {
   },
 };
 
-// @implements SPEC-CORE-007::REQ-008
+// @implements spec-ft-core-epic-hub::REQ-008
 export const CodeViewer: React.FC<CodeViewerProps> = ({ filePath }) => {
   const snippet = mockCodeSnippets[filePath] || {
     lang: filePath.endsWith('.rs') ? 'rust' : 'typescript',
     lines: [
       `// Source File: ${filePath}`,
-      '// @implements SPEC-CORE-006::REQ-001',
+      '// @implements spec-ft-core-webui-shell::REQ-001',
       '// Verified via automated contract seams',
       '',
       'export default function SourceModule() {',

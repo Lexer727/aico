@@ -3,8 +3,8 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { TerminalConsole } from '../src/components/terminal/TerminalConsole';
 
-// @verifies SPEC-CORE-006::REQ-009
-// @verifies SPEC-CORE-006::REQ-010
+// @verifies spec-ft-core-webui-shell::REQ-009
+// @verifies spec-ft-core-webui-shell::REQ-010
 describe('TerminalConsole Component', () => {
   it('renders terminal session and supports adding new terminal tabs', () => {
     render(<TerminalConsole />);

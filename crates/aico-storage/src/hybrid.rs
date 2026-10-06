@@ -22,7 +22,7 @@ impl HybridQueryEngine {
     }
 
     /// Perform unified hybrid query across LanceDB vector store and Kùzu property graph
-    // @implements SPEC-CORE-003::REQ-007
+    // @implements spec-ft-core-local-storage::REQ-007
     pub async fn search(
         &self,
         storage: &StorageManager,

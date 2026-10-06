@@ -3,10 +3,10 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { EpicHubView } from '../src/features/epic-hub/EpicHubView';
 
-// @verifies SPEC-CORE-007::REQ-001
-// @verifies SPEC-CORE-007::REQ-002
-// @verifies SPEC-CORE-007::REQ-005
-// @verifies SPEC-CORE-007::REQ-011
+// @verifies spec-ft-core-epic-hub::REQ-001
+// @verifies spec-ft-core-epic-hub::REQ-002
+// @verifies spec-ft-core-epic-hub::REQ-005
+// @verifies spec-ft-core-epic-hub::REQ-011
 describe('EpicHubView Component', () => {
   const mockEpic = {
     id: '001-aico-core',
@@ -33,18 +33,19 @@ describe('EpicHubView Component', () => {
     // Summary status badge
     expect(screen.getByText('[4/7 Verified]')).toBeInTheDocument();
 
-    // Check accordion headers
-    expect(screen.getByText('Overview')).toBeInTheDocument();
+    // Check Executive Summary top banner and accordion headers
+    expect(screen.getByText('Executive Summary')).toBeInTheDocument();
+    expect(screen.getByText(/Features in this Epic/)).toBeInTheDocument();
     expect(screen.getByText('Brainstorm')).toBeInTheDocument();
-    expect(screen.getByText('Specifications')).toBeInTheDocument();
+    expect(screen.getByText(/Architecture Decision Records/)).toBeInTheDocument();
     expect(screen.getByText('Deep Dive')).toBeInTheDocument();
     expect(screen.getByText('Task Plan')).toBeInTheDocument();
     expect(screen.getByText('Assets')).toBeInTheDocument();
 
-    // Pop-out button on Specifications accordion
-    const popoutBtn = screen.getByTestId('popout-specifications');
+    // Pop-out button on Brainstorm accordion
+    const popoutBtn = screen.getByTestId('popout-brainstorm');
     fireEvent.click(popoutBtn);
-    expect(onPopOut).toHaveBeenCalledWith('001-aico-core', 'specifications');
+    expect(onPopOut).toHaveBeenCalledWith('001-aico-core', 'brainstorm');
   });
 
   it('renders overall Task Execution Progress bar in the Task Plan handle even when collapsed', () => {

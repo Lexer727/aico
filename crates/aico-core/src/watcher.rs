@@ -33,8 +33,8 @@ impl DiscoveryWatcher {
     }
 
     /// Rescan root and synchronize into registry, broadcasting update if changed
-    // @implements SPEC-CORE-004::REQ-006
-    // @implements SPEC-CORE-004::REQ-008
+    // @implements spec-ft-core-discovery::REQ-006
+    // @implements spec-ft-core-discovery::REQ-008
     pub async fn poll_and_sync(&self) -> Result<usize, ManifestError> {
         let discovered = RootScanner::scan(&self.root_path)?;
         let count = discovered.len();

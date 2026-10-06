@@ -1,6 +1,6 @@
 use aico_storage::{CodeChunker, EmbeddingPipeline, StorageManager};
 
-// @verifies SPEC-CORE-003::REQ-004
+// @verifies spec-ft-core-local-storage::REQ-004
 #[tokio::test]
 async fn test_semantic_chunking_and_vector_search() {
     let temp_dir = std::env::temp_dir().join("aico_vector_test_1");

@@ -1,7 +1,7 @@
 use aico_server::{HostServer, ServerConfig};
 use tokio::sync::oneshot;
 
-// @verifies SPEC-CORE-001::REQ-005
+// @verifies spec-ft-core-host-runtime::REQ-005
 #[tokio::test]
 async fn test_server_graceful_shutdown_broadcasts_and_drains() {
     let mut config = ServerConfig::default();

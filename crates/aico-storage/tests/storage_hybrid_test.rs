@@ -1,6 +1,6 @@
 use aico_storage::{StorageManager, HybridQueryEngine, CodeChunker, EmbeddingPipeline};
 
-// @verifies SPEC-CORE-003::REQ-007
+// @verifies spec-ft-core-local-storage::REQ-007
 #[tokio::test]
 async fn test_hybrid_vector_and_graph_query() {
     let temp_dir = std::env::temp_dir().join("aico_hybrid_test_1");

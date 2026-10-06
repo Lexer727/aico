@@ -3,9 +3,9 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { FileDropZone } from '../src/components/common/FileDropZone';
 
-// @verifies SPEC-CORE-007::REQ-004
-// @verifies SPEC-CORE-007::REQ-007
-// @verifies SPEC-CORE-007::REQ-012
+// @verifies spec-ft-core-epic-hub::REQ-004
+// @verifies spec-ft-core-epic-hub::REQ-007
+// @verifies spec-ft-core-epic-hub::REQ-012
 describe('FileDropZone Component', () => {
   it('accepts valid files via drop and triggers onFileUpload callback', () => {
     const handleUpload = vi.fn();

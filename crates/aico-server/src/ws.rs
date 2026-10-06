@@ -28,8 +28,8 @@ impl WebSocketHub {
     }
 
     /// Broadcast an event message to all connected WebSocket clients
-    // @implements SPEC-CORE-001::REQ-003
-    // @implements SPEC-CORE-001::REQ-007
+    // @implements spec-ft-core-host-runtime::REQ-003
+    // @implements spec-ft-core-host-runtime::REQ-007
     pub fn broadcast(&self, topic: &str, payload: &str) -> usize {
         let message = HubMessage {
             topic: topic.to_string(),

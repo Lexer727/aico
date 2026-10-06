@@ -8,7 +8,7 @@ interface SystemStats {
   uptime_seconds: number;
 }
 
-// @implements SPEC-CORE-006::REQ-012
+// @implements spec-ft-core-webui-shell::REQ-012
 export const ActivityMonitor: React.FC = () => {
   const [stats, setStats] = useState<SystemStats>({
     cpu_usage: 1.8,

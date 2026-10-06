@@ -10,7 +10,7 @@ use rust_embed::RustEmbed;
 pub struct FrontendAssets;
 
 /// Serves embedded WebUI static assets with SPA wildcard fallback
-// @implements SPEC-CORE-001::REQ-002
+// @implements spec-ft-core-host-runtime::REQ-002
 pub async fn static_asset_handler(uri: Uri) -> impl IntoResponse {
     let raw_path = uri.path().trim_start_matches('/');
     let asset_path = if raw_path.is_empty() {

@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { DashboardView } from '../src/features/dashboard/DashboardView';
 
-// @verifies SPEC-CORE-007::REQ-007
+// @verifies spec-ft-core-epic-hub::REQ-007
 describe('DashboardView Component', () => {
   it('renders workspace overview with both ec-core and ec-specs epics', () => {
     const onOpenEpic = vi.fn();

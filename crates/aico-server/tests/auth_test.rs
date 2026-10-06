@@ -1,7 +1,7 @@
 use aico_server::LanAuthenticator;
 
-// @verifies SPEC-CORE-001::REQ-004
-// @verifies SPEC-CORE-001::REQ-008
+// @verifies spec-ft-core-host-runtime::REQ-004
+// @verifies spec-ft-core-host-runtime::REQ-008
 #[test]
 fn test_lan_authenticator_token_generation_and_validation() {
     let auth = LanAuthenticator::new();

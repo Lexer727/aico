@@ -9,9 +9,9 @@ interface FileDropZoneProps {
   className?: string;
 }
 
-// @implements SPEC-CORE-007::REQ-004
-// @implements SPEC-CORE-007::REQ-007
-// @implements SPEC-CORE-007::REQ-012
+// @implements spec-ft-core-epic-hub::REQ-004
+// @implements spec-ft-core-epic-hub::REQ-007
+// @implements spec-ft-core-epic-hub::REQ-012
 export const FileDropZone: React.FC<FileDropZoneProps> = ({
   acceptedMime,
   onFileUpload,

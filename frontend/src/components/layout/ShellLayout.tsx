@@ -118,12 +118,12 @@ const defaultAdrs: DiscoveredAdrNav[] = [
   { id: 'ADR-0010', title: 'SDD Structural Grammar v0.1.2 & Standalone Features', status: 'Accepted' },
 ];
 
-// @implements SPEC-CORE-006::REQ-001
-// @implements SPEC-CORE-006::REQ-002
-// @implements SPEC-CORE-006::REQ-008
-// @implements SPEC-CORE-006::REQ-012
-// @implements SPEC-CORE-006::REQ-013
-// @implements SPEC-CORE-007::REQ-001
+// @implements spec-ft-core-webui-shell::REQ-001
+// @implements spec-ft-core-webui-shell::REQ-002
+// @implements spec-ft-core-webui-shell::REQ-008
+// @implements spec-ft-core-webui-shell::REQ-012
+// @implements spec-ft-core-webui-shell::REQ-013
+// @implements spec-ft-core-epic-hub::REQ-001
 export const ShellLayout: React.FC<ShellLayoutProps> = ({
   children,
   isMobile = false,
@@ -222,7 +222,7 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
           <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-pulse" />
           <span>AICO WORKSPACE</span>
         </div>
-        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">
+        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400" title="AICO Platform Version">
           v0.1.1
         </span>
       </div>
@@ -324,6 +324,7 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
                   filteredEpics.map((epic) => (
                     <div
                       key={epic.id}
+                      data-testid={`nav-epic-${epic.id}`}
                       onClick={() => onSelectEpic?.(epic.id)}
                       className="py-1 px-2 hover:bg-zinc-800/60 rounded cursor-pointer flex items-center justify-between group transition-colors"
                     >
@@ -370,6 +371,7 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
                   filteredFeatures.map((feat) => (
                     <div
                       key={feat.id}
+                      data-testid={`nav-feature-${feat.id}`}
                       onClick={() => onSelectFeature?.(feat.id, feat.name)}
                       className="py-1 px-2 hover:bg-zinc-800/60 rounded cursor-pointer flex items-center justify-between group transition-colors"
                       title={`${feat.id}: ${feat.name} (${feat.epicId})`}

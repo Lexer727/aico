@@ -2,9 +2,9 @@ use std::fs;
 use std::sync::Arc;
 use aico_storage::StorageManager;
 
-// @verifies SPEC-CORE-003::REQ-001
-// @verifies SPEC-CORE-003::REQ-002
-// @verifies SPEC-CORE-003::REQ-009
+// @verifies spec-ft-core-local-storage::REQ-001
+// @verifies spec-ft-core-local-storage::REQ-002
+// @verifies spec-ft-core-local-storage::REQ-009
 #[tokio::test]
 async fn test_embedded_databases_init_and_concurrency() {
     let temp_dir = std::env::temp_dir().join("aico_storage_test_1");
@@ -62,7 +62,7 @@ async fn test_embedded_databases_init_and_concurrency() {
     assert!(res.contains("ok") || res.contains("created") || res.contains("success"));
 }
 
-// @verifies SPEC-CORE-003::REQ-003
+// @verifies spec-ft-core-local-storage::REQ-003
 #[tokio::test]
 async fn test_vector_similarity_search() {
     let temp_dir = std::env::temp_dir().join("aico_storage_test_2");

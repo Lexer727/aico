@@ -43,7 +43,7 @@ impl EmergencyKillSwitch {
     }
 
     /// Terminate all tracked active processes immediately
-    // @implements SPEC-CORE-002::REQ-010
+    // @implements spec-ft-core-security-auth::REQ-010
     pub fn kill_all(&self) -> Result<usize, std::io::Error> {
         self.triggered.store(true, Ordering::SeqCst);
         let mut set = self.pids.lock().unwrap();

@@ -2,8 +2,8 @@ use aico_core::human_gate::{
     HumanGateError, HumanGateManager, PlanTask, TaskRole, TaskStatus,
 };
 
-// @verifies SPEC-CORE-007::REQ-008
-// @verifies SPEC-CORE-007::REQ-012
+// @verifies spec-ft-core-epic-hub::REQ-008
+// @verifies spec-ft-core-epic-hub::REQ-012
 #[tokio::test]
 async fn test_human_gate_task_blocks_and_unblocks_agent_frontier() {
     let mut manager = HumanGateManager::new();

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   ExternalLink,
   ChevronDown,
@@ -7,18 +7,20 @@ import {
   FileText,
   CheckSquare,
   GitFork,
-  ShieldCheck,
   FolderArchive,
-  ArrowRight,
   Package,
   BookOpen,
 } from 'lucide-react';
 import { FileDropZone } from '../../components/common/FileDropZone';
+import { MarkdownView, stripDocumentHeader } from '../../components/common/MarkdownView';
 import {
   fetchEpic,
+  normalizeAdrId,
+  extractTaskId,
   type DiscoveredFeature,
   type FeatureTask,
   type TermInfo,
+  type DiscoveredAdr,
 } from '../feature-task-data';
 
 export interface EpicData {
@@ -32,6 +34,9 @@ export interface EpicData {
   executive_summary?: string;
   brainstormContent?: string;
   brainstorm_content?: string;
+  deepdiveContent?: string;
+  deepdive_content?: string;
+  adrs?: string[];
   ubiquitousLanguage?: TermInfo[];
   ubiquitous_language?: TermInfo[];
   features?: DiscoveredFeature[];
@@ -57,6 +62,9 @@ export interface EpicData {
 
 interface EpicHubViewProps {
   epic: EpicData;
+  allFeatures?: DiscoveredFeature[];
+  allAdrs?: DiscoveredAdr[];
+  onOpenAdr?: (adrId: string) => void;
   onPopOut?: (epicId: string, section: string) => void;
   onOpenSpec?: (specId: string, title: string) => void;
   onOpenFeature?: (featureId: string, name: string) => void;
@@ -64,15 +72,18 @@ interface EpicHubViewProps {
   onFileUpload?: (file: File) => void;
 }
 
-// @implements SPEC-CORE-007::REQ-001
-// @implements SPEC-CORE-007::REQ-002
-// @implements SPEC-CORE-007::REQ-003
-// @implements SPEC-CORE-007::REQ-005
-// @implements SPEC-CORE-007::REQ-011
+// @implements spec-ft-core-epic-hub::REQ-001
+// @implements spec-ft-core-epic-hub::REQ-002
+// @implements spec-ft-core-epic-hub::REQ-003
+// @implements spec-ft-core-epic-hub::REQ-005
+// @implements spec-ft-core-epic-hub::REQ-011
 export const EpicHubView: React.FC<EpicHubViewProps> = ({
   epic: initialEpic,
+  allFeatures,
+  allAdrs,
+  onOpenAdr,
   onPopOut,
-  onOpenSpec,
+  onOpenSpec: _onOpenSpec,
   onOpenFeature,
   uploadedFiles = [],
   onFileUpload,
@@ -95,6 +106,8 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
             ...live,
             executiveSummary: live.executive_summary || prev.executiveSummary,
             brainstormContent: live.brainstorm_content || prev.brainstormContent,
+            deepdiveContent: live.deepdive_content || prev.deepdiveContent,
+            adrs: live.adrs || prev.adrs,
             ubiquitousLanguage: live.ubiquitous_language || prev.ubiquitousLanguage,
             features: live.features || prev.features,
             specs: live.specs || prev.specs,
@@ -109,16 +122,13 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
   }, [initialEpic.id]);
 
   // Layout states:
-  // Overview: open by default (collapsed = false)
-  // Left column (Features, Brainstorm, Specs, Deep Dive, Terminology, Assets): closed by default (collapsed = true)
+  // Left column (Features, Brainstorm, ADRs, Deep Dive, Assets): closed by default (collapsed = true)
   // Right column (Task Plan): open by default (collapsed = false)
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
-    overview: false,
     features: true,
     brainstorm: true,
-    specifications: true,
+    adrs: true,
     deepDive: true,
-    terminology: true,
     assets: true,
     taskPlan: false,
   });
@@ -141,13 +151,38 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
       seam: f.tasks?.[0]?.seam || '',
     }));
 
-  const termsList: TermInfo[] = epic.ubiquitous_language || epic.ubiquitousLanguage || [];
-
   // Compute overall task plan progress across all features in this epic
   const allTasks: FeatureTask[] = currentFeaturesList.flatMap((f) => f.tasks || []);
   const totalTasks = allTasks.length;
-  const doneTasks = allTasks.filter((t) => t.status === 'Done').length;
+  const doneTasks = allTasks.filter((t) => t.status === 'Done' || t.status === 'Completed').length;
   const overallPercentage = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 100;
+
+  // Dynamic epic status calculation: if all features and tasks are finished, status rolls up to Completed
+  const isAllFeaturesDone =
+    currentFeaturesList.length > 0 &&
+    currentFeaturesList.every((f) => f.status === 'Completed' || f.status === 'Done');
+  const isAllTasksDone = allTasks.length > 0 && doneTasks === allTasks.length;
+  const computedEpicStatus =
+    (isAllFeaturesDone && (allTasks.length === 0 || isAllTasksDone))
+      ? 'Completed'
+      : epic.status;
+
+  const allTasksMap = useMemo(() => {
+    const map: Record<string, FeatureTask> = {};
+    if (allFeatures && allFeatures.length > 0) {
+      allFeatures.forEach((f) => {
+        (f.tasks || []).forEach((t) => {
+          map[t.id.toUpperCase()] = t;
+          map[t.id.toLowerCase()] = t;
+        });
+      });
+    }
+    allTasks.forEach((t) => {
+      map[t.id.toUpperCase()] = t;
+      map[t.id.toLowerCase()] = t;
+    });
+    return map;
+  }, [allFeatures, allTasks]);
 
   const executiveSummary =
     epic.executiveSummary ||
@@ -158,26 +193,49 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
   const verifiedCount = epic.verifiedCount ?? doneTasks;
   const totalCount = epic.totalCount ?? (totalTasks > 0 ? totalTasks : currentSpecsList.length);
 
+  const epicAdrs = useMemo(() => {
+    const set = new Set<string>();
+    if (epic.adrs) {
+      epic.adrs.forEach((a) => {
+        const norm = normalizeAdrId(a);
+        if (norm) set.add(norm);
+      });
+    }
+    if (epic.features) {
+      epic.features.forEach((f) => {
+        if (f.adrs) {
+          f.adrs.forEach((a) => {
+            const norm = normalizeAdrId(a);
+            if (norm) set.add(norm);
+          });
+        }
+      });
+    }
+    const list = Array.from(set);
+    list.sort();
+    return list;
+  }, [epic.adrs, epic.features]);
+
+  const adrLookupMap = useMemo(() => {
+    const map: Record<string, DiscoveredAdr> = {};
+    if (allAdrs) {
+      allAdrs.forEach((a) => {
+        map[a.id.toLowerCase()] = a;
+        const norm = normalizeAdrId(a.id);
+        if (norm) map[norm.toLowerCase()] = a;
+      });
+    }
+    return map;
+  }, [allAdrs]);
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6 text-zinc-100">
       {/* Epic Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-zinc-800">
         <div>
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2.5 flex-wrap">
             <span className="font-mono text-sm px-2.5 py-1 rounded-md bg-indigo-950 text-indigo-400 border border-indigo-800/80 font-bold uppercase tracking-wide">
               {epic.id}
-            </span>
-            <span
-              className={`text-xs px-2.5 py-1 rounded-full font-medium ${
-                epic.status === 'Completed' || epic.status === 'Done'
-                  ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/80'
-                  : 'bg-amber-950 text-amber-400 border border-amber-800/80'
-              }`}
-            >
-              {epic.status}
-            </span>
-            <span className="text-xs text-zinc-400 font-mono">
-              [{verifiedCount}/{totalCount} Verified]
             </span>
             {epic.order && (
               <span className="text-xs text-zinc-500 font-mono">
@@ -188,71 +246,39 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
           <h1 className="text-2xl font-bold tracking-tight text-white mt-2">{epic.title}</h1>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => {
-              toggleSection('features');
-              toggleSection('brainstorm');
-              toggleSection('specifications');
-              toggleSection('deepDive');
-              toggleSection('terminology');
-              toggleSection('assets');
-            }}
-            className="text-xs px-3 py-1.5 rounded-lg border border-zinc-700 bg-zinc-800/60 hover:bg-zinc-800 text-zinc-300 transition-colors"
+        {/* Status and Verification on the right */}
+        <div className="flex flex-col items-end gap-1">
+          <span
+            className={`text-xs px-3 py-1 rounded-full font-mono font-semibold ${
+              computedEpicStatus === 'Completed' || computedEpicStatus === 'Done'
+                ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/80'
+                : 'bg-amber-950 text-amber-400 border border-amber-800/80'
+            }`}
           >
-            Toggle Left Accordions
-          </button>
+            {computedEpicStatus}
+          </span>
+          <p className="text-[11px] font-mono text-zinc-400">
+            [{verifiedCount}/{totalCount} Verified]
+          </p>
         </div>
       </div>
 
-      {/* TOP SECTION: Overview (Open by default, containing solely the Executive Summary) */}
-      <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
-        <div
-          onClick={() => toggleSection('overview')}
-          className="flex items-center justify-between px-4 py-3 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors"
-        >
-          <div className="flex items-center gap-2.5 flex-1 min-w-0">
-            {collapsedSections.overview ? (
-              <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
-            ) : (
-              <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
-            )}
-            <FileText className="w-4 h-4 text-indigo-400 flex-shrink-0" />
-            <span className="font-semibold text-sm text-zinc-200">Overview</span>
-            {collapsedSections.overview && (
-              <span className="text-xs text-zinc-500 truncate ml-2 italic">
-                — {executiveSummary}
-              </span>
-            )}
+      {/* TOP SECTION: Executive Summary Banner (Directly visible at top, no collapsible accordion) */}
+      {executiveSummary && (
+        <div className="p-4 bg-zinc-900/70 border border-zinc-800 rounded-xl space-y-2 shadow-sm">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-300">
+            <FileText className="w-4 h-4 text-emerald-400" />
+            <span>Executive Summary</span>
           </div>
-          <button
-            data-testid="popout-overview"
-            onClick={(e) => {
-              e.stopPropagation();
-              onPopOut?.(epic.id, 'overview');
-            }}
-            title="Open in separate tab"
-            className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-          </button>
+          <div className="text-zinc-300 text-xs sm:text-sm leading-relaxed">
+            <MarkdownView content={executiveSummary} />
+          </div>
         </div>
-        {!collapsedSections.overview && (
-          <div className="p-5 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30">
-            {/* Executive Summary */}
-            <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800">
-              <h4 className="text-xs font-semibold text-zinc-200 mb-1">Executive Summary</h4>
-              <p className="text-zinc-400 text-xs leading-relaxed">
-                {executiveSummary}
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
+      )}
 
       {/* 2-COLUMN SECTION: Left = Accordions | Right = Task Plan */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-        {/* LEFT COLUMN: Features, Brainstorm, Specifications, Deep Dive, Terminology, Assets (Closed by default) */}
+        {/* LEFT COLUMN: Features, Brainstorm, ADRs, Deep Dive, Assets */}
         <div className="space-y-3">
           {/* Features Accordion */}
           <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
@@ -314,214 +340,191 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
           </div>
 
           {/* Brainstorm Accordion */}
-          <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
-            <div
-              onClick={() => toggleSection('brainstorm')}
-              className="flex items-center justify-between px-4 py-3 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors"
-            >
-              <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                {collapsedSections.brainstorm ? (
-                  <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
-                ) : (
-                  <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
-                )}
-                <Layers className="w-4 h-4 text-indigo-400 flex-shrink-0" />
-                <span className="font-semibold text-sm text-zinc-200">Brainstorm</span>
-                {collapsedSections.brainstorm && (
-                  <span className="text-xs text-zinc-500 truncate ml-2 italic">
-                    — {epic.sections?.brainstorm || 'Architectural trade-offs and decision matrix'}
-                  </span>
-                )}
-              </div>
-              <button
-                data-testid="popout-brainstorm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onPopOut?.(epic.id, 'brainstorm');
-                }}
-                title="Open in separate tab"
-                className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-              </button>
-            </div>
-            {!collapsedSections.brainstorm && (
-              <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-3">
-                <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800 space-y-2">
-                  <h4 className="text-xs font-semibold text-zinc-200">Architectural Context & Brainstorm</h4>
-                  <p className="text-zinc-400 text-xs leading-relaxed">
-                    {epic.brainstormContent ||
-                      epic.brainstorm_content ||
-                      epic.sections?.brainstorm ||
-                      'Problem exploration, architectural boundaries, and alternative approaches.'}
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Specifications Accordion */}
-          <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
-            <div
-              onClick={() => toggleSection('specifications')}
-              className="flex items-center justify-between px-4 py-3 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors"
-            >
-              <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                {collapsedSections.specifications ? (
-                  <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
-                ) : (
-                  <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
-                )}
-                <ShieldCheck className="w-4 h-4 text-sky-400 flex-shrink-0" />
-                <span className="font-semibold text-sm text-zinc-200">Specifications</span>
-                {collapsedSections.specifications && (
-                  <span className="text-xs text-zinc-500 truncate ml-2 italic">
-                    — {epic.sections?.specifications || `${currentSpecsList.length} EARS specifications`}
-                  </span>
-                )}
-              </div>
-              <button
-                data-testid="popout-specifications"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onPopOut?.(epic.id, 'specifications');
-                }}
-                title="Open in separate tab"
-                className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-              </button>
-            </div>
-            {!collapsedSections.specifications && (
-              <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-2">
-                {currentSpecsList.map((spec) => (
-                  <div
-                    key={spec.id}
-                    className="p-2.5 bg-zinc-900/80 rounded border border-zinc-800 flex items-center justify-between"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs font-semibold text-sky-400">{spec.id}</span>
-                        <span className="text-xs text-zinc-200">{spec.title}</span>
-                      </div>
-                      <div className="text-[10px] text-zinc-500 font-mono mt-0.5">
-                        {spec.requirements_count ?? (spec as any).requirementsCount ?? 0} Requirements
-                        {spec.seam ? ` • Seam: ${spec.seam}` : ''}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => onOpenSpec?.(spec.id, spec.title)}
-                      className="flex items-center gap-1 text-[11px] px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors"
-                    >
-                      <span>Open</span>
-                      <ArrowRight className="w-3 h-3" />
-                    </button>
+          {(() => {
+            const rawBrainstorm = epic.brainstormContent || epic.brainstorm_content || epic.sections?.brainstorm;
+            const displayBrainstorm = stripDocumentHeader(rawBrainstorm);
+            return (
+              <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
+                <div
+                  onClick={() => toggleSection('brainstorm')}
+                  className="flex items-center justify-between px-4 py-3 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors"
+                >
+                  <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                    {collapsedSections.brainstorm ? (
+                      <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                    )}
+                    <Layers className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+                    <span className="font-semibold text-sm text-zinc-200">Brainstorm</span>
+                    {collapsedSections.brainstorm && (
+                      <span className="text-xs text-zinc-500 truncate ml-2 italic">
+                        {rawBrainstorm ? '— Architectural trade-offs and decision matrix' : '— No brainstorm artifact defined'}
+                      </span>
+                    )}
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Deep Dive Accordion */}
-          <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
-            <div
-              onClick={() => toggleSection('deepDive')}
-              className="flex items-center justify-between px-4 py-3 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors"
-            >
-              <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                {collapsedSections.deepDive ? (
-                  <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
-                ) : (
-                  <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
-                )}
-                <GitFork className="w-4 h-4 text-indigo-400 flex-shrink-0" />
-                <span className="font-semibold text-sm text-zinc-200">Deep Dive</span>
-                {collapsedSections.deepDive && (
-                  <span className="text-xs text-zinc-500 truncate ml-2 italic">
-                    — {epic.sections?.deepDive || 'System boundaries and designated seams'}
-                  </span>
-                )}
-              </div>
-              <button
-                data-testid="popout-deepDive"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onPopOut?.(epic.id, 'deepDive');
-                }}
-                title="Open in separate tab"
-                className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-              </button>
-            </div>
-            {!collapsedSections.deepDive && (
-              <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-2">
-                <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800 space-y-2">
-                  <h4 className="text-xs font-semibold text-zinc-200">System Boundaries & Seams</h4>
-                  <p className="text-zinc-400 text-xs leading-relaxed">
-                    Graph traversal designates test seams between modules to prevent regressions and isolate blast radii.
-                  </p>
+                  {rawBrainstorm && (
+                    <button
+                      data-testid="popout-brainstorm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onPopOut?.(epic.id, 'brainstorm');
+                      }}
+                      title="Open in separate tab"
+                      className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
+                {!collapsedSections.brainstorm && (
+                  <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-3">
+                    {displayBrainstorm ? (
+                      <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800 space-y-2">
+                        <h4 className="text-xs font-semibold text-zinc-200">Architectural Context & Exploration</h4>
+                        <MarkdownView content={displayBrainstorm} />
+                      </div>
+                    ) : rawBrainstorm ? (
+                      <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800 text-zinc-400 text-xs italic">
+                        Brainstorming details summarized in Executive Summary above.
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800 text-zinc-500 text-xs italic">
+                        No brainstorm artifact (brain-ec-*.md) created for this epic.
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            );
+          })()}
 
-          {/* Ubiquitous Domain Terminology Accordion */}
+          {/* Architecture Decision Records (ADRs) Accordion */}
           <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
             <div
-              onClick={() => toggleSection('terminology')}
+              onClick={() => toggleSection('adrs')}
               className="flex items-center justify-between px-4 py-3 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors"
             >
               <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                {collapsedSections.terminology ? (
+                {collapsedSections.adrs ? (
                   <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
                 ) : (
                   <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
                 )}
                 <BookOpen className="w-4 h-4 text-amber-400 flex-shrink-0" />
                 <span className="font-semibold text-sm text-zinc-200">
-                  Ubiquitous Domain Terminology ({termsList.length})
+                  Architecture Decision Records ({epicAdrs.length})
                 </span>
-                {collapsedSections.terminology && (
+                {collapsedSections.adrs && (
                   <span className="text-xs text-zinc-500 truncate ml-2 italic">
-                    — GLOSSARY.md domain language definitions
+                    — Architectural governance records across child features
                   </span>
                 )}
               </div>
-              <button
-                data-testid="popout-terminology"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onPopOut?.(epic.id, 'terminology');
-                }}
-                title="Open in separate tab"
-                className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-              </button>
             </div>
-            {!collapsedSections.terminology && (
+            {!collapsedSections.adrs && (
               <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-2.5">
-                {termsList.length > 0 ? (
-                  <div className="space-y-2">
-                    {termsList.map((t, idx) => (
-                      <div
-                        key={idx}
-                        className="p-3 bg-zinc-900/80 rounded-lg border border-zinc-800 space-y-1"
-                      >
-                        <span className="font-semibold text-amber-400 text-xs">{t.term}</span>
-                        <p className="text-zinc-400 text-[11px] leading-relaxed">{t.definition}</p>
-                      </div>
-                    ))}
+                {epicAdrs.length > 0 ? (
+                  <div className="grid grid-cols-1 gap-2">
+                    {epicAdrs.map((adrId) => {
+                      const adrInfo = adrLookupMap[adrId.toLowerCase()];
+                      return (
+                        <div
+                          key={adrId}
+                          onClick={() => onOpenAdr?.(adrId)}
+                          className="p-3 bg-zinc-900/80 rounded border border-zinc-800 hover:border-amber-500/50 cursor-pointer transition-colors space-y-1.5 group"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-xs font-semibold text-amber-400 group-hover:text-amber-300">
+                                {adrId}
+                              </span>
+                              <span className="text-xs font-semibold text-zinc-200 group-hover:text-white truncate">
+                                {adrInfo?.title || `Architecture Decision Record ${adrId}`}
+                              </span>
+                            </div>
+                            <span className="text-[10px] px-2 py-0.5 rounded font-mono bg-emerald-950 text-emerald-400 border border-emerald-800/80">
+                              {adrInfo?.status || 'Accepted'}
+                            </span>
+                          </div>
+                          {adrInfo?.decision && (
+                            <p className="text-[11px] text-zinc-400 line-clamp-2">
+                              {adrInfo.decision}
+                            </p>
+                          )}
+                          <div className="flex items-center justify-between text-[10px] text-zinc-500 pt-1">
+                            <span>Click to view decision record</span>
+                            <span className="text-amber-400 group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
+                              Open ADR &rarr;
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : (
-                  <p className="text-zinc-500 text-xs italic">
-                    Glossary terms defined in GLOSSARY.md.
-                  </p>
+                  <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800 text-zinc-500 text-xs italic">
+                    No Architecture Decision Records (ADRs) associated with this epic.
+                  </div>
                 )}
               </div>
             )}
           </div>
+
+          {/* Deep Dive Accordion */}
+          {(() => {
+            const epicDeepDive = epic.deepdiveContent || epic.deepdive_content || epic.sections?.deepDive;
+            return (
+              <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
+                <div
+                  onClick={() => toggleSection('deepDive')}
+                  className="flex items-center justify-between px-4 py-3 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors"
+                >
+                  <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                    {collapsedSections.deepDive ? (
+                      <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                    )}
+                    <GitFork className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+                    <span className="font-semibold text-sm text-zinc-200">Deep Dive</span>
+                    {collapsedSections.deepDive && (
+                      <span className="text-xs text-zinc-500 truncate ml-2 italic">
+                        {epicDeepDive ? '— System boundaries and designated seams' : '— No deep dive artifact defined'}
+                      </span>
+                    )}
+                  </div>
+                  {epicDeepDive && (
+                    <button
+                      data-testid="popout-deepDive"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onPopOut?.(epic.id, 'deepDive');
+                      }}
+                      title="Open in separate tab"
+                      className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                {!collapsedSections.deepDive && (
+                  <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-2">
+                    {epicDeepDive ? (
+                      <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800 space-y-2">
+                        <h4 className="text-xs font-semibold text-zinc-200">System Boundaries & Seams</h4>
+                        <MarkdownView content={epicDeepDive} />
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800 text-zinc-500 text-xs italic">
+                        No deep dive artifact (deepdive-ec-*.md) created for this epic.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Assets Accordion */}
           <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
@@ -718,19 +721,47 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
                                     ))}
                                   </div>
                                 )}
-                                {blockedList.length > 0 && (
-                                  <div className="text-zinc-500 flex items-center gap-1 flex-wrap">
-                                    <span>Blocked by:</span>
-                                    {blockedList.map((dep) => (
-                                      <span
-                                        key={dep}
-                                        className="px-1 py-0.2 rounded bg-amber-950/80 text-amber-400 border border-amber-800/60"
-                                      >
-                                        {dep}
-                                      </span>
-                                    ))}
-                                  </div>
-                                )}
+                                {blockedList.length > 0 && (() => {
+                                  const isAllResolved = blockedList.every((dep) => {
+                                    const depUpper = dep.trim().toUpperCase();
+                                    if (!depUpper || depUpper === 'NONE' || depUpper.startsWith('NONE')) return true;
+                                    const taskId = extractTaskId(dep);
+                                    const blocker = taskId
+                                      ? allTasksMap[taskId] || allTasksMap[taskId.toLowerCase()]
+                                      : allTasksMap[depUpper] || allTasksMap[dep.trim().toLowerCase()];
+                                    return blocker && (blocker.status === 'Done' || blocker.status === 'Completed');
+                                  });
+
+                                  return (
+                                    <div className="text-zinc-500 flex items-center gap-1.5 flex-wrap pt-0.5">
+                                      <span>{isAllResolved ? 'Depends on:' : 'Blocked by:'}</span>
+                                      {blockedList.map((dep) => {
+                                        const depUpper = dep.trim().toUpperCase();
+                                        const isNone = !depUpper || depUpper === 'NONE' || depUpper.startsWith('NONE');
+                                        const taskId = extractTaskId(dep);
+                                        const blocker = taskId
+                                          ? allTasksMap[taskId] || allTasksMap[taskId.toLowerCase()]
+                                          : allTasksMap[depUpper] || allTasksMap[dep.trim().toLowerCase()];
+                                        const isResolved =
+                                          isNone ||
+                                          (blocker && (blocker.status === 'Done' || blocker.status === 'Completed'));
+
+                                        return (
+                                          <span
+                                            key={dep}
+                                            className={`px-1.5 py-0.5 rounded font-mono text-[10px] ${
+                                              isResolved
+                                                ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/60'
+                                                : 'bg-rose-950/80 text-rose-400 border border-rose-800/60'
+                                            }`}
+                                          >
+                                            {dep} {isResolved ? '(Done)' : blocker?.status ? `(${blocker.status})` : '(Pending)'}
+                                          </span>
+                                        );
+                                      })}
+                                    </div>
+                                  );
+                                })()}
                               </div>
 
                               {/* Deliverables */}

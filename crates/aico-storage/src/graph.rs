@@ -10,7 +10,7 @@ pub struct KuzuGraphStore {
 
 impl KuzuGraphStore {
     /// Initialize embedded openCypher property graph database
-    // @implements SPEC-CORE-003::REQ-002
+    // @implements spec-ft-core-local-storage::REQ-002
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StorageError> {
         let path = path.as_ref().to_path_buf();
         std::fs::create_dir_all(&path)?;
@@ -22,7 +22,7 @@ impl KuzuGraphStore {
     }
 
     /// Execute openCypher statement against property graph
-    // @implements SPEC-CORE-003::REQ-002
+    // @implements spec-ft-core-local-storage::REQ-002
     pub fn execute_query(&mut self, cypher: &str) -> Result<String, StorageError> {
         let trimmed = cypher.trim();
         if trimmed.starts_with("CREATE") || trimmed.starts_with("MERGE") {

@@ -64,15 +64,15 @@ impl PolicyEngine {
     }
 
     /// Check if target path violates workspace sandboxing
-    // @implements SPEC-CORE-002::REQ-008
+    // @implements spec-ft-core-security-auth::REQ-008
     pub fn is_sandboxed<P: AsRef<Path>>(&self, target_path: P) -> bool {
         let normalized = Self::normalize_path(target_path.as_ref());
         normalized.starts_with(&self.workspace_root)
     }
 
     /// Classify a command string and execution working directory
-    // @implements SPEC-CORE-002::REQ-001
-    // @implements SPEC-CORE-002::REQ-009
+    // @implements spec-ft-core-security-auth::REQ-001
+    // @implements spec-ft-core-security-auth::REQ-009
     pub fn classify_command<P: AsRef<Path>>(&self, cmd: &str, _cwd: P) -> PolicyDecision {
         let trimmed = cmd.trim();
 
@@ -131,7 +131,7 @@ impl PolicyEngine {
     }
 
     /// Evaluate command policy with explicit AutoMode state
-    // @implements SPEC-CORE-002::REQ-011
+    // @implements spec-ft-core-security-auth::REQ-011
     pub fn evaluate_with_mode<P: AsRef<Path>>(&self, cmd: &str, cwd: P, mode: AutoModeState) -> PolicyDecision {
         let mut decision = self.classify_command(cmd, cwd);
         match mode {

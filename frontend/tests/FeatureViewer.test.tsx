@@ -3,14 +3,14 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { FeatureViewer } from '../src/features/feature-viewer/FeatureViewer';
 
-// @verifies SPEC-CORE-007::REQ-001
-// @verifies SPEC-CORE-007::REQ-004
+// @verifies spec-ft-core-epic-hub::REQ-001
+// @verifies spec-ft-core-epic-hub::REQ-004
 describe('FeatureViewer Component', () => {
   const mockFeature = {
     id: '01-host-runtime',
     name: 'Host Runtime & Local Server',
     epicId: '001-aico-core',
-    specId: 'SPEC-CORE-001',
+    specId: 'spec-ft-core-host-runtime',
     specTitle: 'Host Runtime & Local HTTP/WebSocket Server',
     planId: 'PLAN-CORE-001',
     planTitle: 'Host Runtime & Local Axum Server',
@@ -31,12 +31,16 @@ describe('FeatureViewer Component', () => {
 
     expect(screen.getByText('FEATURE: 01-host-runtime')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1, name: 'Host Runtime & Local Server' })).toBeInTheDocument();
-    expect(screen.getByText('SPEC-CORE-001')).toBeInTheDocument();
+    expect(screen.getByText('spec-ft-core-host-runtime')).toBeInTheDocument();
     expect(screen.getByText('PLAN-CORE-001')).toBeInTheDocument();
 
-    const openSpecBtn = screen.getByText('Open Spec Document');
-    fireEvent.click(openSpecBtn);
-    expect(onOpenSpec).toHaveBeenCalledWith('SPEC-CORE-001', 'Host Runtime & Local HTTP/WebSocket Server');
+    const specTag = screen.getByText('spec-ft-core-host-runtime');
+    fireEvent.click(specTag);
+    expect(onOpenSpec).toHaveBeenCalledWith('spec-ft-core-host-runtime', 'Host Runtime & Local HTTP/WebSocket Server');
+
+    const planTag = screen.getByText('PLAN-CORE-001');
+    fireEvent.click(planTag);
+    expect(onOpenPlan).toHaveBeenCalledWith('PLAN-CORE-001', 'Host Runtime & Local Axum Server');
   });
 
   it('renders Task Execution Progress bar in the handle of Task Plan even when collapsed', () => {
@@ -66,63 +70,205 @@ describe('FeatureViewer Component', () => {
     expect(collapsedHandleProgress).toHaveTextContent('Done (50%)');
   });
 
-  it('renders Scope Boundaries on left accordion and Executive Summary in overview', () => {
-    const featureWithScopes = {
+  it('renders Specs accordion with Scope Boundaries, EARS requirements, and Designated Public Test Seams', () => {
+    const featureWithSpecs = {
       ...mockFeature,
       description: 'Custom Executive Summary for feature',
       in_scope: ['In-scope item 1', 'In-scope item 2'],
       out_of_scope: ['Out-of-scope item 1'],
+      requirements: [
+        { id: 'REQ-001', pattern: 'Ubiquitous', statement: 'The system shall boot deterministically.', status: 'Verified' },
+      ],
+      test_seams: [
+        { id: 'SEAM-001', path: 'crates/aico-server/src/server.rs', description: 'HTTP bind seam' },
+      ],
     };
 
-    render(<FeatureViewer feature={featureWithScopes} />);
+    render(<FeatureViewer feature={featureWithSpecs} />);
 
     // Executive summary in overview is visible
     expect(screen.getByText('Custom Executive Summary for feature')).toBeInTheDocument();
 
-    // Scope Boundaries accordion header is visible
-    const scopeAccordion = screen.getByText(/Scope Boundaries \(3\)/);
-    expect(scopeAccordion).toBeInTheDocument();
+    // Specs accordion header is visible
+    const specsAccordion = screen.getByText(/Specs \(1 Reqs • 1 Seams\)/);
+    expect(specsAccordion).toBeInTheDocument();
 
     // Initially closed: in-scope items not visible
     expect(screen.queryByText('In-scope item 1')).toBeNull();
 
-    // Click to open Scope Boundaries
-    fireEvent.click(scopeAccordion);
+    // Click to open Specs
+    fireEvent.click(specsAccordion);
 
-    // In-Scope and Out-of-Scope items become visible
+    // In-Scope and Out-of-Scope items become visible inside Specs
     expect(screen.getByText('In-scope item 1')).toBeInTheDocument();
     expect(screen.getByText('In-scope item 2')).toBeInTheDocument();
     expect(screen.getByText('Out-of-scope item 1')).toBeInTheDocument();
+
+    // EARS Requirements and Test Seams are visible inside Specs
+    expect(screen.getByText('The system shall boot deterministically.')).toBeInTheDocument();
+    expect(screen.getByText('crates/aico-server/src/server.rs')).toBeInTheDocument();
   });
 
-  it('renders Ubiquitous Domain Terminology on left accordion and allows expanding', () => {
-    const onPopOut = vi.fn();
-    const featureWithTerms = {
+  it('renders Deep Dive with zero placeholder or random info when no artifact exists, and shows content when present', () => {
+    // Feature with NO deep dive artifact created
+    const featureWithoutDeepDive = {
       ...mockFeature,
-      ubiquitous_language: [
-        { term: 'Designated Test Seam', definition: 'Public interface contract for testing' },
-        { term: 'Vertical Tracer-Bullet', definition: 'End-to-end atomic task execution' },
+      test_seams: [
+        { id: 'SEAM-001', path: 'crates/aico-server/src/server.rs', description: 'Migration Verification seam' },
       ],
     };
 
-    render(<FeatureViewer feature={featureWithTerms} onPopOut={onPopOut} />);
+    const { rerender } = render(<FeatureViewer feature={featureWithoutDeepDive} />);
 
-    // Accordion header shows term count and is closed by default
-    const termsAccordion = screen.getByText(/Ubiquitous Domain Terminology \(2\)/);
-    expect(termsAccordion).toBeInTheDocument();
-    expect(screen.queryByText('Designated Test Seam')).toBeNull();
+    // Deep Dive accordion shows "No deep dive artifact defined"
+    expect(screen.getByText(/No deep dive artifact defined/)).toBeInTheDocument();
 
-    // Click to open terminology
-    fireEvent.click(termsAccordion);
+    // Expand Deep Dive accordion
+    const deepDiveHeader = screen.getByText('Deep Dive');
+    fireEvent.click(deepDiveHeader);
 
-    // Terms and definitions are visible
-    expect(screen.getByText('Designated Test Seam')).toBeInTheDocument();
-    expect(screen.getByText('Public interface contract for testing')).toBeInTheDocument();
-    expect(screen.getByText('Vertical Tracer-Bullet')).toBeInTheDocument();
+    // Deep Dive must NOT show test seams from spec.md!
+    expect(screen.queryByText('Migration Verification seam')).toBeNull();
+    // It displays strict no artifact notice, NOT a placeholder or test seams
+    expect(screen.getByText(/No deep dive artifact \(deepdive-ft-\*\.md\) created for this feature\./)).toBeInTheDocument();
 
-    // Popout button works
-    const popoutBtn = screen.getByTestId('popout-terminology');
-    fireEvent.click(popoutBtn);
-    expect(onPopOut).toHaveBeenCalledWith('01-host-runtime', 'terminology');
+    // Now re-render with an actual deepdive_content artifact
+    const featureWithDeepDive = {
+      ...mockFeature,
+      deepdive_content: 'Kùzu graph blast-radius traversal designating boundaries.',
+    };
+
+    rerender(<FeatureViewer feature={featureWithDeepDive} />);
+    expect(screen.getByText(/Kùzu graph blast-radius traversal/)).toBeInTheDocument();
+  });
+
+  it('renders ADRs accordion under Brainstorm with linked architecture decision records', () => {
+    const featureWithAdrs = {
+      ...mockFeature,
+      adrs: ['ADR-0010'],
+    };
+    const mockAllAdrs = [
+      { id: 'ADR-0010', title: 'SDD Structural Grammar', status: 'Accepted', decision: 'Implement single PID architecture.' },
+    ];
+    const onOpenAdr = vi.fn();
+
+    render(<FeatureViewer feature={featureWithAdrs} allAdrs={mockAllAdrs} onOpenAdr={onOpenAdr} />);
+
+    // ADR accordion header is present
+    const adrHeader = screen.getByText(/Architecture Decision Records \(1\)/);
+    expect(adrHeader).toBeInTheDocument();
+
+    // Click to open ADR accordion
+    fireEvent.click(adrHeader);
+
+    // ADR card is rendered with title and status
+    expect(screen.getByText('SDD Structural Grammar')).toBeInTheDocument();
+    expect(screen.getByText('Implement single PID architecture.')).toBeInTheDocument();
+
+    // Click to open ADR
+    fireEvent.click(screen.getByText('SDD Structural Grammar'));
+    expect(onOpenAdr).toHaveBeenCalledWith('ADR-0010');
+  });
+
+  it('correctly resolves cross-feature dependencies with titles as Done and renders Depends on:', () => {
+    const featureWithDep = {
+      ...mockFeature,
+      id: 'ft-core-security-auth',
+      name: 'Security & Auth',
+      tasks: [
+        {
+          id: 'TASK-CORE-002-4',
+          title: 'Interactive WebSocket Gating',
+          status: 'Done' as const,
+          addresses: ['REQ-004'],
+          blocked_by: ['TASK-CORE-001-3 (WebSocket Hub)'],
+          seam: 'tests/security_gate_test.rs',
+          deliverables: ['ApprovalGateManager implementation'],
+        },
+      ],
+    };
+
+    const mockAllFeatures = [
+      {
+        id: 'ft-core-host-runtime',
+        name: 'Host Runtime',
+        status: 'Completed',
+        tasks: [
+          {
+            id: 'TASK-CORE-001-3',
+            title: 'WebSocket Hub',
+            status: 'Done' as const,
+            addresses: ['REQ-003'],
+            blocked_by: [],
+          },
+        ],
+      },
+    ];
+
+    render(
+      <FeatureViewer
+        feature={featureWithDep}
+        allFeatures={mockAllFeatures}
+      />
+    );
+
+    // Should render "Depends on:" because all blockers are Done
+    expect(screen.getByText('Depends on:')).toBeInTheDocument();
+
+    // Dependency pill should show Done and have green styling
+    const depPill = screen.getByText(/TASK-CORE-001-3 \(WebSocket Hub\) \(Done\)/);
+    expect(depPill).toBeInTheDocument();
+    expect(depPill.className).toContain('text-emerald-400');
+  });
+
+  it('shows red Pending and Blocked by: when blocking dependency is still pending', () => {
+    const featureWithPendingDep = {
+      ...mockFeature,
+      id: 'ft-core-security-auth',
+      name: 'Security & Auth',
+      tasks: [
+        {
+          id: 'TASK-CORE-002-4',
+          title: 'Interactive WebSocket Gating',
+          status: 'Done' as const,
+          addresses: ['REQ-004'],
+          blocked_by: ['TASK-CORE-001-9 (Unfinished Service)'],
+          seam: 'tests/security_gate_test.rs',
+          deliverables: ['ApprovalGateManager implementation'],
+        },
+      ],
+    };
+
+    const mockAllFeatures = [
+      {
+        id: 'ft-core-host-runtime',
+        name: 'Host Runtime',
+        status: 'In Progress',
+        tasks: [
+          {
+            id: 'TASK-CORE-001-9',
+            title: 'Unfinished Service',
+            status: 'Pending' as const,
+            addresses: ['REQ-009'],
+            blocked_by: [],
+          },
+        ],
+      },
+    ];
+
+    render(
+      <FeatureViewer
+        feature={featureWithPendingDep}
+        allFeatures={mockAllFeatures}
+      />
+    );
+
+    // Should render "Blocked by:" because blocker is not Done
+    expect(screen.getByText('Blocked by:')).toBeInTheDocument();
+
+    // Dependency pill should show Pending and have red styling
+    const depPill = screen.getByText(/TASK-CORE-001-9 \(Unfinished Service\) \(Pending\)/);
+    expect(depPill).toBeInTheDocument();
+    expect(depPill.className).toContain('text-rose-400');
   });
 });

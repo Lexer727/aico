@@ -25,8 +25,8 @@ pub struct RootScanner;
 
 impl RootScanner {
     /// Scan root directory for `*-specs` folders containing `.aico-project.json`
-    // @implements SPEC-CORE-004::REQ-001
-    // @implements SPEC-CORE-004::REQ-011
+    // @implements spec-ft-core-discovery::REQ-001
+    // @implements spec-ft-core-discovery::REQ-011
     pub fn scan<P: AsRef<Path>>(root: P) -> Result<Vec<DiscoveredProject>, ManifestError> {
         let root_path = root.as_ref();
         if !root_path.exists() || !root_path.is_dir() {

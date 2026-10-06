@@ -1,10 +1,10 @@
 use aico_mcp::{AnnotationExtractor, AnnotationKind, EarsValidator, EarsValidationError};
 
-// @verifies SPEC-CORE-005::REQ-004
+// @verifies spec-ft-core-mcp-tools::REQ-004
 #[test]
 fn test_extract_verifies_annotations() {
     let source = r#"
-// @verifies SPEC-CORE-001::REQ-002
+// @verifies spec-ft-core-host-runtime::REQ-002
 #[test]
 fn test_something() {
     // some test code
@@ -14,17 +14,17 @@ fn test_something() {
     let annotations = AnnotationExtractor::extract(source);
     assert_eq!(annotations.len(), 1);
     assert_eq!(annotations[0].kind, AnnotationKind::Verifies);
-    assert_eq!(annotations[0].spec_id, "SPEC-CORE-001");
+    assert_eq!(annotations[0].spec_id, "spec-ft-core-host-runtime");
     assert_eq!(annotations[0].req_id, "REQ-002");
     assert_eq!(annotations[0].line_number, 2);
 }
 
-// @verifies SPEC-CORE-005::REQ-005
+// @verifies spec-ft-core-mcp-tools::REQ-005
 #[test]
 fn test_extract_implements_annotations() {
     let source = r#"
 // Some doc comment
-// @implements SPEC-CORE-004::REQ-001
+// @implements spec-ft-core-discovery::REQ-001
 pub fn scan_projects() {
     // implementation
 }
@@ -33,11 +33,11 @@ pub fn scan_projects() {
     let annotations = AnnotationExtractor::extract(source);
     assert_eq!(annotations.len(), 1);
     assert_eq!(annotations[0].kind, AnnotationKind::Implements);
-    assert_eq!(annotations[0].spec_id, "SPEC-CORE-004");
+    assert_eq!(annotations[0].spec_id, "spec-ft-core-discovery");
     assert_eq!(annotations[0].req_id, "REQ-001");
 }
 
-// @verifies SPEC-CORE-005::REQ-003
+// @verifies spec-ft-core-mcp-tools::REQ-003
 #[test]
 fn test_validate_ears_syntax() {
     // Valid Ubiquitous pattern with modal "shall"

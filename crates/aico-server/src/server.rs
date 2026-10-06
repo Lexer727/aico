@@ -108,8 +108,8 @@ impl HostServer {
     }
 
     /// Try binding the server to the configured port or next available fallback
-    // @implements SPEC-CORE-001::REQ-001
-    // @implements SPEC-CORE-001::REQ-010
+    // @implements spec-ft-core-host-runtime::REQ-001
+    // @implements spec-ft-core-host-runtime::REQ-010
     pub async fn bind(&mut self) -> Result<SocketAddr, ServerError> {
         let mut last_err = None;
 
@@ -145,13 +145,13 @@ impl HostServer {
         self.bound_addr
     }
 
-    // @implements SPEC-CORE-001::REQ-002
-    // @implements SPEC-CORE-001::REQ-003
-    // @implements SPEC-CORE-001::REQ-006
-    // @implements SPEC-CORE-001::REQ-007
-    // @implements SPEC-CORE-004::REQ-008
-    // @implements SPEC-CORE-007::REQ-001
-    // @implements SPEC-CORE-006::REQ-012
+    // @implements spec-ft-core-host-runtime::REQ-002
+    // @implements spec-ft-core-host-runtime::REQ-003
+    // @implements spec-ft-core-host-runtime::REQ-006
+    // @implements spec-ft-core-host-runtime::REQ-007
+    // @implements spec-ft-core-discovery::REQ-008
+    // @implements spec-ft-core-epic-hub::REQ-001
+    // @implements spec-ft-core-webui-shell::REQ-012
     pub fn build_router(state: AppState) -> Router {
         Router::new()
             .route("/api/v1/health", get(health_check_handler))
@@ -172,8 +172,8 @@ impl HostServer {
     }
 
     /// Run the server loop until shutdown
-    // @implements SPEC-CORE-001::REQ-001
-    // @implements SPEC-CORE-001::REQ-006
+    // @implements spec-ft-core-host-runtime::REQ-001
+    // @implements spec-ft-core-host-runtime::REQ-006
     pub async fn serve(mut self) -> Result<(), ServerError> {
         let listener = self
             .listener
@@ -187,7 +187,7 @@ impl HostServer {
     }
 
     /// Run server with graceful shutdown signal and drain
-    // @implements SPEC-CORE-001::REQ-005
+    // @implements spec-ft-core-host-runtime::REQ-005
     pub async fn serve_with_shutdown<F>(mut self, shutdown_signal: F) -> Result<(), ServerError>
     where
         F: std::future::Future<Output = ()> + Send + 'static,
@@ -221,7 +221,7 @@ async fn health_check_handler(
     })
 }
 
-// @implements SPEC-CORE-004::REQ-008
+// @implements spec-ft-core-discovery::REQ-008
 async fn list_projects_handler(
     State(state): State<AppState>,
 ) -> Json<Vec<DiscoveredProject>> {
@@ -229,7 +229,7 @@ async fn list_projects_handler(
     Json(registry.list_cloned())
 }
 
-// @implements SPEC-CORE-004::REQ-008
+// @implements spec-ft-core-discovery::REQ-008
 async fn set_active_project_handler(
     State(state): State<AppState>,
     Json(payload): Json<SetActiveProjectRequest>,
@@ -298,6 +298,10 @@ pub struct DiscoveredEpic {
     pub executive_summary: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub brainstorm_content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deepdive_content: Option<String>,
+    #[serde(default)]
+    pub adrs: Vec<String>,
     #[serde(default)]
     pub ubiquitous_language: Vec<TermInfo>,
 }
@@ -334,6 +338,10 @@ pub struct DiscoveredFeatureInfo {
     pub raw_spec_content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_plan_content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub brainstorm_content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deepdive_content: Option<String>,
     #[serde(default)]
     pub ubiquitous_language: Vec<TermInfo>,
 }
@@ -413,7 +421,18 @@ pub fn parse_frontmatter_full(content: &str) -> (Option<String>, Option<String>,
                     for item in inner.split(',') {
                         let cleaned = item.trim().trim_matches('"').trim_matches('\'').trim();
                         if !cleaned.is_empty() {
-                            derives_from.push(cleaned.to_string());
+                            let adr_id = if let Some(fname) = cleaned.split('/').last() {
+                                if fname.len() >= 4 && fname[..4].chars().all(|c| c.is_ascii_digit()) {
+                                    format!("ADR-{}", &fname[..4])
+                                } else if cleaned.starts_with("ADR-") {
+                                    cleaned.to_string()
+                                } else {
+                                    cleaned.to_string()
+                                }
+                            } else {
+                                cleaned.to_string()
+                            };
+                            derives_from.push(adr_id);
                         }
                     }
                 }
@@ -811,6 +830,8 @@ pub fn scan_feature_dir(feat_path: &std::path::Path, epic_id: &str, is_standalon
     let mut tasks = Vec::new();
     let mut raw_spec_content = None;
     let mut raw_plan_content = None;
+    let mut feat_brainstorm_content = None;
+    let mut feat_deepdive_content = None;
 
     if let Ok(files) = std::fs::read_dir(feat_path) {
         for f in files.flatten() {
@@ -855,6 +876,20 @@ pub fn scan_feature_dir(feat_path: &std::path::Path, epic_id: &str, is_standalon
                 }
                 feat_plan_id = Some(p_id);
                 feat_plan_title = Some(p_title);
+            } else if fname_lower.starts_with("brain-") && fname_lower.ends_with(".md") {
+                if let Ok(bcontent) = std::fs::read_to_string(f.path()) {
+                    let (_, _, _, _, brain_adrs) = parse_frontmatter_full(&bcontent);
+                    for a in brain_adrs {
+                        if !adrs.contains(&a) {
+                            adrs.push(a);
+                        }
+                    }
+                    feat_brainstorm_content = Some(bcontent);
+                }
+            } else if fname_lower.starts_with("deepdive-") && fname_lower.ends_with(".md") {
+                if let Ok(dcontent) = std::fs::read_to_string(f.path()) {
+                    feat_deepdive_content = Some(dcontent);
+                }
             }
         }
     }
@@ -881,6 +916,8 @@ pub fn scan_feature_dir(feat_path: &std::path::Path, epic_id: &str, is_standalon
         tasks,
         raw_spec_content,
         raw_plan_content,
+        brainstorm_content: feat_brainstorm_content,
+        deepdive_content: feat_deepdive_content,
         ubiquitous_language: Vec::new(),
     })
 }
@@ -908,15 +945,17 @@ pub fn scan_epics_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredEpi
                 let mut epic_order = None;
                 let mut executive_summary = None;
                 let mut brainstorm_content = None;
+                let mut deepdive_content = None;
+                let mut epic_brain_adrs = Vec::new();
 
-                // Look for brain-*.md
+                // Look for brain-*.md and deepdive-*.md
                 if let Ok(files) = std::fs::read_dir(&path) {
                     for f in files.flatten() {
                         let fname = f.file_name().to_string_lossy().to_string();
                         let fname_lower = fname.to_lowercase();
                         if fname_lower.starts_with("brain-") && fname_lower.ends_with(".md") {
                             if let Ok(content) = std::fs::read_to_string(f.path()) {
-                                let (_, fm_title, fm_status, fm_order) = parse_frontmatter(&content);
+                                let (_, fm_title, fm_status, fm_order, brain_derives) = parse_frontmatter_full(&content);
                                 if let Some(t) = fm_title {
                                     title = t;
                                 }
@@ -926,8 +965,13 @@ pub fn scan_epics_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredEpi
                                 if let Some(o) = fm_order {
                                     epic_order = Some(o);
                                 }
+                                epic_brain_adrs = brain_derives;
                                 executive_summary = parse_epic_brainstorm(&content);
                                 brainstorm_content = Some(content);
+                            }
+                        } else if fname_lower.starts_with("deepdive-") && fname_lower.ends_with(".md") {
+                            if let Ok(content) = std::fs::read_to_string(f.path()) {
+                                deepdive_content = Some(content);
                             }
                         }
                     }
@@ -974,16 +1018,59 @@ pub fn scan_epics_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredEpi
                 specs.sort_by_key(|s| (s.order.unwrap_or(9999), s.id.clone()));
                 features.sort_by_key(|f| (f.order.unwrap_or(9999), f.id.clone()));
 
+                let mut epic_adrs_set = std::collections::BTreeSet::new();
+                for a in epic_brain_adrs {
+                    epic_adrs_set.insert(a);
+                }
+                for f in &features {
+                    for a in &f.adrs {
+                        epic_adrs_set.insert(a.clone());
+                    }
+                }
+                let epic_adrs: Vec<String> = epic_adrs_set.into_iter().collect();
+
+                // Dynamic epic status evaluation:
+                // Roll up status from child features and task DAG execution
+                let dynamic_status = if !features.is_empty() {
+                    let all_features_completed = features.iter().all(|f| f.status == "Completed" || f.status == "Done");
+                    let all_tasks_done = features.iter().all(|f| {
+                        f.tasks.is_empty() || f.tasks.iter().all(|t| {
+                            t.status == "Done" || t.status == "Completed" || t.status == "Skipped/Canceled" || t.status == "Rewritten"
+                        })
+                    });
+                    let any_in_progress = features.iter().any(|f| f.status == "In Progress")
+                        || features.iter().any(|f| f.tasks.iter().any(|t| t.status == "In Progress"));
+
+                    if all_features_completed && all_tasks_done {
+                        "Completed".to_string()
+                    } else if any_in_progress {
+                        "In Progress".to_string()
+                    } else {
+                        let any_done = features.iter().any(|f| f.status == "Completed" || f.tasks.iter().any(|t| t.status == "Done"));
+                        if any_done {
+                            "In Progress".to_string()
+                        } else if status == "Draft" {
+                            "Draft".to_string()
+                        } else {
+                            "Pending".to_string()
+                        }
+                    }
+                } else {
+                    status
+                };
+
                 epics.push(DiscoveredEpic {
                     id: epic_id,
                     title,
-                    status,
+                    status: dynamic_status,
                     specs_count: specs.len(),
                     specs,
                     features,
                     order: epic_order,
                     executive_summary,
                     brainstorm_content,
+                    deepdive_content,
+                    adrs: epic_adrs,
                     ubiquitous_language: ubiquitous_language.clone(),
                 });
             }
@@ -1092,7 +1179,7 @@ pub fn scan_adrs_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredAdrI
     adrs
 }
 
-// @implements SPEC-CORE-007::REQ-001
+// @implements spec-ft-core-epic-hub::REQ-001
 async fn list_epics_handler(
     State(state): State<AppState>,
 ) -> Json<Vec<DiscoveredEpic>> {
@@ -1112,7 +1199,7 @@ async fn list_epics_handler(
     Json(scan_epics_for_project(&target_path))
 }
 
-// @implements SPEC-CORE-007::REQ-001
+// @implements spec-ft-core-epic-hub::REQ-001
 async fn get_epic_handler(
     Path(id): Path<String>,
     State(state): State<AppState>,
@@ -1139,7 +1226,7 @@ async fn get_epic_handler(
     }
 }
 
-// @implements SPEC-CORE-007::REQ-001
+// @implements spec-ft-core-epic-hub::REQ-001
 async fn list_features_handler(
     State(state): State<AppState>,
 ) -> Json<Vec<DiscoveredFeatureInfo>> {
@@ -1159,7 +1246,7 @@ async fn list_features_handler(
     Json(scan_all_features_for_project(&target_path))
 }
 
-// @implements SPEC-CORE-007::REQ-001
+// @implements spec-ft-core-epic-hub::REQ-001
 async fn get_feature_handler(
     Path(id): Path<String>,
     State(state): State<AppState>,
@@ -1179,14 +1266,23 @@ async fn get_feature_handler(
 
     let all_features = scan_all_features_for_project(&target_path);
     let id_lower = id.to_lowercase();
-    if let Some(feature) = all_features.into_iter().find(|f| f.id.to_lowercase() == id_lower) {
+    let stripped_spec = id_lower.strip_prefix("spec-").unwrap_or(&id_lower);
+    let stripped_plan = id_lower.strip_prefix("plan-").unwrap_or(&id_lower);
+    if let Some(feature) = all_features.into_iter().find(|f| {
+        let fid = f.id.to_lowercase();
+        fid == id_lower
+            || fid == stripped_spec
+            || fid == stripped_plan
+            || f.spec_id.as_deref().map(|s| s.to_lowercase()) == Some(id_lower.clone())
+            || f.plan_id.as_deref().map(|p| p.to_lowercase()) == Some(id_lower.clone())
+    }) {
         Ok(Json(feature))
     } else {
         Err(StatusCode::NOT_FOUND)
     }
 }
 
-// @implements SPEC-CORE-007::REQ-008
+// @implements spec-ft-core-epic-hub::REQ-008
 async fn list_adrs_handler(
     State(state): State<AppState>,
 ) -> Json<Vec<DiscoveredAdrInfo>> {
@@ -1206,7 +1302,7 @@ async fn list_adrs_handler(
     Json(scan_adrs_for_project(&target_path))
 }
 
-// @implements SPEC-CORE-007::REQ-008
+// @implements spec-ft-core-epic-hub::REQ-008
 async fn get_adr_handler(
     Path(id): Path<String>,
     State(state): State<AppState>,
@@ -1233,7 +1329,7 @@ async fn get_adr_handler(
     }
 }
 
-// @implements SPEC-CORE-007::REQ-001
+// @implements spec-ft-core-epic-hub::REQ-001
 async fn get_glossary_handler(
     State(state): State<AppState>,
 ) -> Json<Vec<TermInfo>> {
@@ -1253,7 +1349,7 @@ async fn get_glossary_handler(
     Json(load_project_glossary(&target_path))
 }
 
-// @implements SPEC-CORE-007::REQ-001
+// @implements spec-ft-core-epic-hub::REQ-001
 async fn get_raw_file_handler(
     Query(query): Query<RawFileQuery>,
     State(state): State<AppState>,
@@ -1289,7 +1385,7 @@ async fn get_raw_file_handler(
     }
 }
 
-// @implements SPEC-CORE-006::REQ-012
+// @implements spec-ft-core-webui-shell::REQ-012
 async fn get_stats_handler(
     State(state): State<AppState>,
 ) -> Json<SystemStats> {
@@ -1301,8 +1397,8 @@ async fn get_stats_handler(
     })
 }
 
-// @implements SPEC-CORE-001::REQ-003
-// @implements SPEC-CORE-001::REQ-007
+// @implements spec-ft-core-host-runtime::REQ-003
+// @implements spec-ft-core-host-runtime::REQ-007
 async fn ws_handler(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,

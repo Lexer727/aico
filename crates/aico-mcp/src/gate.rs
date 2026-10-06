@@ -40,8 +40,8 @@ pub struct ArtifactToolGate;
 
 impl ArtifactToolGate {
     /// Calculate deterministic destination file path for artifact
-    // @implements SPEC-CORE-005::REQ-002
-    // @implements SPEC-CORE-005::REQ-010
+    // @implements spec-ft-core-mcp-tools::REQ-002
+    // @implements spec-ft-core-mcp-tools::REQ-010
     pub fn determine_path(
         specs_root: &Path,
         artifact_type: &str,
@@ -85,9 +85,9 @@ impl ArtifactToolGate {
     }
 
     /// Inject YAML frontmatter and write artifact atomically to disk
-    // @implements SPEC-CORE-005::REQ-003
-    // @implements SPEC-CORE-005::REQ-005
-    // @implements SPEC-CORE-005::REQ-012
+    // @implements spec-ft-core-mcp-tools::REQ-003
+    // @implements spec-ft-core-mcp-tools::REQ-005
+    // @implements spec-ft-core-mcp-tools::REQ-012
     pub fn create_artifact(params: CreateArtifactParams) -> Result<PathBuf, GateError> {
         if let Some(custom) = params.custom_path {
             return Err(GateError::CustomPathProhibited(custom));
@@ -129,7 +129,7 @@ impl ArtifactToolGate {
         let body = params.content.unwrap_or_default();
 
         let full_doc = format!(
-            "---\nid: {}\ntype: {}\naico_version: \"0.1.1\"\nepic: {}\ntitle: {}\nstatus: \"Draft\"\nderives_from: {}\ncreated_at: \"2026-10-05T20:00:00Z\"\n---\n\n{}",
+            "---\nid: {}\ntype: {}\naico_skills_version: \"0.1.2\"\nepic: {}\ntitle: {}\nstatus: \"Draft\"\nderives_from: {}\ncreated_at: \"2026-10-05T20:00:00Z\"\n---\n\n{}",
             doc_id, params.artifact_type, params.epic_slug, params.title, derives_str, body
         );
 

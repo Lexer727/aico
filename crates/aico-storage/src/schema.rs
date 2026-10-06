@@ -43,7 +43,7 @@ impl SchemaMigrator {
     }
 
     /// Check if target aico_version is compatible with current schema version
-    // @implements SPEC-CORE-003::REQ-008
+    // @implements spec-ft-core-local-storage::REQ-008
     pub fn is_version_compatible(&self, target_version: &str) -> bool {
         let parts: Vec<&str> = target_version.split('.').collect();
         if parts.len() != 3 {
@@ -80,7 +80,7 @@ impl SchemaMigrator {
     }
 
     /// Apply schema migrations to Kùzu property graph
-    // @implements SPEC-CORE-003::REQ-006
+    // @implements spec-ft-core-local-storage::REQ-006
     pub async fn apply_migrations(&self, storage: &StorageManager) -> Result<(), StorageError> {
         let mut gstore = storage.graph_store().write().await;
 

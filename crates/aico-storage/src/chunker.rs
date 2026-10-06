@@ -21,7 +21,7 @@ impl CodeChunker {
     }
 
     /// Split source code into AST boundary-aware semantic chunks
-    // @implements SPEC-CORE-003::REQ-004
+    // @implements spec-ft-core-local-storage::REQ-004
     pub fn chunk_file(&self, file_path: &str, content: &str) -> Vec<CodeChunk> {
         let lines: Vec<&str> = content.lines().collect();
         let mut chunks = Vec::new();
@@ -82,7 +82,7 @@ impl EmbeddingPipeline {
     }
 
     /// Generate 384-dimensional vector embedding for text
-    // @implements SPEC-CORE-003::REQ-004
+    // @implements spec-ft-core-local-storage::REQ-004
     pub fn embed_text(&self, text: &str) -> Vec<f32> {
         let mut vec = vec![0.0f32; 384];
         let bytes = text.as_bytes();
@@ -103,7 +103,7 @@ impl EmbeddingPipeline {
     }
 
     /// Ingest semantic code chunks into LanceDB vector store
-    // @implements SPEC-CORE-003::REQ-004
+    // @implements spec-ft-core-local-storage::REQ-004
     pub async fn ingest_chunks(&self, storage: &StorageManager, chunks: &[CodeChunk]) -> Result<usize, StorageError> {
         let mut vstore = storage.vector_store().write().await;
         for chunk in chunks {

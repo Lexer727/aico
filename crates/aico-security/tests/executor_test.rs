@@ -1,7 +1,7 @@
 use aico_security::{CommandExecutor, ExecutionError};
 use std::time::Duration;
 
-// @verifies SPEC-CORE-002::REQ-002
+// @verifies spec-ft-core-security-auth::REQ-002
 #[tokio::test]
 async fn test_execute_command_captures_output() {
     let cwd = std::env::current_dir().unwrap();
@@ -15,7 +15,7 @@ async fn test_execute_command_captures_output() {
     assert!(output.stdout.contains("Hello AICO"));
 }
 
-// @verifies SPEC-CORE-002::REQ-007
+// @verifies spec-ft-core-security-auth::REQ-007
 #[tokio::test]
 async fn test_execute_command_aborts_on_timeout() {
     let cwd = std::env::current_dir().unwrap();

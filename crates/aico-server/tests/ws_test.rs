@@ -1,7 +1,7 @@
 use aico_server::{WebSocketHub, HubMessage};
 
-// @verifies SPEC-CORE-001::REQ-003
-// @verifies SPEC-CORE-001::REQ-007
+// @verifies spec-ft-core-host-runtime::REQ-003
+// @verifies spec-ft-core-host-runtime::REQ-007
 #[tokio::test]
 async fn test_websocket_connect_and_broadcast() {
     let hub = WebSocketHub::new(16);
@@ -15,8 +15,8 @@ async fn test_websocket_connect_and_broadcast() {
     assert!(received.payload.contains("cargo test"));
 }
 
-// @verifies SPEC-CORE-001::REQ-003
-// @verifies SPEC-CORE-001::REQ-007
+// @verifies spec-ft-core-host-runtime::REQ-003
+// @verifies spec-ft-core-host-runtime::REQ-007
 #[tokio::test]
 async fn test_real_websocket_handshake_and_stream() {
     use aico_server::{AppState, HostServer, ServerConfig};
@@ -50,12 +50,12 @@ async fn test_real_websocket_handshake_and_stream() {
 
     // Broadcast an event through the hub
     tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-    ws_hub.broadcast("spec_update", r#"{"spec_id": "SPEC-CORE-001"}"#);
+    ws_hub.broadcast("spec_update", r#"{"spec_id": "spec-ft-core-host-runtime"}"#);
 
     // Assert message received over real WS
     if let Some(Ok(Message::Text(text))) = read.next().await {
         assert!(text.contains("spec_update"), "Expected spec_update topic in: {}", text);
-        assert!(text.contains("SPEC-CORE-001"), "Expected SPEC-CORE-001 payload in: {}", text);
+        assert!(text.contains("spec-ft-core-host-runtime"), "Expected spec-ft-core-host-runtime payload in: {}", text);
     } else {
         panic!("Did not receive broadcast text message over WebSocket");
     }

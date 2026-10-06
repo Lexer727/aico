@@ -3,8 +3,8 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { SettingsModal } from '../src/components/settings/SettingsModal';
 
-// @verifies SPEC-CORE-006::REQ-008
-// @verifies SPEC-CORE-006::REQ-012
+// @verifies spec-ft-core-webui-shell::REQ-008
+// @verifies spec-ft-core-webui-shell::REQ-012
 describe('SettingsModal Component', () => {
   it('renders settings dialog and triggers close on close button click', () => {
     const onClose = vi.fn();

@@ -1,6 +1,6 @@
 use aico_storage::{StorageManager, DifferentialIndexer, LanguageKind};
 
-// @verifies SPEC-CORE-003::REQ-010
+// @verifies spec-ft-core-local-storage::REQ-010
 #[tokio::test]
 async fn test_incremental_file_reindexing() {
     let temp_dir = std::env::temp_dir().join("aico_diff_indexer_test_1");

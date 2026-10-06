@@ -6,8 +6,8 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-// @implements SPEC-CORE-006::REQ-008
-// @implements SPEC-CORE-006::REQ-012
+// @implements spec-ft-core-webui-shell::REQ-008
+// @implements spec-ft-core-webui-shell::REQ-012
 export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
@@ -45,7 +45,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               <Server className="w-3.5 h-3.5 text-sky-400" />
               <span>Host Server Configuration</span>
             </div>
-            <div className="grid grid-cols-2 gap-3 bg-zinc-950/60 p-3 rounded-lg border border-zinc-800/80">
+            <div className="grid grid-cols-3 gap-3 bg-zinc-950/60 p-3 rounded-lg border border-zinc-800/80">
               <div>
                 <span className="text-zinc-500 block mb-1">Server Port</span>
                 <span className="font-mono text-zinc-200 bg-zinc-900 px-2 py-1 rounded border border-zinc-800 block">
@@ -55,7 +55,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               <div>
                 <span className="text-zinc-500 block mb-1">Bind Host</span>
                 <span className="font-mono text-zinc-200 bg-zinc-900 px-2 py-1 rounded border border-zinc-800 block">
-                  127.0.0.1 (Localhost Only)
+                  127.0.0.1
+                </span>
+              </div>
+              <div>
+                <span className="text-zinc-500 block mb-1">Platform Version</span>
+                <span className="font-mono text-zinc-200 bg-zinc-900 px-2 py-1 rounded border border-zinc-800 block">
+                  v0.1.1
                 </span>
               </div>
             </div>
@@ -69,9 +75,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             </div>
             <div className="grid grid-cols-2 gap-3 bg-zinc-950/60 p-3 rounded-lg border border-zinc-800/80">
               <div>
-                <span className="text-zinc-500 block mb-1">Spec Version</span>
+                <span className="text-zinc-500 block mb-1">Skills Version</span>
                 <span className="font-mono text-zinc-200 bg-zinc-900 px-2 py-1 rounded border border-zinc-800 block">
-                  0.1.1 (Standardized Frontmatter)
+                  0.1.2 (Standardized Frontmatter)
                 </span>
               </div>
               <div>

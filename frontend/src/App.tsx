@@ -3,14 +3,17 @@ import { ShellLayout, type DiscoveredEpicNav, type DiscoveredFeatureNav, type Di
 import { DockablePanel } from './components/layout/DockablePanel';
 import { TabBar } from './components/navigation/TabBar';
 import { ProjectSwitcher } from './components/navigation/ProjectSwitcher';
+import { HistoryNavButtons } from './components/navigation/HistoryNavButtons';
 import { ConnectionStatusBanner } from './components/navigation/ConnectionStatusBanner';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { TerminalConsole } from './components/terminal/TerminalConsole';
 import { DashboardView } from './features/dashboard/DashboardView';
 import { EpicHubView, type EpicData } from './features/epic-hub/EpicHubView';
 import { FeatureViewer, type FeatureData } from './features/feature-viewer/FeatureViewer';
-import { type DiscoveredEpic, type DiscoveredFeature } from './features/feature-task-data';
+import { type DiscoveredEpic, type DiscoveredFeature, type DiscoveredAdr } from './features/feature-task-data';
 import { SpecViewer } from './features/spec-viewer/SpecViewer';
+import { PlanViewer } from './features/plan-viewer/PlanViewer';
+import { DocumentViewer } from './features/document-viewer/DocumentViewer';
 import { CodeViewer } from './features/code-viewer/CodeViewer';
 import { AdrViewer } from './features/adr-viewer/AdrViewer';
 import { GlossaryViewer } from './features/glossary-viewer/GlossaryViewer';
@@ -18,6 +21,10 @@ import { VisualLineageCanvas, type GraphNode, type GraphEdge } from './features/
 import { WebSocketProvider, useWebSocket } from './context/WebSocketContext';
 import { useTabStore, type TabItem } from './stores/useTabStore';
 import { useDockStore } from './stores/useDockStore';
+
+if (typeof window !== 'undefined') {
+  (window as any).__TAB_STORE__ = useTabStore;
+}
 
 const mockProjects = [
   { id: 'aico-core', name: 'AICO Core SDD' },
@@ -30,8 +37,8 @@ const mockNodes: GraphNode[] = [
   { id: 'feat-1', type: 'task', label: '01-host-runtime', isFrontier: false },
   { id: 'feat-6', type: 'task', label: '06-webui-shell', isFrontier: false },
   { id: 'feat-7', type: 'task', label: '07-epic-hub', isFrontier: true },
-  { id: 'spec-1', type: 'spec', label: 'SPEC-CORE-001', isFrontier: false },
-  { id: 'spec-6', type: 'spec', label: 'SPEC-CORE-006', isFrontier: false },
+  { id: 'spec-1', type: 'spec', label: 'spec-ft-core-host-runtime', isFrontier: false },
+  { id: 'spec-6', type: 'spec', label: 'spec-ft-core-webui-shell', isFrontier: false },
   { id: 'code-1', type: 'code', label: 'ShellLayout.tsx', isFrontier: false },
 ];
 
@@ -53,8 +60,18 @@ const MainWorkspace: React.FC = () => {
   const [discoveredFeatures, setDiscoveredFeatures] = useState<DiscoveredFeatureNav[]>([]);
   const [fullFeatures, setFullFeatures] = useState<DiscoveredFeature[]>([]);
   const [discoveredAdrs, setDiscoveredAdrs] = useState<DiscoveredAdrNav[]>([]);
+  const [fullAdrs, setFullAdrs] = useState<DiscoveredAdr[]>([]);
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
-  const { openTab, activeProjectId, setActiveProject, activeTabId, getProjectTabs } = useTabStore();
+  const {
+    openTab,
+    activeProjectId,
+    setActiveProject,
+    activeTabId,
+    getProjectTabs,
+    goBack,
+    goForward,
+    reopenLastClosedTab,
+  } = useTabStore();
   const { position } = useDockStore();
 
   // Dynamic Epic discovery from Axum Server REST API
@@ -107,7 +124,13 @@ const MainWorkspace: React.FC = () => {
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
-          setDiscoveredAdrs(data);
+          setFullAdrs(data);
+          const mapped: DiscoveredAdrNav[] = data.map((a: DiscoveredAdr) => ({
+            id: a.id,
+            title: a.title,
+            status: a.status,
+          }));
+          setDiscoveredAdrs(mapped);
         }
       }
     } catch {
@@ -160,7 +183,60 @@ const MainWorkspace: React.FC = () => {
     }
   }, [lastMessage, setActiveProject, fetchProjects, fetchEpics, fetchFeatures, fetchAdrs]);
 
-  // Tab management helpers
+  // Mouse Back / Forward button navigation (Mouse button 3 = Back, 4 = Forward)
+  const lastNavTime = React.useRef(0);
+  useEffect(() => {
+    const handleMouseNav = (e: MouseEvent) => {
+      if (e.button === 3) {
+        // Back button
+        e.preventDefault();
+        e.stopPropagation();
+        const now = Date.now();
+        if (now - lastNavTime.current > 150) {
+          lastNavTime.current = now;
+          goBack();
+        }
+      } else if (e.button === 4) {
+        // Forward button
+        e.preventDefault();
+        e.stopPropagation();
+        const now = Date.now();
+        if (now - lastNavTime.current > 150) {
+          lastNavTime.current = now;
+          goForward();
+        }
+      }
+    };
+
+    window.addEventListener('mouseup', handleMouseNav);
+    window.addEventListener('auxclick', handleMouseNav);
+
+    return () => {
+      window.removeEventListener('mouseup', handleMouseNav);
+      window.removeEventListener('auxclick', handleMouseNav);
+    };
+  }, [goBack, goForward]);
+
+  // Keyboard navigation shortcuts: Alt + ArrowLeft (Back), Alt + ArrowRight (Forward), Ctrl+Shift+T / Ctrl+Alt+T (Reopen Closed Tab)
+  useEffect(() => {
+    const handleKeyNav = (e: KeyboardEvent) => {
+      if (e.altKey && e.key === 'ArrowLeft') {
+        e.preventDefault();
+        goBack();
+      } else if (e.altKey && e.key === 'ArrowRight') {
+        e.preventDefault();
+        goForward();
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 't' || e.key === 'T') && (e.shiftKey || e.altKey)) {
+        e.preventDefault();
+        reopenLastClosedTab();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyNav);
+    return () => window.removeEventListener('keydown', handleKeyNav);
+  }, [goBack, goForward, reopenLastClosedTab]);
+
+  // Tab management helpers - consistently use canonical IDs for title and id
   const handleOpenEpic = (epicId: string) => {
     openTab(activeProjectId, {
       id: epicId,
@@ -169,19 +245,43 @@ const MainWorkspace: React.FC = () => {
     });
   };
 
-  const handleOpenFeature = (featureId: string, name?: string) => {
+  const handleOpenFeature = (featureId: string) => {
     openTab(activeProjectId, {
       id: featureId,
-      title: name || featureId,
+      title: featureId,
       type: 'feature',
     });
   };
 
-  const handleOpenSpec = (specId: string, title?: string) => {
+  const handleOpenSpec = (specId: string) => {
     openTab(activeProjectId, {
       id: specId,
-      title: title || specId,
+      title: specId,
       type: 'spec',
+    });
+  };
+
+  const handleOpenPlan = (planId: string) => {
+    openTab(activeProjectId, {
+      id: planId,
+      title: planId,
+      type: 'plan',
+    });
+  };
+
+  const handleOpenBrainstorm = (entityId: string) => {
+    openTab(activeProjectId, {
+      id: `brainstorm-${entityId}`,
+      title: `brainstorm-${entityId}`,
+      type: 'brainstorm',
+    });
+  };
+
+  const handleOpenDeepDive = (entityId: string) => {
+    openTab(activeProjectId, {
+      id: `deepdive-${entityId}`,
+      title: `deepdive-${entityId}`,
+      type: 'deep_dive',
     });
   };
 
@@ -205,7 +305,7 @@ const MainWorkspace: React.FC = () => {
   const handleOpenGlossary = () => {
     openTab(activeProjectId, {
       id: 'glossary',
-      title: 'Domain Glossary',
+      title: 'glossary',
       type: 'glossary',
     });
   };
@@ -219,9 +319,12 @@ const MainWorkspace: React.FC = () => {
     if (!activeTab || activeTab.id === 'dashboard') {
       return (
         <DashboardView
+          epics={fullEpics}
+          adrs={fullAdrs}
           onOpenEpic={handleOpenEpic}
           onOpenSpec={handleOpenSpec}
           onOpenGlossary={handleOpenGlossary}
+          onOpenAdr={handleOpenAdr}
           ubiquitousLanguage={fullEpics[0]?.ubiquitous_language || fullEpics[0]?.ubiquitousLanguage}
         />
       );
@@ -237,6 +340,8 @@ const MainWorkspace: React.FC = () => {
             order: foundEpic.order,
             executiveSummary: foundEpic.executive_summary || foundEpic.executiveSummary,
             brainstormContent: foundEpic.brainstorm_content || foundEpic.brainstormContent,
+            deepdiveContent: foundEpic.deepdive_content || foundEpic.deepdiveContent,
+            adrs: foundEpic.adrs,
             ubiquitousLanguage: foundEpic.ubiquitous_language || foundEpic.ubiquitousLanguage,
             features: foundEpic.features,
             specs: foundEpic.specs,
@@ -252,13 +357,22 @@ const MainWorkspace: React.FC = () => {
           {/* Spatial 2-Column Epic Hub */}
           <EpicHubView
             epic={currentEpicData}
+            allFeatures={fullFeatures}
+            allAdrs={fullAdrs}
+            onOpenAdr={handleOpenAdr}
             onPopOut={(epicId, section) => {
               if (section === 'terminology') {
                 handleOpenGlossary();
+              } else if (section === 'brainstorm') {
+                handleOpenBrainstorm(epicId);
+              } else if (section === 'deepDive') {
+                handleOpenDeepDive(epicId);
+              } else if (section === 'taskPlan') {
+                handleOpenPlan(`plan-${epicId}`);
               } else {
                 openTab(activeProjectId, {
                   id: `${epicId}-${section}`,
-                  title: `${section.toUpperCase()} (${epicId})`,
+                  title: `${epicId}-${section}`,
                   type: 'spec',
                 });
               }
@@ -301,6 +415,10 @@ const MainWorkspace: React.FC = () => {
             test_seams: foundFeat.test_seams,
             adrs: foundFeat.adrs,
             tasks: foundFeat.tasks,
+            brainstorm_content: foundFeat.brainstorm_content || foundFeat.brainstormContent,
+            brainstormContent: foundFeat.brainstormContent || foundFeat.brainstorm_content,
+            deepdive_content: foundFeat.deepdive_content || foundFeat.deepdiveContent,
+            deepdiveContent: foundFeat.deepdiveContent || foundFeat.deepdive_content,
             ubiquitous_language: foundFeat.ubiquitous_language || foundFeat.ubiquitousLanguage,
           }
         : {
@@ -310,19 +428,33 @@ const MainWorkspace: React.FC = () => {
             isStandalone: activeTab.id.includes('fast-trace'),
           };
 
+      const specId = featData.specId || `spec-${featData.id}`;
+      const planId = featData.planId || `plan-${featData.id}`;
+
       return (
         <FeatureViewer
           feature={featData}
+          allFeatures={fullFeatures}
+          allAdrs={fullAdrs}
+          onOpenEpic={handleOpenEpic}
           onOpenSpec={handleOpenSpec}
-          onOpenPlan={(planId, title) => handleOpenSpec(planId, title)}
+          onOpenPlan={handleOpenPlan}
           onOpenAdr={handleOpenAdr}
           onPopOut={(featId, section) => {
             if (section === 'terminology') {
               handleOpenGlossary();
+            } else if (section === 'brainstorm') {
+              handleOpenBrainstorm(featId);
+            } else if (section === 'deepDive') {
+              handleOpenDeepDive(featId);
+            } else if (section === 'specifications') {
+              handleOpenSpec(specId);
+            } else if (section === 'taskPlan') {
+              handleOpenPlan(planId);
             } else {
               openTab(activeProjectId, {
                 id: `${featId}-${section}`,
-                title: `${section.toUpperCase()} (${featId})`,
+                title: `${featId}-${section}`,
                 type: 'spec',
               });
             }
@@ -331,11 +463,39 @@ const MainWorkspace: React.FC = () => {
       );
     }
 
+    if (activeTab.type === 'plan') {
+      return (
+        <PlanViewer
+          planId={activeTab.id}
+          title={activeTab.title}
+          allFeatures={fullFeatures}
+          onOpenEpic={handleOpenEpic}
+          onOpenFeature={handleOpenFeature}
+          onOpenSpec={handleOpenSpec}
+          onOpenAdr={handleOpenAdr}
+        />
+      );
+    }
+
+    if (activeTab.type === 'brainstorm' || activeTab.type === 'deep_dive') {
+      return (
+        <DocumentViewer
+          docId={activeTab.id}
+          docType={activeTab.type}
+          title={activeTab.title}
+          onOpenEpic={handleOpenEpic}
+          onOpenFeature={handleOpenFeature}
+          onOpenSpec={handleOpenSpec}
+          onOpenPlan={handleOpenPlan}
+          onOpenAdr={handleOpenAdr}
+        />
+      );
+    }
+
     if (activeTab.type === 'glossary') {
       return (
         <GlossaryViewer
           terms={fullEpics[0]?.ubiquitous_language || fullEpics[0]?.ubiquitousLanguage}
-          onBack={() => handleOpenEpic('ec-core')}
         />
       );
     }
@@ -345,7 +505,10 @@ const MainWorkspace: React.FC = () => {
         <SpecViewer
           specId={activeTab.id}
           title={activeTab.title}
-          onBack={() => handleOpenEpic('ec-core')}
+          onOpenEpic={handleOpenEpic}
+          onOpenFeature={handleOpenFeature}
+          onOpenAdr={handleOpenAdr}
+          onOpenPlan={handleOpenPlan}
         />
       );
     }
@@ -355,14 +518,23 @@ const MainWorkspace: React.FC = () => {
     }
 
     if (activeTab.type === 'adr') {
-      return <AdrViewer adrId={activeTab.id} />;
+      return (
+        <AdrViewer
+          adrId={activeTab.id}
+          onOpenEpic={handleOpenEpic}
+          onOpenFeature={handleOpenFeature}
+        />
+      );
     }
 
     return (
       <DashboardView
+        epics={fullEpics}
+        adrs={fullAdrs}
         onOpenEpic={handleOpenEpic}
         onOpenSpec={handleOpenSpec}
         onOpenGlossary={handleOpenGlossary}
+        onOpenAdr={handleOpenAdr}
         ubiquitousLanguage={fullEpics[0]?.ubiquitous_language || fullEpics[0]?.ubiquitousLanguage}
       />
     );
@@ -389,7 +561,8 @@ const MainWorkspace: React.FC = () => {
     >
       {/* Top Application Bar */}
       <header className="h-12 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between px-4 gap-4">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <HistoryNavButtons />
           <ProjectSwitcher projects={projects} />
         </div>
 

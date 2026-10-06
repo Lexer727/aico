@@ -1,7 +1,7 @@
 use aico_mcp::{McpServerManager, TraceabilityTracker, VerificationStatus};
 
-// @verifies SPEC-CORE-005::REQ-006
-// @verifies SPEC-CORE-005::REQ-007
+// @verifies spec-ft-core-mcp-tools::REQ-006
+// @verifies spec-ft-core-mcp-tools::REQ-007
 #[test]
 fn test_traceability_and_test_before_code_gate() {
     let mut tracker = TraceabilityTracker::new();
@@ -43,22 +43,22 @@ fn test_traceability_and_test_before_code_gate() {
     assert_eq!(val["status"], "verified");
 }
 
-// @verifies SPEC-CORE-005::REQ-006
+// @verifies spec-ft-core-mcp-tools::REQ-006
 #[test]
 fn test_find_dangling_requirements() {
     let mut tracker = TraceabilityTracker::new();
 
-    tracker.register_requirement("SPEC-CORE-001::REQ-001");
-    tracker.register_requirement("SPEC-CORE-001::REQ-002");
+    tracker.register_requirement("spec-ft-core-host-runtime::REQ-001");
+    tracker.register_requirement("spec-ft-core-host-runtime::REQ-002");
 
     // REQ-001 gets test and implementation
-    tracker.record_verifies_edge("test_req1", "SPEC-CORE-001::REQ-001", VerificationStatus::Passed);
-    tracker.record_implements_edge("impl_req1", "SPEC-CORE-001::REQ-001");
+    tracker.record_verifies_edge("test_req1", "spec-ft-core-host-runtime::REQ-001", VerificationStatus::Passed);
+    tracker.record_implements_edge("impl_req1", "spec-ft-core-host-runtime::REQ-001");
 
     // REQ-002 has neither
     let dangling = tracker.find_dangling_requirements();
     assert_eq!(dangling.len(), 1);
-    assert_eq!(dangling[0].requirement_id, "SPEC-CORE-001::REQ-002");
+    assert_eq!(dangling[0].requirement_id, "spec-ft-core-host-runtime::REQ-002");
     assert!(!dangling[0].has_test);
     assert!(!dangling[0].has_implementation);
 }

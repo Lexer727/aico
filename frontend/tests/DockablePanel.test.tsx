@@ -4,8 +4,8 @@ import React from 'react';
 import { DockablePanel } from '../src/components/layout/DockablePanel';
 import { useDockStore } from '../src/stores/useDockStore';
 
-// @verifies SPEC-CORE-006::REQ-010
-// @verifies SPEC-CORE-006::REQ-011
+// @verifies spec-ft-core-webui-shell::REQ-010
+// @verifies spec-ft-core-webui-shell::REQ-011
 describe('DockablePanel Component', () => {
   beforeEach(() => {
     localStorage.clear();

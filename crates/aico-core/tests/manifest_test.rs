@@ -1,7 +1,7 @@
 use aico_core::{ProjectManifest, ManifestError};
 use std::path::PathBuf;
 
-// @verifies SPEC-CORE-004::REQ-002
+// @verifies spec-ft-core-discovery::REQ-002
 #[test]
 fn test_parse_valid_manifest() {
     let json_content = r#"{
@@ -20,7 +20,7 @@ fn test_parse_valid_manifest() {
     assert_eq!(manifest.created_at, Some("2026-10-05T18:45:00Z".to_string()));
 }
 
-// @verifies SPEC-CORE-004::REQ-003
+// @verifies spec-ft-core-discovery::REQ-003
 #[test]
 fn test_resolve_relative_codebase_path() {
     let json_content = r#"{
@@ -40,7 +40,7 @@ fn test_resolve_relative_codebase_path() {
     assert!(resolved.ends_with(PathBuf::from("codebase/project-a")) || resolved.to_string_lossy().contains("project-a"));
 }
 
-// @verifies SPEC-CORE-004::REQ-007
+// @verifies spec-ft-core-discovery::REQ-007
 #[test]
 fn test_reject_manifest_missing_required_fields() {
     let invalid_json = r#"{
@@ -52,7 +52,7 @@ fn test_reject_manifest_missing_required_fields() {
     assert!(result.is_err(), "Manifest missing codebase_path must be rejected");
 }
 
-// @verifies SPEC-CORE-004::REQ-007
+// @verifies spec-ft-core-discovery::REQ-007
 #[test]
 fn test_reject_invalid_project_identifier() {
     let invalid_json = r#"{

@@ -25,7 +25,7 @@ pub struct McpServerManager;
 
 impl McpServerManager {
     /// List all registered SDD deterministic MCP tools
-    // @implements SPEC-CORE-005::REQ-001
+    // @implements spec-ft-core-mcp-tools::REQ-001
     pub fn list_tools() -> Vec<ToolDefinition> {
         vec![
             ToolDefinition {
@@ -79,8 +79,8 @@ impl McpServerManager {
     }
 
     /// Dispatch a tool call with input validation and error guidance
-    // @implements SPEC-CORE-005::REQ-008
-    // @implements SPEC-CORE-005::REQ-009
+    // @implements spec-ft-core-mcp-tools::REQ-008
+    // @implements spec-ft-core-mcp-tools::REQ-009
     pub fn call_tool(name: &str, params: serde_json::Value) -> Result<serde_json::Value, ToolError> {
         match name {
             "extract_annotations" => {

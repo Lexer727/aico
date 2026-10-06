@@ -3,10 +3,10 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { ShellLayout } from '../src/components/layout/ShellLayout';
 
-// @verifies SPEC-CORE-006::REQ-001
-// @verifies SPEC-CORE-006::REQ-002
-// @verifies SPEC-CORE-006::REQ-008
-// @verifies SPEC-CORE-006::REQ-013
+// @verifies spec-ft-core-webui-shell::REQ-001
+// @verifies spec-ft-core-webui-shell::REQ-002
+// @verifies spec-ft-core-webui-shell::REQ-008
+// @verifies spec-ft-core-webui-shell::REQ-013
 describe('ShellLayout Component', () => {
   it('renders full-height left sidebar and accordion navigation items', () => {
     render(

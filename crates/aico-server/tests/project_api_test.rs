@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-// @verifies SPEC-CORE-004::REQ-008
+// @verifies spec-ft-core-discovery::REQ-008
 #[tokio::test]
 async fn test_project_management_rest_api() {
     let mut config = ServerConfig::default();
@@ -71,7 +71,7 @@ async fn test_project_management_rest_api() {
     assert_eq!(not_found_res.status(), 404);
 
     // 4. GET /api/v1/stats
-    // @verifies SPEC-CORE-006::REQ-012
+    // @verifies spec-ft-core-webui-shell::REQ-012
     let stats_res = client
         .get(format!("http://{}/api/v1/stats", addr))
         .send()
@@ -80,7 +80,7 @@ async fn test_project_management_rest_api() {
     assert_eq!(stats_res.status(), 200);
 
     // 5. GET /api/v1/epics
-    // @verifies SPEC-CORE-007::REQ-001
+    // @verifies spec-ft-core-epic-hub::REQ-001
     let epics_res = client
         .get(format!("http://{}/api/v1/epics", addr))
         .send()
@@ -130,6 +130,7 @@ async fn test_project_management_rest_api() {
     assert!(!feat_obj["requirements"].as_array().unwrap().is_empty());
     assert!(!feat_obj["tasks"].as_array().unwrap().is_empty());
     assert!(!feat_obj["ubiquitous_language"].as_array().unwrap().is_empty());
+    assert!(feat_obj["brainstorm_content"].is_string(), "Brainstorm content was: {:?}", feat_obj["brainstorm_content"]);
 
     // 9. GET /api/v1/glossary
     let glossary_res = client

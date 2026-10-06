@@ -34,7 +34,7 @@ impl ApprovalGateManager {
     }
 
     /// Create a pending approval gate with an interactive channel
-    // @implements SPEC-CORE-002::REQ-008
+    // @implements spec-ft-core-security-auth::REQ-008
     pub fn create_gate(
         &self,
         command: &str,
@@ -58,8 +58,8 @@ impl ApprovalGateManager {
     }
 
     /// Respond to an approval request (approve or deny)
-    // @implements SPEC-CORE-002::REQ-009
-    // @implements SPEC-CORE-002::REQ-010
+    // @implements spec-ft-core-security-auth::REQ-009
+    // @implements spec-ft-core-security-auth::REQ-010
     pub fn respond_approval(&self, gate_id: &str, approved: bool) -> Result<(), ApprovalError> {
         let mut gates = self.gates.lock().unwrap();
         if let Some(tx) = gates.remove(gate_id) {
@@ -77,7 +77,7 @@ impl ApprovalGateManager {
     }
 
     /// Wait for gate response with timeout enforcement
-    // @implements SPEC-CORE-002::REQ-012
+    // @implements spec-ft-core-security-auth::REQ-012
     pub async fn wait_for_gate(
         &self,
         gate_id: &str,

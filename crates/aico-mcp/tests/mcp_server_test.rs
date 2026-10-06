@@ -1,6 +1,6 @@
 use aico_mcp::{McpServerManager, ToolError};
 
-// @verifies SPEC-CORE-005::REQ-001
+// @verifies spec-ft-core-mcp-tools::REQ-001
 #[test]
 fn test_list_tools_returns_sdd_core_tools() {
     let tools = McpServerManager::list_tools();
@@ -13,10 +13,10 @@ fn test_list_tools_returns_sdd_core_tools() {
     assert!(names.contains(&"validate_ears".to_string()));
 }
 
-// @verifies SPEC-CORE-005::REQ-008
+// @verifies spec-ft-core-mcp-tools::REQ-008
 #[test]
 fn test_call_tool_dispatch_and_execution() {
-    let source_code = "// @verifies SPEC-CORE-001::REQ-001\nfn test_port() {}";
+    let source_code = "// @verifies spec-ft-core-host-runtime::REQ-001\nfn test_port() {}";
     let params = serde_json::json!({ "source": source_code });
 
     let result = McpServerManager::call_tool("extract_annotations", params)
@@ -26,7 +26,7 @@ fn test_call_tool_dispatch_and_execution() {
     assert_eq!(result.as_array().unwrap().len(), 1);
 }
 
-// @verifies SPEC-CORE-005::REQ-009
+// @verifies spec-ft-core-mcp-tools::REQ-009
 #[test]
 fn test_call_tool_error_handling_and_guidance() {
     // 1. Unknown tool

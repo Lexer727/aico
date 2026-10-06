@@ -24,8 +24,8 @@ pub struct CommandExecutor;
 
 impl CommandExecutor {
     /// Executes a shell command with timeout and process termination on cancellation
-    // @implements SPEC-CORE-002::REQ-002
-    // @implements SPEC-CORE-002::REQ-007
+    // @implements spec-ft-core-security-auth::REQ-002
+    // @implements spec-ft-core-security-auth::REQ-007
     pub async fn run_command<P: AsRef<Path>>(
         cmd: &str,
         cwd: P,

@@ -2,7 +2,7 @@ use aico_core::{RootScanner, WorkspaceRegistry, ProjectManifest, DiscoveredProje
 use std::fs;
 use std::path::PathBuf;
 
-// @verifies SPEC-CORE-004::REQ-001
+// @verifies spec-ft-core-discovery::REQ-001
 #[test]
 fn test_root_scanner_discovers_specs_and_codebases() {
     let temp_root = std::env::temp_dir().join(format!("aico_test_root_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
@@ -29,7 +29,7 @@ fn test_root_scanner_discovers_specs_and_codebases() {
     let _ = fs::remove_dir_all(temp_root);
 }
 
-// @verifies SPEC-CORE-004::REQ-005
+// @verifies spec-ft-core-discovery::REQ-005
 #[test]
 fn test_workspace_registry_tracks_active_project() {
     let mut registry = WorkspaceRegistry::new();

@@ -3,8 +3,8 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { VisualLineageCanvas } from '../src/features/epic-hub/VisualLineageCanvas';
 
-// @verifies SPEC-CORE-007::REQ-003
-// @verifies SPEC-CORE-007::REQ-010
+// @verifies spec-ft-core-epic-hub::REQ-003
+// @verifies spec-ft-core-epic-hub::REQ-010
 describe('VisualLineageCanvas Component', () => {
   const mockNodes = [
     { id: 'node-epic', type: 'epic', label: 'Epic 001', isFrontier: false },

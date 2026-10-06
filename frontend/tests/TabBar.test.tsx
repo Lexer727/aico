@@ -5,9 +5,9 @@ import { TabBar } from '../src/components/navigation/TabBar';
 import { ProjectSwitcher } from '../src/components/navigation/ProjectSwitcher';
 import { useTabStore } from '../src/stores/useTabStore';
 
-// @verifies SPEC-CORE-006::REQ-004
-// @verifies SPEC-CORE-006::REQ-005
-// @verifies SPEC-CORE-006::REQ-006
+// @verifies spec-ft-core-webui-shell::REQ-004
+// @verifies spec-ft-core-webui-shell::REQ-005
+// @verifies spec-ft-core-webui-shell::REQ-006
 describe('TabBar and ProjectSwitcher', () => {
   beforeEach(() => {
     useTabStore.getState().reset();
@@ -35,18 +35,18 @@ describe('TabBar and ProjectSwitcher', () => {
     expect(restoredTabs.map(t => t.id)).toEqual(['tab-1', 'tab-2']);
   });
 
-  it('renders tab bar items for active project and allows switching active tab', () => {
+  it('renders tab bar items for active project using canonical id and allows switching active tab', () => {
     const store = useTabStore.getState();
     store.setActiveProject('project-alpha');
-    store.openTab('project-alpha', { id: 'tab-overview', title: 'Overview', type: 'epic' });
-    store.openTab('project-alpha', { id: 'tab-specs', title: 'Specs', type: 'spec' });
+    store.openTab('project-alpha', { id: 'tab-overview', title: 'tab-overview', type: 'epic' });
+    store.openTab('project-alpha', { id: 'tab-specs', title: 'tab-specs', type: 'spec' });
 
     render(<TabBar />);
 
-    expect(screen.getByText('Overview')).toBeInTheDocument();
-    expect(screen.getByText('Specs')).toBeInTheDocument();
+    expect(screen.getByText('tab-overview')).toBeInTheDocument();
+    expect(screen.getByText('tab-specs')).toBeInTheDocument();
 
-    const specTab = screen.getByText('Specs');
+    const specTab = screen.getByText('tab-specs');
     fireEvent.click(specTab);
 
     expect(useTabStore.getState().activeTabId).toBe('tab-specs');
@@ -78,10 +78,10 @@ describe('TabBar and ProjectSwitcher', () => {
     openSpy.mockRestore();
   });
 
-  it('closes tab on middle mouse click but protects dashboard tab', () => {
+  it('closes tab on middle mouse click and allows reopening closed tab via reopen button', () => {
     const store = useTabStore.getState();
     store.setActiveProject('project-test');
-    store.openTab('project-test', { id: 'tab-closable', title: 'Closable', type: 'spec' });
+    store.openTab('project-test', { id: 'tab-closable', title: 'tab-closable', type: 'spec' });
 
     render(<TabBar />);
 
@@ -96,5 +96,67 @@ describe('TabBar and ProjectSwitcher', () => {
 
     // Dashboard tab is permanent
     expect(screen.getByTestId('tab-dashboard')).toBeInTheDocument();
+
+    // Reopen closed tab button should be enabled
+    const reopenBtn = screen.getByTestId('tab-reopen-btn');
+    expect(reopenBtn).not.toBeDisabled();
+
+    // Click reopen button
+    fireEvent.click(reopenBtn);
+
+    // Tab should be restored
+    expect(useTabStore.getState().getProjectTabs('project-test')).toHaveLength(1);
+    expect(useTabStore.getState().activeTabId).toBe('tab-closable');
+  });
+
+  it('reorders tabs using reorderTabs action', () => {
+    const store = useTabStore.getState();
+    store.setActiveProject('project-test');
+    store.openTab('project-test', { id: 'tab-1', title: 'tab-1', type: 'spec' });
+    store.openTab('project-test', { id: 'tab-2', title: 'tab-2', type: 'plan' });
+    store.openTab('project-test', { id: 'tab-3', title: 'tab-3', type: 'epic' });
+
+    expect(store.getProjectTabs('project-test').map((t) => t.id)).toEqual(['tab-1', 'tab-2', 'tab-3']);
+
+    // Reorder tab-3 (index 2) to the front (index 0)
+    store.reorderTabs('project-test', 2, 0);
+
+    expect(useTabStore.getState().getProjectTabs('project-test').map((t) => t.id)).toEqual(['tab-3', 'tab-1', 'tab-2']);
+  });
+
+  it('shifts other tabs on drag over to provide a live preview before drop', () => {
+    const store = useTabStore.getState();
+    store.setActiveProject('project-test');
+    store.openTab('project-test', { id: 'tab-1', title: 'tab-1', type: 'spec' });
+    store.openTab('project-test', { id: 'tab-2', title: 'tab-2', type: 'plan' });
+    store.openTab('project-test', { id: 'tab-3', title: 'tab-3', type: 'epic' });
+
+    render(<TabBar />);
+
+    const tab1 = screen.getByTestId('tab-tab-1');
+    const tab3 = screen.getByTestId('tab-tab-3');
+
+    // 1. Drag start on tab-1
+    fireEvent.dragStart(tab1);
+
+    // 2. Drag over tab-3: should shift tab-1 to tab-3's position
+    fireEvent.dragOver(tab3);
+
+    // In the DOM, tab-2 and tab-3 should now precede tab-1 in rendered order!
+    const tabs = screen.getAllByTestId(/^tab-tab-/);
+    expect(tabs.map((el) => el.getAttribute('data-testid'))).toEqual([
+      'tab-tab-2',
+      'tab-tab-3',
+      'tab-tab-1',
+    ]);
+
+    // 3. Drop: should commit the new order to useTabStore
+    fireEvent.drop(screen.getByTestId('tab-tab-1'));
+
+    expect(useTabStore.getState().getProjectTabs('project-test').map((t) => t.id)).toEqual([
+      'tab-2',
+      'tab-3',
+      'tab-1',
+    ]);
   });
 });

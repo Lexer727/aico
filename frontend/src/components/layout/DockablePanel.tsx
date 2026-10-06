@@ -9,8 +9,8 @@ interface DockablePanelProps {
   className?: string;
 }
 
-// @implements SPEC-CORE-006::REQ-010
-// @implements SPEC-CORE-006::REQ-011
+// @implements spec-ft-core-webui-shell::REQ-010
+// @implements spec-ft-core-webui-shell::REQ-011
 export const DockablePanel: React.FC<DockablePanelProps> = ({
   title = 'Docked Panel',
   children,
