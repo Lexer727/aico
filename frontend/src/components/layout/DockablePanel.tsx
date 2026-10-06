@@ -25,10 +25,10 @@ export const DockablePanel: React.FC<DockablePanelProps> = ({
       data-testid="dockable-panel"
       data-position={position}
       className={clsx(
-        'border-t md:border-t-0 md:border-l border-zinc-800 bg-zinc-950 flex flex-col transition-all duration-200 z-10',
+        'border-zinc-800 bg-zinc-950 flex flex-col transition-all duration-200 z-10 flex-shrink-0',
         isBottom
-          ? 'w-full h-64 border-t border-zinc-800'
-          : 'w-80 md:w-96 h-full border-l border-zinc-800',
+          ? 'w-full h-64 border-t'
+          : 'w-80 md:w-96 h-full border-l',
         className
       )}
     >

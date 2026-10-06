@@ -10,6 +10,7 @@ import { EpicHubView, type EpicData } from './features/epic-hub/EpicHubView';
 import { VisualLineageCanvas, type GraphNode, type GraphEdge } from './features/epic-hub/VisualLineageCanvas';
 import { WebSocketProvider, useWebSocket } from './context/WebSocketContext';
 import { useTabStore } from './stores/useTabStore';
+import { useDockStore } from './stores/useDockStore';
 import { Search, Terminal, MessageSquare } from 'lucide-react';
 
 const mockProjects = [
@@ -54,6 +55,7 @@ const MainWorkspace: React.FC = () => {
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
   const [projects, setProjects] = useState(mockProjects);
   const { openTab, activeProjectId, setActiveProject } = useTabStore();
+  const { position } = useDockStore();
 
   const fetchProjects = useCallback(async () => {
     try {
@@ -127,9 +129,13 @@ const MainWorkspace: React.FC = () => {
       <TabBar />
 
       {/* Main Canvas Area */}
-      <div className="flex-1 flex flex-col md:flex-row h-[calc(100vh-84px)] overflow-hidden">
+      <div
+        className={`flex-1 flex overflow-hidden min-h-0 ${
+          position === 'bottom' ? 'flex-col' : 'flex-row'
+        }`}
+      >
         {/* Central Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 min-w-0 min-h-0">
           <EpicHubView
             epic={mockEpic}
             onPopOut={(epicId, section) => {

@@ -170,10 +170,8 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
       )}
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col h-full overflow-hidden min-w-0">
-        <div className="flex-1 overflow-auto bg-zinc-950 relative">
-          {children}
-        </div>
+      <main className="flex-1 flex flex-col h-full overflow-hidden min-w-0 bg-zinc-950 relative">
+        {children}
       </main>
     </div>
   );
