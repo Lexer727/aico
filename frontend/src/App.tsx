@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ShellLayout, type DiscoveredEpicNav, type DiscoveredAdrNav } from './components/layout/ShellLayout';
+import { ShellLayout, type DiscoveredEpicNav, type DiscoveredFeatureNav, type DiscoveredAdrNav } from './components/layout/ShellLayout';
 import { DockablePanel } from './components/layout/DockablePanel';
 import { TabBar } from './components/navigation/TabBar';
 import { ProjectSwitcher } from './components/navigation/ProjectSwitcher';
@@ -23,8 +23,8 @@ const mockProjects = [
 ];
 
 const mockEpicsData: Record<string, EpicData> = {
-  '001-aico-core': {
-    id: '001-aico-core',
+  'EC-core': {
+    id: 'EC-core',
     title: 'AICO Core SDD Platform',
     status: 'In Progress',
     verifiedCount: 48,
@@ -38,14 +38,14 @@ const mockEpicsData: Record<string, EpicData> = {
       assets: 'Multi-modal reference designs, mockups, and assets.',
     },
   },
-  '002-aico-specs': {
-    id: '002-aico-specs',
+  'EC-specs': {
+    id: 'EC-specs',
     title: 'AICO SDD Blueprints & Migration',
     status: 'Completed',
     verifiedCount: 12,
     totalCount: 12,
     sections: {
-      overview: 'Standardization of SDD artifacts to v0.1.1, universal line-1 frontmatter, and 6-state DAG tracking.',
+      overview: 'Standardization of SDD artifacts to v0.1.2, universal line-1 frontmatter, and 6-state DAG tracking.',
       brainstorm: 'Non-destructive migration engine, AST YAML validation, zero amnesia across revisions.',
       specifications: '3 Approved EARS Specifications: Blueprint Standards, Skills Evolution, Migration Engine.',
       deepDive: 'File traversal boundaries, regex/AST frontmatter transformations, backward compatibility.',
@@ -56,105 +56,115 @@ const mockEpicsData: Record<string, EpicData> = {
 };
 
 const defaultFeaturesData: Record<string, FeatureData> = {
-  '01-host-runtime': {
-    id: '01-host-runtime',
+  'core-host-runtime': {
+    id: 'core-host-runtime',
     name: 'Host Runtime & Local HTTP/WS Server',
-    epicId: '001-aico-core',
-    specId: 'SPEC-CORE-001',
+    epicId: 'EC-core',
+    specId: 'SPEC-core-host-runtime',
     specTitle: 'Host Runtime & Local HTTP/WebSocket Server',
-    planId: 'PLAN-CORE-001',
+    planId: 'PLAN-core-host-runtime',
     planTitle: 'Host Runtime & Local Axum Server',
     status: 'Completed',
+    order: 1,
   },
-  '02-security-auth': {
-    id: '02-security-auth',
+  'core-security-auth': {
+    id: 'core-security-auth',
     name: 'LAN Security & Local Authentication',
-    epicId: '001-aico-core',
-    specId: 'SPEC-CORE-002',
+    epicId: 'EC-core',
+    specId: 'SPEC-core-security-auth',
     specTitle: 'LAN Security & Local Authentication',
-    planId: 'PLAN-CORE-002',
+    planId: 'PLAN-core-security-auth',
     planTitle: 'LAN Security & Local Authentication',
     status: 'Completed',
+    order: 2,
   },
-  '03-local-storage': {
-    id: '03-local-storage',
+  'core-local-storage': {
+    id: 'core-local-storage',
     name: 'Local Storage & Embedded Engine Lifecycle',
-    epicId: '001-aico-core',
-    specId: 'SPEC-CORE-003',
+    epicId: 'EC-core',
+    specId: 'SPEC-core-local-storage',
     specTitle: 'Local Storage & Embedded Engine Lifecycle',
-    planId: 'PLAN-CORE-003',
+    planId: 'PLAN-core-local-storage',
     planTitle: 'Local Storage & Embedded Engine Lifecycle',
     status: 'Completed',
+    order: 3,
   },
-  '04-discovery': {
-    id: '04-discovery',
+  'core-discovery': {
+    id: 'core-discovery',
     name: 'Workspace & Multi-Project Discovery',
-    epicId: '001-aico-core',
-    specId: 'SPEC-CORE-004',
+    epicId: 'EC-core',
+    specId: 'SPEC-core-discovery',
     specTitle: 'Workspace & Multi-Project Discovery',
-    planId: 'PLAN-CORE-004',
+    planId: 'PLAN-core-discovery',
     planTitle: 'Workspace & Multi-Project Discovery',
     status: 'Completed',
+    order: 4,
   },
-  '05-mcp-tools': {
-    id: '05-mcp-tools',
+  'core-mcp-tools': {
+    id: 'core-mcp-tools',
     name: 'Deterministic SDD Tool Registration',
-    epicId: '001-aico-core',
-    specId: 'SPEC-CORE-005',
+    epicId: 'EC-core',
+    specId: 'SPEC-core-mcp-tools',
     specTitle: 'Deterministic SDD Tool Registration',
-    planId: 'PLAN-CORE-005',
+    planId: 'PLAN-core-mcp-tools',
     planTitle: 'Deterministic SDD Tool Registration',
     status: 'Completed',
+    order: 5,
   },
-  '06-webui-shell': {
-    id: '06-webui-shell',
+  'core-webui-shell': {
+    id: 'core-webui-shell',
     name: 'WebUI Workspace Shell & Dockable Layout',
-    epicId: '001-aico-core',
-    specId: 'SPEC-CORE-006',
+    epicId: 'EC-core',
+    specId: 'SPEC-core-webui-shell',
     specTitle: 'WebUI Workspace Shell & Dockable Layout',
-    planId: 'PLAN-CORE-006',
+    planId: 'PLAN-core-webui-shell',
     planTitle: 'WebUI Workspace Shell & Dockable Layout',
-    status: 'In Progress',
+    status: 'Completed',
+    order: 6,
   },
-  '07-epic-hub': {
-    id: '07-epic-hub',
+  'core-epic-hub': {
+    id: 'core-epic-hub',
     name: 'Single-Page Epic Hub & Lineage Graph',
-    epicId: '001-aico-core',
-    specId: 'SPEC-CORE-007',
+    epicId: 'EC-core',
+    specId: 'SPEC-core-epic-hub',
     specTitle: 'Single-Page Epic Hub & Lineage Graph',
-    planId: 'PLAN-CORE-007',
+    planId: 'PLAN-core-epic-hub',
     planTitle: 'Single-Page Epic Hub & Lineage Graph',
-    status: 'In Progress',
-  },
-  '01-blueprint-standards': {
-    id: '01-blueprint-standards',
-    name: 'AICO SDD Blueprint Standards v0.1.1',
-    epicId: '002-aico-specs',
-    specId: 'SPEC-SPECS-001',
-    specTitle: 'AICO SDD Blueprint Standards v0.1.1',
-    planId: 'PLAN-SPECS-001',
-    planTitle: 'AICO SDD Blueprint Standards v0.1.1',
     status: 'Completed',
+    order: 7,
   },
-  '02-skills-evolution': {
-    id: '02-skills-evolution',
-    name: 'AICO Skills Evolution & 6-State Task Tracking',
-    epicId: '002-aico-specs',
-    specId: 'SPEC-SPECS-002',
-    specTitle: 'AICO Skills Evolution & 6-State Task Tracking',
-    planId: 'PLAN-SPECS-002',
-    planTitle: 'AICO Skills Evolution & 6-State Task Tracking',
+  'specs-blueprint-standards': {
+    id: 'specs-blueprint-standards',
+    name: 'AICO SDD Blueprint Standards v0.1.2',
+    epicId: 'EC-specs',
+    specId: 'SPEC-specs-blueprint-standards',
+    specTitle: 'AICO SDD Blueprint Standards v0.1.2',
+    planId: 'PLAN-specs-blueprint-standards',
+    planTitle: 'AICO SDD Blueprint Standards v0.1.2',
     status: 'Completed',
+    order: 1,
   },
-  '03-migration-engine': {
-    id: '03-migration-engine',
-    name: 'AICO Spec Migration Engine v0.1.0 to v0.1.1',
-    epicId: '002-aico-specs',
-    specId: 'SPEC-SPECS-003',
-    specTitle: 'AICO Spec Migration Engine v0.1.0 to v0.1.1',
-    planId: 'PLAN-SPECS-003',
-    planTitle: 'AICO Spec Migration Engine v0.1.0 to v0.1.1',
+  'specs-skills-evolution': {
+    id: 'specs-skills-evolution',
+    name: 'AICO Skills Evolution & Wave-Internal Tasks',
+    epicId: 'EC-specs',
+    specId: 'SPEC-specs-skills-evolution',
+    specTitle: 'AICO Skills Evolution & Wave-Internal Tasks',
+    planId: 'PLAN-specs-skills-evolution',
+    planTitle: 'AICO Skills Evolution & Wave-Internal Tasks',
     status: 'Completed',
+    order: 2,
+  },
+  'specs-migration-engine': {
+    id: 'specs-migration-engine',
+    name: 'AICO Spec Migration Engine v0.1.2',
+    epicId: 'EC-specs',
+    specId: 'SPEC-specs-migration-engine',
+    specTitle: 'AICO Spec Migration Engine v0.1.2',
+    planId: 'PLAN-specs-migration-engine',
+    planTitle: 'AICO Spec Migration Engine v0.1.2',
+    status: 'Completed',
+    order: 3,
   },
 };
 
@@ -183,6 +193,7 @@ const MainWorkspace: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [projects, setProjects] = useState(mockProjects);
   const [discoveredEpics, setDiscoveredEpics] = useState<DiscoveredEpicNav[]>([]);
+  const [discoveredFeatures, setDiscoveredFeatures] = useState<DiscoveredFeatureNav[]>([]);
   const [discoveredAdrs, setDiscoveredAdrs] = useState<DiscoveredAdrNav[]>([]);
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
   const { openTab, activeProjectId, setActiveProject, activeTabId, getProjectTabs } = useTabStore();
@@ -209,6 +220,33 @@ const MainWorkspace: React.FC = () => {
             features: e.features || [],
           }));
           setDiscoveredEpics(mapped);
+        }
+      }
+    } catch {
+      // Offline fallback
+    }
+  }, []);
+
+  const fetchFeatures = useCallback(async () => {
+    try {
+      const res = await fetch('/api/v1/features');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          const mapped: DiscoveredFeatureNav[] = data.map((f: {
+            id: string;
+            name: string;
+            epic_id?: string;
+            epicId?: string;
+            is_standalone?: boolean;
+            isStandalone?: boolean;
+          }) => ({
+            id: f.id,
+            name: f.name || f.id,
+            epicId: f.epic_id || f.epicId || '',
+            isStandalone: f.is_standalone ?? f.isStandalone ?? false,
+          }));
+          setDiscoveredFeatures(mapped);
         }
       }
     } catch {
@@ -254,8 +292,9 @@ const MainWorkspace: React.FC = () => {
   useEffect(() => {
     fetchProjects();
     fetchEpics();
+    fetchFeatures();
     fetchAdrs();
-  }, [fetchProjects, fetchEpics, fetchAdrs]);
+  }, [fetchProjects, fetchEpics, fetchFeatures, fetchAdrs]);
 
   useEffect(() => {
     if (lastMessage && typeof lastMessage === 'object') {
@@ -263,14 +302,16 @@ const MainWorkspace: React.FC = () => {
       if (msg.topic === 'active_project_changed' && msg.payload) {
         setActiveProject(msg.payload);
         fetchEpics();
+        fetchFeatures();
         fetchAdrs();
       } else if (msg.topic === 'projects_updated') {
         fetchProjects();
         fetchEpics();
+        fetchFeatures();
         fetchAdrs();
       }
     }
-  }, [lastMessage, setActiveProject, fetchProjects, fetchEpics, fetchAdrs]);
+  }, [lastMessage, setActiveProject, fetchProjects, fetchEpics, fetchFeatures, fetchAdrs]);
 
   // Tab management helpers
   const handleOpenEpic = (epicId: string) => {
@@ -379,7 +420,7 @@ const MainWorkspace: React.FC = () => {
       const featData = defaultFeaturesData[activeTab.id] || {
         id: activeTab.id,
         name: activeTab.title,
-        epicId: '001-aico-core',
+        epicId: 'EC-core',
         status: 'In Progress',
       };
       return (
@@ -387,6 +428,7 @@ const MainWorkspace: React.FC = () => {
           feature={featData}
           onOpenSpec={handleOpenSpec}
           onOpenPlan={(planId, title) => handleOpenSpec(planId, title)}
+          onOpenAdr={handleOpenAdr}
         />
       );
     }
@@ -420,6 +462,7 @@ const MainWorkspace: React.FC = () => {
   return (
     <ShellLayout
       epics={discoveredEpics.length > 0 ? discoveredEpics : undefined}
+      features={discoveredFeatures.length > 0 ? discoveredFeatures : undefined}
       adrs={discoveredAdrs.length > 0 ? discoveredAdrs : undefined}
       onSelectEpic={handleOpenEpic}
       onSelectFeature={handleOpenFeature}

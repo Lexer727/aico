@@ -39,112 +39,139 @@ interface EpicHubViewProps {
   onFileUpload?: (file: File) => void;
 }
 
-// Features definition
+// Features definition for EC-core
 const coreFeaturesList = [
   {
-    id: '01-host-runtime',
+    id: 'core-host-runtime',
     name: 'Host Runtime & Local HTTP/WS Server',
-    specId: 'SPEC-CORE-001',
-    planId: 'PLAN-CORE-001',
+    specId: 'SPEC-core-host-runtime',
+    planId: 'PLAN-core-host-runtime',
     status: 'Completed',
     desc: 'Axum embedded server on port 4242 with SPA fallback and WebSocket broadcast hub.',
   },
   {
-    id: '02-security-auth',
+    id: 'core-security-auth',
     name: 'LAN Security & Local Authentication',
-    specId: 'SPEC-CORE-002',
-    planId: 'PLAN-CORE-002',
+    specId: 'SPEC-core-security-auth',
+    planId: 'PLAN-core-security-auth',
     status: 'Completed',
     desc: 'Strict loopback binding, QR pairing, and SHA-256 HMAC token gate.',
   },
   {
-    id: '03-local-storage',
+    id: 'core-local-storage',
     name: 'Local Storage & Embedded Engine Lifecycle',
-    specId: 'SPEC-CORE-003',
-    planId: 'PLAN-CORE-003',
+    specId: 'SPEC-core-local-storage',
+    planId: 'PLAN-core-local-storage',
     status: 'Completed',
     desc: 'In-process LanceDB vector search and Kùzu graph without Docker or background daemons.',
   },
   {
-    id: '04-discovery',
+    id: 'core-discovery',
     name: 'Workspace & Multi-Project Discovery',
-    specId: 'SPEC-CORE-004',
-    planId: 'PLAN-CORE-004',
+    specId: 'SPEC-core-discovery',
+    planId: 'PLAN-core-discovery',
     status: 'Completed',
     desc: 'Project manifest scanning and active workspace registry synchronization.',
   },
   {
-    id: '05-mcp-tools',
+    id: 'core-mcp-tools',
     name: 'Deterministic SDD Tool Registration',
-    specId: 'SPEC-CORE-005',
-    planId: 'PLAN-CORE-005',
+    specId: 'SPEC-core-mcp-tools',
+    planId: 'PLAN-core-mcp-tools',
     status: 'Completed',
     desc: 'In-process Model Context Protocol tool gates enforcing strict SDD contracts.',
   },
   {
-    id: '06-webui-shell',
+    id: 'core-webui-shell',
     name: 'WebUI Workspace Shell & Dockable Layout',
-    specId: 'SPEC-CORE-006',
-    planId: 'PLAN-CORE-006',
+    specId: 'SPEC-core-webui-shell',
+    planId: 'PLAN-core-webui-shell',
     status: 'In Progress',
     desc: '100vh Shell, sidebar tree search, 5 filter scopes, activity monitor, and multi-terminals.',
   },
   {
-    id: '07-epic-hub',
+    id: 'core-epic-hub',
     name: 'Single-Page Epic Hub & Lineage Graph',
-    specId: 'SPEC-CORE-007',
-    planId: 'PLAN-CORE-007',
+    specId: 'SPEC-core-epic-hub',
+    planId: 'PLAN-core-epic-hub',
     status: 'In Progress',
-    desc: '2-column overview, visual wave task plan with progress bars, and lineage graph.',
+    desc: '2-column overview, visual wave-internal task plan with progress bars, and lineage graph.',
   },
 ];
 
-// Specs definitions
+const specsFeaturesList = [
+  {
+    id: 'specs-blueprint-standards',
+    name: 'AICO SDD Blueprint Standards v0.1.2',
+    specId: 'SPEC-specs-blueprint-standards',
+    planId: 'PLAN-specs-blueprint-standards',
+    status: 'Completed',
+    desc: 'Normalized YAML frontmatters with order attribute, relative links, and clean single-source metadata.',
+  },
+  {
+    id: 'specs-skills-evolution',
+    name: 'Skills Suite Evolution & Triage System',
+    specId: 'SPEC-specs-skills-evolution',
+    planId: 'PLAN-specs-skills-evolution',
+    status: 'Completed',
+    desc: 'Front-door triage via /aico-start, standalone /aico-feature orchestration, and wave-internal planning.',
+  },
+  {
+    id: 'specs-migration-engine',
+    name: 'SDD v0.1.1 to v0.1.2 Migration Engine',
+    specId: 'SPEC-specs-migration-engine',
+    planId: 'PLAN-specs-migration-engine',
+    status: 'Completed',
+    desc: 'Automated artifact migrator for renaming epics (EC-), specs/ to features/, and updating frontmatters.',
+  },
+];
+
+// Specs definitions for EC-core
 const coreSpecsList = [
   {
-    id: 'SPEC-CORE-001',
+    id: 'SPEC-core-host-runtime',
     title: 'Host Runtime & Local HTTP/WebSocket Server',
     status: 'Completed',
     reqs: 10,
     seam: 'crates/aico-server/src/server.rs',
   },
   {
-    id: 'SPEC-CORE-002',
+    id: 'SPEC-core-security-auth',
     title: 'LAN Security & Local Authentication',
     status: 'Completed',
     reqs: 8,
     seam: 'crates/aico-server/src/auth.rs',
   },
   {
-    id: 'SPEC-CORE-003',
+    id: 'SPEC-core-local-storage',
     title: 'Local Storage & Embedded Engine Lifecycle',
     status: 'Completed',
     reqs: 8,
     seam: 'crates/aico-storage/src/embedded.rs',
   },
   {
-    id: 'SPEC-CORE-004',
+    id: 'SPEC-core-discovery',
     title: 'Workspace & Multi-Project Discovery',
     status: 'Completed',
     reqs: 11,
     seam: 'crates/aico-core/src/scanner.rs',
   },
   {
-    id: 'SPEC-CORE-005',
+    id: 'SPEC-core-mcp-tools',
     title: 'Deterministic SDD Tool Registration',
     status: 'Completed',
     reqs: 9,
     seam: 'crates/aico-mcp/src/registry.rs',
   },
   {
-    id: 'SPEC-CORE-006',
+    id: 'SPEC-core-webui-shell',
     title: 'WebUI Workspace Shell & Dockable Layout',
     status: 'In Progress',
     reqs: 13,
     seam: 'frontend/src/components/layout/ShellLayout.tsx',
   },
   {
-    id: 'SPEC-CORE-007',
+    id: 'SPEC-core-epic-hub',
     title: 'Single-Page Epic Hub & Lineage Graph',
     status: 'In Progress',
     reqs: 11,
@@ -152,116 +179,391 @@ const coreSpecsList = [
   },
 ];
 
-// Visual Task Waves for 001-aico-core
-interface TaskItem {
+const specsSpecsList = [
+  {
+    id: 'SPEC-specs-blueprint-standards',
+    title: 'AICO SDD Blueprint Standards v0.1.2',
+    status: 'Completed',
+    reqs: 8,
+    seam: 'aico-specs/adr/0010.md',
+  },
+  {
+    id: 'SPEC-specs-skills-evolution',
+    title: 'Skills Suite Evolution & Triage System',
+    status: 'Completed',
+    reqs: 6,
+    seam: 'skills/aico-start/SKILL.md',
+  },
+  {
+    id: 'SPEC-specs-migration-engine',
+    title: 'SDD v0.1.1 to v0.1.2 Migration Engine',
+    status: 'Completed',
+    reqs: 6,
+    seam: 'skills/aico-spec-migration/SKILL.md',
+  },
+];
+
+export interface WaveSubTask {
   id: string;
   title: string;
   status: 'Done' | 'In Progress' | 'Pending' | 'Blocked';
-  spec: string;
-  deps: string[];
+  seam?: string;
+  deps?: string[];
 }
 
-interface TaskWave {
+export interface InternalWave {
   waveNumber: number;
   name: string;
-  featureId: string;
-  tasks: TaskItem[];
+  stage: 'Scaffolding' | 'Implementation' | 'Verification';
+  tasks: WaveSubTask[];
 }
 
-const coreTaskWaves: TaskWave[] = [
+export interface FeatureTaskGroup {
+  id: string;
+  featureId: string;
+  title: string;
+  specId: string;
+  waves: InternalWave[];
+}
+
+const coreTaskGroups: FeatureTaskGroup[] = [
   {
-    waveNumber: 1,
-    name: 'Host Runtime & Dynamic Binding',
-    featureId: '01-host-runtime',
-    tasks: [
-      { id: 'TASK-CORE-001-1', title: 'Axum Server Scaffolding & Dynamic Port Binding', status: 'Done', spec: 'SPEC-CORE-001', deps: ['None'] },
-      { id: 'TASK-CORE-001-2', title: 'Embedded Static Asset Serving with SPA Fallback', status: 'Done', spec: 'SPEC-CORE-001', deps: ['TASK-CORE-001-1'] },
-      { id: 'TASK-CORE-001-3', title: 'Full-Duplex WebSocket Broadcast Hub', status: 'Done', spec: 'SPEC-CORE-001', deps: ['TASK-CORE-001-1'] },
-      { id: 'TASK-CORE-001-4', title: 'Graceful Shutdown Broadcasting & Drain', status: 'Done', spec: 'SPEC-CORE-001', deps: ['TASK-CORE-001-3'] },
-      { id: 'TASK-CORE-001-5', title: 'Host Runtime Integration Test Suite', status: 'Done', spec: 'SPEC-CORE-001', deps: ['TASK-CORE-001-2', 'TASK-CORE-001-4'] },
+    id: 'TASK-core-host-runtime',
+    featureId: 'core-host-runtime',
+    title: 'Host Runtime & Local HTTP/WS Server',
+    specId: 'SPEC-core-host-runtime',
+    waves: [
+      {
+        waveNumber: 1,
+        name: 'Wave 1: Seam Scaffolding / Red Tests',
+        stage: 'Scaffolding',
+        tasks: [
+          { id: 'TASK-CORE-001-1', title: 'Axum Server Types & Dynamic Port Binding Seam', status: 'Done', seam: 'crates/aico-server::server.rs', deps: ['None'] },
+          { id: 'TASK-CORE-001-2', title: 'HTTP Health & Project Info Endpoint Contracts', status: 'Done', seam: 'crates/aico-server::server.rs', deps: ['TASK-CORE-001-1'] },
+        ],
+      },
+      {
+        waveNumber: 2,
+        name: 'Wave 2: Domain Implementation / Green',
+        stage: 'Implementation',
+        tasks: [
+          { id: 'TASK-CORE-001-3', title: 'Static Asset Serving with SPA HTML Fallback', status: 'Done', seam: 'crates/aico-server::server.rs', deps: ['TASK-CORE-001-1'] },
+          { id: 'TASK-CORE-001-4', title: 'Full-Duplex WebSocket Broadcast Hub Channels', status: 'Done', seam: 'crates/aico-server::ws_hub.rs', deps: ['TASK-CORE-001-1'] },
+        ],
+      },
+      {
+        waveNumber: 3,
+        name: 'Wave 3: Seam Verification / Hardening',
+        stage: 'Verification',
+        tasks: [
+          { id: 'TASK-CORE-001-5', title: 'Graceful Shutdown Signal Handling & Drain Seam', status: 'Done', seam: 'crates/aico-server::server.rs', deps: ['TASK-CORE-001-4'] },
+          { id: 'TASK-CORE-001-6', title: 'Host Runtime & WebSocket Integration Test Suite', status: 'Done', seam: 'tests/host_runtime_test.rs', deps: ['TASK-CORE-001-3', 'TASK-CORE-001-5'] },
+        ],
+      },
     ],
   },
   {
-    waveNumber: 2,
-    name: 'LAN Security & Authentication',
-    featureId: '02-security-auth',
-    tasks: [
-      { id: 'TASK-CORE-002-1', title: 'Loopback Mode Default & Binding Constraints', status: 'Done', spec: 'SPEC-CORE-002', deps: ['None'] },
-      { id: 'TASK-CORE-002-2', title: 'Token-Based Authentication & QR Pairing', status: 'Done', spec: 'SPEC-CORE-002', deps: ['TASK-CORE-002-1'] },
-      { id: 'TASK-CORE-002-3', title: 'Security Audit Logger & Auto-Mode Policy', status: 'Done', spec: 'SPEC-CORE-002', deps: ['TASK-CORE-002-2'] },
-      { id: 'TASK-CORE-002-4', title: 'LAN Security & Auth Test Seams', status: 'Done', spec: 'SPEC-CORE-002', deps: ['TASK-CORE-002-3'] },
+    id: 'TASK-core-security-auth',
+    featureId: 'core-security-auth',
+    title: 'LAN Security & Local Authentication',
+    specId: 'SPEC-core-security-auth',
+    waves: [
+      {
+        waveNumber: 1,
+        name: 'Wave 1: Seam Scaffolding / Red Tests',
+        stage: 'Scaffolding',
+        tasks: [
+          { id: 'TASK-CORE-002-1', title: 'Loopback Mode Default & Binding Constraints', status: 'Done', seam: 'crates/aico-server::auth.rs', deps: ['None'] },
+        ],
+      },
+      {
+        waveNumber: 2,
+        name: 'Wave 2: Domain Implementation / Green',
+        stage: 'Implementation',
+        tasks: [
+          { id: 'TASK-CORE-002-2', title: 'Token-Based Auth & SHA-256 HMAC Header Gate', status: 'Done', seam: 'crates/aico-server::auth.rs', deps: ['TASK-CORE-002-1'] },
+          { id: 'TASK-CORE-002-3', title: 'QR Code Terminal Pairing & Auto-Mode Policy', status: 'Done', seam: 'crates/aico-server::auth.rs', deps: ['TASK-CORE-002-2'] },
+        ],
+      },
+      {
+        waveNumber: 3,
+        name: 'Wave 3: Seam Verification / Hardening',
+        stage: 'Verification',
+        tasks: [
+          { id: 'TASK-CORE-002-4', title: 'LAN Security Audit Logger & Auth Seam Tests', status: 'Done', seam: 'tests/auth_tests.rs', deps: ['TASK-CORE-002-3'] },
+        ],
+      },
     ],
   },
   {
-    waveNumber: 3,
-    name: 'Local Storage & Embedded Engines',
-    featureId: '03-local-storage',
-    tasks: [
-      { id: 'TASK-CORE-003-1', title: 'LanceDB Embedded Vector Storage Setup', status: 'Done', spec: 'SPEC-CORE-003', deps: ['None'] },
-      { id: 'TASK-CORE-003-2', title: 'Kùzu Embedded Property Graph Lifecycle', status: 'Done', spec: 'SPEC-CORE-003', deps: ['TASK-CORE-003-1'] },
-      { id: 'TASK-CORE-003-3', title: 'Hybrid Query Coordinator & Search Seams', status: 'Done', spec: 'SPEC-CORE-003', deps: ['TASK-CORE-003-2'] },
-      { id: 'TASK-CORE-003-4', title: 'File Watcher & Incremental Ingestion', status: 'Done', spec: 'SPEC-CORE-003', deps: ['TASK-CORE-003-3'] },
-      { id: 'TASK-CORE-003-5', title: 'Embedded Storage Concurrency Test Suite', status: 'Done', spec: 'SPEC-CORE-003', deps: ['TASK-CORE-003-4'] },
+    id: 'TASK-core-local-storage',
+    featureId: 'core-local-storage',
+    title: 'Local Storage & Embedded Engine Lifecycle',
+    specId: 'SPEC-core-local-storage',
+    waves: [
+      {
+        waveNumber: 1,
+        name: 'Wave 1: Seam Scaffolding / Red Tests',
+        stage: 'Scaffolding',
+        tasks: [
+          { id: 'TASK-CORE-003-1', title: 'Embedded Storage Engine Lifecycle Interfaces', status: 'Done', seam: 'crates/aico-storage::embedded.rs', deps: ['None'] },
+        ],
+      },
+      {
+        waveNumber: 2,
+        name: 'Wave 2: Domain Implementation / Green',
+        stage: 'Implementation',
+        tasks: [
+          { id: 'TASK-CORE-003-2', title: 'LanceDB In-Process Vector Storage Integration', status: 'Done', seam: 'crates/aico-storage::lancedb.rs', deps: ['TASK-CORE-003-1'] },
+          { id: 'TASK-CORE-003-3', title: 'Kùzu Embedded Property Graph Lifecycle', status: 'Done', seam: 'crates/aico-storage::kuzu.rs', deps: ['TASK-CORE-003-1'] },
+          { id: 'TASK-CORE-003-4', title: 'Hybrid Query Coordinator & Search Dispatcher', status: 'Done', seam: 'crates/aico-storage::embedded.rs', deps: ['TASK-CORE-003-2', 'TASK-CORE-003-3'] },
+        ],
+      },
+      {
+        waveNumber: 3,
+        name: 'Wave 3: Seam Verification / Hardening',
+        stage: 'Verification',
+        tasks: [
+          { id: 'TASK-CORE-003-5', title: 'File Watcher Ingestion & Storage Concurrency Tests', status: 'Done', seam: 'tests/storage_test.rs', deps: ['TASK-CORE-003-4'] },
+        ],
+      },
     ],
   },
   {
-    waveNumber: 4,
-    name: 'Workspace & Multi-Project Discovery',
-    featureId: '04-discovery',
-    tasks: [
-      { id: 'TASK-CORE-004-1', title: 'Project Manifest Parser & Validation', status: 'Done', spec: 'SPEC-CORE-004', deps: ['None'] },
-      { id: 'TASK-CORE-004-2', title: 'Unified Root Scanner & Workspace Registry', status: 'Done', spec: 'SPEC-CORE-004', deps: ['TASK-CORE-004-1'] },
-      { id: 'TASK-CORE-004-3', title: 'Active Project Selection REST API', status: 'Done', spec: 'SPEC-CORE-004', deps: ['TASK-CORE-004-2'] },
-      { id: 'TASK-CORE-004-4', title: 'Discovery Scanner & Project Switcher Tests', status: 'Done', spec: 'SPEC-CORE-004', deps: ['TASK-CORE-004-3'] },
+    id: 'TASK-core-discovery',
+    featureId: 'core-discovery',
+    title: 'Workspace & Multi-Project Discovery',
+    specId: 'SPEC-core-discovery',
+    waves: [
+      {
+        waveNumber: 1,
+        name: 'Wave 1: Seam Scaffolding / Red Tests',
+        stage: 'Scaffolding',
+        tasks: [
+          { id: 'TASK-CORE-004-1', title: 'Project Manifest Parser & Schema Contracts', status: 'Done', seam: 'crates/aico-core::manifest.rs', deps: ['None'] },
+        ],
+      },
+      {
+        waveNumber: 2,
+        name: 'Wave 2: Domain Implementation / Green',
+        stage: 'Implementation',
+        tasks: [
+          { id: 'TASK-CORE-004-2', title: 'Unified Root Scanner & Workspace Registry', status: 'Done', seam: 'crates/aico-core::scanner.rs', deps: ['TASK-CORE-004-1'] },
+          { id: 'TASK-CORE-004-3', title: 'Active Project Selection & Manifest Watcher', status: 'Done', seam: 'crates/aico-server::server.rs', deps: ['TASK-CORE-004-2'] },
+        ],
+      },
+      {
+        waveNumber: 3,
+        name: 'Wave 3: Seam Verification / Hardening',
+        stage: 'Verification',
+        tasks: [
+          { id: 'TASK-CORE-004-4', title: 'Discovery Scanner & Project Switcher Tests', status: 'Done', seam: 'tests/project_api_test.rs', deps: ['TASK-CORE-004-3'] },
+        ],
+      },
     ],
   },
   {
-    waveNumber: 5,
-    name: 'Deterministic SDD Tool Registration',
-    featureId: '05-mcp-tools',
-    tasks: [
-      { id: 'TASK-CORE-005-1', title: 'In-Process Model Context Protocol Engine', status: 'Done', spec: 'SPEC-CORE-005', deps: ['None'] },
-      { id: 'TASK-CORE-005-2', title: 'SDD Deterministic Tool Handlers Registration', status: 'Done', spec: 'SPEC-CORE-005', deps: ['TASK-CORE-005-1'] },
-      { id: 'TASK-CORE-005-3', title: 'Tree-sitter Traceability Tag Watcher', status: 'Done', spec: 'SPEC-CORE-005', deps: ['TASK-CORE-005-2'] },
-      { id: 'TASK-CORE-005-4', title: 'Contract Enforcement Gate & Verification Loop', status: 'Done', spec: 'SPEC-CORE-005', deps: ['TASK-CORE-005-3'] },
-      { id: 'TASK-CORE-005-5', title: 'MCP Dispatch & Error Handling Test Suites', status: 'Done', spec: 'SPEC-CORE-005', deps: ['TASK-CORE-005-4'] },
+    id: 'TASK-core-mcp-tools',
+    featureId: 'core-mcp-tools',
+    title: 'Deterministic SDD Tool Registration',
+    specId: 'SPEC-core-mcp-tools',
+    waves: [
+      {
+        waveNumber: 1,
+        name: 'Wave 1: Seam Scaffolding / Red Tests',
+        stage: 'Scaffolding',
+        tasks: [
+          { id: 'TASK-CORE-005-1', title: 'In-Process Model Context Protocol Engine', status: 'Done', seam: 'crates/aico-mcp::registry.rs', deps: ['None'] },
+        ],
+      },
+      {
+        waveNumber: 2,
+        name: 'Wave 2: Domain Implementation / Green',
+        stage: 'Implementation',
+        tasks: [
+          { id: 'TASK-CORE-005-2', title: 'SDD Deterministic Tool Handlers Registration', status: 'Done', seam: 'crates/aico-mcp::handlers.rs', deps: ['TASK-CORE-005-1'] },
+          { id: 'TASK-CORE-005-3', title: 'Tree-sitter Traceability Tag Watcher Seam', status: 'Done', seam: 'crates/aico-mcp::tags.rs', deps: ['TASK-CORE-005-2'] },
+        ],
+      },
+      {
+        waveNumber: 3,
+        name: 'Wave 3: Seam Verification / Hardening',
+        stage: 'Verification',
+        tasks: [
+          { id: 'TASK-CORE-005-4', title: 'Contract Enforcement Gate & Verification Loop Tests', status: 'Done', seam: 'tests/mcp_registry_test.rs', deps: ['TASK-CORE-005-3'] },
+        ],
+      },
     ],
   },
   {
-    waveNumber: 6,
-    name: 'WebUI Workspace Shell & Dockable Layout',
-    featureId: '06-webui-shell',
-    tasks: [
-      { id: 'TASK-CORE-006-1', title: 'ShellLayout 100vh Scaffold & Dark Theme', status: 'Done', spec: 'SPEC-CORE-006', deps: ['None'] },
-      { id: 'TASK-CORE-006-2', title: 'Left Sidebar Navigation Accordion Tree', status: 'Done', spec: 'SPEC-CORE-006', deps: ['TASK-CORE-006-1'] },
-      { id: 'TASK-CORE-006-3', title: 'Project-Scoped TabBar & Broadcast Synchronization', status: 'Done', spec: 'SPEC-CORE-006', deps: ['TASK-CORE-006-2'] },
-      { id: 'TASK-CORE-006-4', title: 'Dockable Bottom/Right Auxiliary Terminal Panel', status: 'Done', spec: 'SPEC-CORE-006', deps: ['TASK-CORE-006-3'] },
-      { id: 'TASK-CORE-006-5', title: 'Global OmniSearch Modal (Ctrl+K)', status: 'Done', spec: 'SPEC-CORE-006', deps: ['TASK-CORE-006-4'] },
-      { id: 'TASK-CORE-006-6', title: 'Tailwind CSS Integration & Layout Theme Restoration', status: 'Done', spec: 'SPEC-CORE-006', deps: ['TASK-CORE-006-5'] },
-      { id: 'TASK-CORE-006-7', title: 'Dynamic Project Discovery & Active Workspace Binding', status: 'Done', spec: 'SPEC-CORE-006', deps: ['TASK-CORE-006-6'] },
-      { id: 'TASK-CORE-006-8', title: 'Sidebar Integrated Search & Activity Monitor', status: 'Done', spec: 'SPEC-CORE-006', deps: ['TASK-CORE-006-7'] },
-      { id: 'TASK-CORE-006-9', title: 'Multi-Tab Terminal System with Dynamic Tab Creation', status: 'Done', spec: 'SPEC-CORE-006', deps: ['TASK-CORE-006-8'] },
-      { id: 'TASK-CORE-006-10', title: 'Sidebar Settings Modal & Configuration View', status: 'Done', spec: 'SPEC-CORE-006', deps: ['TASK-CORE-006-8'] },
-      { id: 'TASK-CORE-006-11', title: 'Tree-Integrated Search, 5-Scope Filter & Middle Click Close', status: 'Done', spec: 'SPEC-CORE-006', deps: ['TASK-CORE-006-10'] },
+    id: 'TASK-core-webui-shell',
+    featureId: 'core-webui-shell',
+    title: 'WebUI Workspace Shell & Dockable Layout',
+    specId: 'SPEC-core-webui-shell',
+    waves: [
+      {
+        waveNumber: 1,
+        name: 'Wave 1: Seam Scaffolding / Red Tests',
+        stage: 'Scaffolding',
+        tasks: [
+          { id: 'TASK-CORE-006-1', title: 'ShellLayout 100vh Scaffold & Theme Provider', status: 'Done', seam: 'frontend/ShellLayout.tsx', deps: ['None'] },
+        ],
+      },
+      {
+        waveNumber: 2,
+        name: 'Wave 2: Domain Implementation / Green',
+        stage: 'Implementation',
+        tasks: [
+          { id: 'TASK-CORE-006-2', title: 'Tree-Integrated Search, 5-Scope Filter & Accordion', status: 'Done', seam: 'frontend/ShellLayout.tsx', deps: ['TASK-CORE-006-1'] },
+          { id: 'TASK-CORE-006-3', title: 'Project-Scoped TabBar & Middle-Click Close Seam', status: 'Done', seam: 'frontend/TabBar.tsx', deps: ['TASK-CORE-006-2'] },
+          { id: 'TASK-CORE-006-4', title: 'Dockable Bottom/Right Multi-Tab Terminal Panel', status: 'Done', seam: 'frontend/DockablePanel.tsx', deps: ['TASK-CORE-006-3'] },
+        ],
+      },
+      {
+        waveNumber: 3,
+        name: 'Wave 3: Seam Verification / Hardening',
+        stage: 'Verification',
+        tasks: [
+          { id: 'TASK-CORE-006-5', title: 'OmniSearch Modal (Ctrl+K) & Shell Integration Tests', status: 'Done', seam: 'tests/ShellLayout.test.tsx', deps: ['TASK-CORE-006-4'] },
+        ],
+      },
     ],
   },
   {
-    waveNumber: 7,
-    name: 'Single-Page Epic Hub & Visual Lineage Graph',
-    featureId: '07-epic-hub',
-    tasks: [
-      { id: 'TASK-CORE-007-1', title: 'EpicHubView Consolidated Single-Page Component', status: 'Done', spec: 'SPEC-CORE-007', deps: ['None'] },
-      { id: 'TASK-CORE-007-2', title: 'VisualLineageCanvas Interactive Graph', status: 'Done', spec: 'SPEC-CORE-007', deps: ['TASK-CORE-007-1'] },
-      { id: 'TASK-CORE-007-3', title: 'Section Pop-Out Tabs & Multi-Tab Synchronization', status: 'Done', spec: 'SPEC-CORE-007', deps: ['TASK-CORE-007-2'] },
-      { id: 'TASK-CORE-007-4', title: 'Multimodal Asset Drag & Drop Zone', status: 'Done', spec: 'SPEC-CORE-007', deps: ['TASK-CORE-007-3'] },
-      { id: 'TASK-CORE-007-5', title: 'Epic Hub Verification & Vitest Test Suites', status: 'Done', spec: 'SPEC-CORE-007', deps: ['TASK-CORE-007-4'] },
-      { id: 'TASK-CORE-007-6', title: 'Dynamic Multi-Epic Discovery via Server REST API', status: 'Done', spec: 'SPEC-CORE-007', deps: ['TASK-CORE-007-5'] },
-      { id: 'TASK-CORE-007-7', title: 'Workspace Home / Dashboard View with Epic Progress', status: 'Done', spec: 'SPEC-CORE-007', deps: ['TASK-CORE-007-6'] },
-      { id: 'TASK-CORE-007-8', title: 'Active Tab Content Renderer for Spec, Code, ADR, Epic', status: 'Done', spec: 'SPEC-CORE-007', deps: ['TASK-CORE-007-7'] },
-      { id: 'TASK-CORE-007-9', title: 'Epic Hub Accordion Content Expansion', status: 'Done', spec: 'SPEC-CORE-007', deps: ['TASK-CORE-007-8'] },
-      { id: 'TASK-CORE-007-10', title: '2-Column Epic Hub Layout & Spatial Optimization', status: 'Done', spec: 'SPEC-CORE-007', deps: ['TASK-CORE-007-9'] },
-      { id: 'TASK-CORE-007-11', title: 'Visual Wave Task Plan with Overall & Per-Wave Progress', status: 'Done', spec: 'SPEC-CORE-007', deps: ['TASK-CORE-007-10'] },
-      { id: 'TASK-CORE-007-12', title: 'Feature Bundle View & SDD Frontmatter Parser Fix', status: 'Done', spec: 'SPEC-CORE-007', deps: ['TASK-CORE-007-11'] },
+    id: 'TASK-core-epic-hub',
+    featureId: 'core-epic-hub',
+    title: 'Single-Page Epic Hub & Lineage Graph',
+    specId: 'SPEC-core-epic-hub',
+    waves: [
+      {
+        waveNumber: 1,
+        name: 'Wave 1: Seam Scaffolding / Red Tests',
+        stage: 'Scaffolding',
+        tasks: [
+          { id: 'TASK-CORE-007-1', title: 'EpicHubView Consolidated 2-Column Grid Layout', status: 'Done', seam: 'frontend/EpicHubView.tsx', deps: ['None'] },
+        ],
+      },
+      {
+        waveNumber: 2,
+        name: 'Wave 2: Domain Implementation / Green',
+        stage: 'Implementation',
+        tasks: [
+          { id: 'TASK-CORE-007-2', title: 'Internal Wave Task Plan with Overall & Per-Group Progress', status: 'Done', seam: 'frontend/EpicHubView.tsx', deps: ['TASK-CORE-007-1'] },
+          { id: 'TASK-CORE-007-3', title: 'VisualLineageCanvas Interactive Graph & Popouts', status: 'Done', seam: 'frontend/VisualLineageCanvas.tsx', deps: ['TASK-CORE-007-2'] },
+          { id: 'TASK-CORE-007-4', title: 'Rich FeatureViewer Hub with EARS Requirements & Test Seams', status: 'Done', seam: 'frontend/FeatureViewer.tsx', deps: ['TASK-CORE-007-3'] },
+        ],
+      },
+      {
+        waveNumber: 3,
+        name: 'Wave 3: Seam Verification / Hardening',
+        stage: 'Verification',
+        tasks: [
+          { id: 'TASK-CORE-007-5', title: 'Dynamic Multi-Epic Discovery via Server REST API Tests', status: 'Done', seam: 'tests/EpicHubView.test.tsx', deps: ['TASK-CORE-007-4'] },
+        ],
+      },
+    ],
+  },
+];
+
+const specsTaskGroups: FeatureTaskGroup[] = [
+  {
+    id: 'TASK-specs-blueprint-standards',
+    featureId: 'specs-blueprint-standards',
+    title: 'AICO SDD Blueprint Standards v0.1.2',
+    specId: 'SPEC-specs-blueprint-standards',
+    waves: [
+      {
+        waveNumber: 1,
+        name: 'Wave 1: Seam Scaffolding / Red Tests',
+        stage: 'Scaffolding',
+        tasks: [
+          { id: 'TASK-SPECS-001-1', title: 'SDD v0.1.2 Schema Definition & Validation Seams', status: 'Done', seam: 'aico-specs/adr/0010.md', deps: ['None'] },
+        ],
+      },
+      {
+        waveNumber: 2,
+        name: 'Wave 2: Domain Implementation / Green',
+        stage: 'Implementation',
+        tasks: [
+          { id: 'TASK-SPECS-001-2', title: 'Universal Line-1 Frontmatter with Order Attribute', status: 'Done', seam: 'aico-specs/epics/EC-specs', deps: ['TASK-SPECS-001-1'] },
+          { id: 'TASK-SPECS-001-3', title: 'Relative Link Conversion & Single-Source Metadata', status: 'Done', seam: 'aico-specs/epics/EC-core', deps: ['TASK-SPECS-001-2'] },
+        ],
+      },
+      {
+        waveNumber: 3,
+        name: 'Wave 3: Seam Verification / Hardening',
+        stage: 'Verification',
+        tasks: [
+          { id: 'TASK-SPECS-001-4', title: 'Frontmatter Schema Linting & ADR-0010 Verification', status: 'Done', seam: 'crates/aico-server/src/server.rs', deps: ['TASK-SPECS-001-3'] },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'TASK-specs-skills-evolution',
+    featureId: 'specs-skills-evolution',
+    title: 'Skills Suite Evolution & Triage System',
+    specId: 'SPEC-specs-skills-evolution',
+    waves: [
+      {
+        waveNumber: 1,
+        name: 'Wave 1: Seam Scaffolding / Red Tests',
+        stage: 'Scaffolding',
+        tasks: [
+          { id: 'TASK-SPECS-002-1', title: 'Front-Door Triage Specification & Router Seam', status: 'Done', seam: 'skills/aico-start/SKILL.md', deps: ['None'] },
+        ],
+      },
+      {
+        waveNumber: 2,
+        name: 'Wave 2: Domain Implementation / Green',
+        stage: 'Implementation',
+        tasks: [
+          { id: 'TASK-SPECS-002-2', title: 'Author /aico-start Universal Discovery Skill', status: 'Done', seam: 'skills/aico-start/SKILL.md', deps: ['TASK-SPECS-002-1'] },
+          { id: 'TASK-SPECS-002-3', title: 'Author /aico-feature Standalone Workflow Skill', status: 'Done', seam: 'skills/aico-feature/SKILL.md', deps: ['TASK-SPECS-002-2'] },
+          { id: 'TASK-SPECS-002-4', title: 'Update /aico-epic, /aico-spec-creation, /aico-planning for v0.1.2', status: 'Done', seam: 'skills/aico-epic/SKILL.md', deps: ['TASK-SPECS-002-3'] },
+        ],
+      },
+      {
+        waveNumber: 3,
+        name: 'Wave 3: Seam Verification / Hardening',
+        stage: 'Verification',
+        tasks: [
+          { id: 'TASK-SPECS-002-5', title: 'Skills Suite Execution Verification & Symlink Sync', status: 'Done', seam: 'tests/skills_suite_test.rs', deps: ['TASK-SPECS-002-4'] },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'TASK-specs-migration-engine',
+    featureId: 'specs-migration-engine',
+    title: 'SDD v0.1.1 to v0.1.2 Migration Engine',
+    specId: 'SPEC-specs-migration-engine',
+    waves: [
+      {
+        waveNumber: 1,
+        name: 'Wave 1: Seam Scaffolding / Red Tests',
+        stage: 'Scaffolding',
+        tasks: [
+          { id: 'TASK-SPECS-003-1', title: 'Migration Scanner Seam & Legacy Pattern Matcher', status: 'Done', seam: 'skills/aico-spec-migration/SKILL.md', deps: ['None'] },
+        ],
+      },
+      {
+        waveNumber: 2,
+        name: 'Wave 2: Domain Implementation / Green',
+        stage: 'Implementation',
+        tasks: [
+          { id: 'TASK-SPECS-003-2', title: 'EC- Epic Folder Renamer & specs/ to features/ Transformation', status: 'Done', seam: 'aico-specs', deps: ['TASK-SPECS-003-1'] },
+          { id: 'TASK-SPECS-003-3', title: 'In-Place YAML Frontmatter Order & Version Upgrader', status: 'Done', seam: 'aico-specs', deps: ['TASK-SPECS-003-2'] },
+        ],
+      },
+      {
+        waveNumber: 3,
+        name: 'Wave 3: Seam Verification / Hardening',
+        stage: 'Verification',
+        tasks: [
+          { id: 'TASK-SPECS-003-4', title: 'Migration Validation & Server Discovery Compatibility Test', status: 'Done', seam: 'tests/project_api_test.rs', deps: ['TASK-SPECS-003-3'] },
+        ],
+      },
     ],
   },
 ];
@@ -299,13 +601,26 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
     }));
   };
 
+  const isSpecsEpic = epic.id === 'EC-specs' || epic.id === '002-aico-specs';
+  const currentFeaturesList = isSpecsEpic ? specsFeaturesList : coreFeaturesList;
+  const currentSpecsList = isSpecsEpic ? specsSpecsList : coreSpecsList;
+  const currentTaskGroups = isSpecsEpic ? specsTaskGroups : coreTaskGroups;
+
   // Compute overall task plan progress
-  const totalTasks = coreTaskWaves.reduce((acc, w) => acc + w.tasks.length, 0);
-  const doneTasks = coreTaskWaves.reduce(
-    (acc, w) => acc + w.tasks.filter((t) => t.status === 'Done').length,
+  const totalTasks = currentTaskGroups.reduce(
+    (acc, group) => acc + group.waves.reduce((wAcc, wave) => wAcc + wave.tasks.length, 0),
     0
   );
-  const overallPercentage = Math.round((doneTasks / totalTasks) * 100);
+  const doneTasks = currentTaskGroups.reduce(
+    (acc, group) =>
+      acc +
+      group.waves.reduce(
+        (wAcc, wave) => wAcc + wave.tasks.filter((t) => t.status === 'Done').length,
+        0
+      ),
+    0
+  );
+  const overallPercentage = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 100;
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6 text-zinc-100">
@@ -374,10 +689,10 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
             <div className="space-y-2">
               <h4 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
                 <Package className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Features in this Epic ({coreFeaturesList.length})</span>
+                <span>Features in this Epic ({currentFeaturesList.length})</span>
               </h4>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5">
-                {coreFeaturesList.map((feat) => (
+                {currentFeaturesList.map((feat) => (
                   <div
                     key={feat.id}
                     onClick={() => onOpenFeature?.(feat.id, feat.name)}
@@ -545,7 +860,7 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
             </div>
             {!collapsedSections.specifications && (
               <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-2">
-                {coreSpecsList.map((spec) => (
+                {currentSpecsList.map((spec) => (
                   <div
                     key={spec.id}
                     className="p-2.5 bg-zinc-900/80 rounded border border-zinc-800 flex items-center justify-between"
@@ -740,70 +1055,114 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
                 </div>
               </div>
 
-              {/* Sequential Waves with Individual Progress Bars */}
+              {/* Sequential Feature Task Groups with Individual Progress Bars and Internal Waves */}
               <div className="space-y-4 max-h-[700px] overflow-y-auto pr-1">
-                {coreTaskWaves.map((wave) => {
-                  const waveDone = wave.tasks.filter((t) => t.status === 'Done').length;
-                  const waveTotal = wave.tasks.length;
-                  const wavePct = Math.round((waveDone / waveTotal) * 100);
+                {currentTaskGroups.map((group) => {
+                  const groupTotal = group.waves.reduce((acc, w) => acc + w.tasks.length, 0);
+                  const groupDone = group.waves.reduce(
+                    (acc, w) => acc + w.tasks.filter((t) => t.status === 'Done').length,
+                    0
+                  );
+                  const groupPct = groupTotal > 0 ? Math.round((groupDone / groupTotal) * 100) : 100;
 
                   return (
                     <div
-                      key={wave.waveNumber}
-                      className="p-3.5 bg-zinc-900/60 rounded-xl border border-zinc-800/80 space-y-3"
+                      key={group.id}
+                      className="p-4 bg-zinc-900/70 rounded-xl border border-zinc-800/90 space-y-3.5"
                     >
-                      {/* Wave Header & Dedicated Progress Bar */}
+                      {/* Task Group Header & Dedicated Progress Bar */}
                       <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-zinc-800 text-indigo-400">
-                              Wave {wave.waveNumber}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-zinc-800 text-indigo-400 shrink-0">
+                              {group.id}
                             </span>
-                            <span className="font-semibold text-xs text-zinc-200">
-                              {wave.name}
+                            <span className="font-semibold text-xs text-zinc-200 truncate">
+                              {group.title}
                             </span>
                           </div>
-                          <span className="font-mono text-[11px] text-zinc-400">
-                            {waveDone}/{waveTotal} Done ({wavePct}%)
-                          </span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="font-mono text-[11px] text-zinc-400">
+                              {groupDone}/{groupTotal} Done ({groupPct}%)
+                            </span>
+                            {onOpenFeature && (
+                              <button
+                                onClick={() => onOpenFeature(group.featureId, group.title)}
+                                className="text-[10px] px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors"
+                              >
+                                View Feature
+                              </button>
+                            )}
+                          </div>
                         </div>
                         <div className="w-full bg-zinc-950 rounded-full h-1.5 overflow-hidden border border-zinc-800/60">
                           <div
                             className="bg-indigo-500 h-full rounded-full transition-all duration-200"
-                            style={{ width: `${wavePct}%` }}
+                            style={{ width: `${groupPct}%` }}
                           />
                         </div>
                       </div>
 
-                      {/* Wave Tasks List (Chronological Order) */}
-                      <div className="space-y-1.5 divide-y divide-zinc-800/40">
-                        {wave.tasks.map((task) => (
+                      {/* Internal Execution Waves within this Task */}
+                      <div className="space-y-2.5 pt-1">
+                        {group.waves.map((wave) => (
                           <div
-                            key={task.id}
-                            className="pt-1.5 first:pt-0 flex items-start justify-between gap-2"
+                            key={wave.waveNumber}
+                            className="p-2.5 bg-zinc-950/50 rounded-lg border border-zinc-800/60 space-y-2"
                           >
-                            <div className="space-y-0.5 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="font-mono text-[11px] font-semibold text-indigo-400 shrink-0">
-                                  {task.id}
-                                </span>
-                                <span className="text-[11px] text-zinc-300 truncate">
-                                  {task.title}
-                                </span>
-                              </div>
-                              <div className="text-[9px] text-zinc-500 font-mono">
-                                Spec: {task.spec} • Deps: {task.deps.join(', ')}
-                              </div>
+                            <div className="flex items-center justify-between">
+                              <span
+                                className={`text-[10px] px-2 py-0.5 rounded font-mono font-bold border ${
+                                  wave.stage === 'Scaffolding'
+                                    ? 'bg-rose-950/60 text-rose-300 border-rose-800/50'
+                                    : wave.stage === 'Implementation'
+                                    ? 'bg-indigo-950/60 text-indigo-300 border-indigo-800/50'
+                                    : 'bg-emerald-950/60 text-emerald-300 border-emerald-800/50'
+                                }`}
+                              >
+                                {wave.name}
+                              </span>
+                              <span className="text-[10px] text-zinc-500 font-mono">
+                                {wave.tasks.filter((t) => t.status === 'Done').length}/{wave.tasks.length} Done
+                              </span>
                             </div>
-                            <span
-                              className={`text-[9px] px-1.5 py-0.2 rounded font-mono shrink-0 ${
-                                task.status === 'Done'
-                                  ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                                  : 'bg-amber-950 text-amber-400 border border-amber-800'
-                              }`}
-                            >
-                              {task.status}
-                            </span>
+
+                            {/* Sub-tasks in this Wave */}
+                            <div className="space-y-1.5 divide-y divide-zinc-800/40">
+                              {wave.tasks.map((task) => (
+                                <div
+                                  key={task.id}
+                                  className="pt-1.5 first:pt-0 flex items-start justify-between gap-2"
+                                >
+                                  <div className="space-y-0.5 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-mono text-[11px] font-semibold text-zinc-400 shrink-0">
+                                        {task.id}
+                                      </span>
+                                      <span className="text-[11px] text-zinc-300 truncate">
+                                        {task.title}
+                                      </span>
+                                    </div>
+                                    {task.seam && (
+                                      <div className="text-[9px] text-zinc-500 font-mono truncate">
+                                        Seam: <span className="text-zinc-400">{task.seam}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                  <span
+                                    className={`text-[9px] px-1.5 py-0.2 rounded font-mono shrink-0 ${
+                                      task.status === 'Done'
+                                        ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                                        : task.status === 'In Progress'
+                                        ? 'bg-amber-950 text-amber-400 border border-amber-800'
+                                        : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                                    }`}
+                                  >
+                                    {task.status}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         ))}
                       </div>

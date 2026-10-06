@@ -34,7 +34,7 @@ describe('FeatureViewer Component', () => {
     expect(screen.getByText('SPEC-CORE-001')).toBeInTheDocument();
     expect(screen.getByText('PLAN-CORE-001')).toBeInTheDocument();
 
-    const openSpecBtn = screen.getByText('Open Spec in Tab');
+    const openSpecBtn = screen.getByText('Open Spec Document');
     fireEvent.click(openSpecBtn);
     expect(onOpenSpec).toHaveBeenCalledWith('SPEC-CORE-001', 'Host Runtime & Local HTTP/WebSocket Server');
   });

@@ -158,6 +158,7 @@ impl HostServer {
             .route("/api/v1/projects", get(list_projects_handler))
             .route("/api/v1/projects/active", post(set_active_project_handler))
             .route("/api/v1/epics", get(list_epics_handler))
+            .route("/api/v1/features", get(list_features_handler))
             .route("/api/v1/adrs", get(list_adrs_handler))
             .route("/api/v1/stats", get(get_stats_handler))
             .route("/ws", get(ws_handler))
@@ -248,6 +249,8 @@ pub struct DiscoveredEpic {
     pub specs_count: usize,
     pub specs: Vec<DiscoveredSpecInfo>,
     pub features: Vec<DiscoveredFeatureInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub order: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -260,6 +263,10 @@ pub struct DiscoveredFeatureInfo {
     pub plan_id: Option<String>,
     pub plan_title: Option<String>,
     pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub order: Option<u32>,
+    #[serde(default)]
+    pub is_standalone: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -268,6 +275,8 @@ pub struct DiscoveredSpecInfo {
     pub title: String,
     pub status: String,
     pub path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub order: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -287,10 +296,11 @@ pub struct SystemStats {
 }
 
 /// Helper function to parse YAML frontmatter strictly between `---` markers
-pub fn parse_frontmatter(content: &str) -> (Option<String>, Option<String>, Option<String>) {
+pub fn parse_frontmatter(content: &str) -> (Option<String>, Option<String>, Option<String>, Option<u32>) {
     let mut id = None;
     let mut title = None;
     let mut status = None;
+    let mut order = None;
     let mut in_frontmatter = false;
 
     for line in content.lines() {
@@ -312,11 +322,13 @@ pub fn parse_frontmatter(content: &str) -> (Option<String>, Option<String>, Opti
                 title = Some(rest.trim().trim_matches('"').to_string());
             } else if let Some(rest) = trimmed.strip_prefix("status:") {
                 status = Some(rest.trim().trim_matches('"').to_string());
+            } else if let Some(rest) = trimmed.strip_prefix("order:") {
+                order = rest.trim().trim_matches('"').parse::<u32>().ok();
             }
         }
     }
 
-    (id, title, status)
+    (id, title, status, order)
 }
 
 // Function to scan active project's epics
@@ -337,6 +349,7 @@ pub fn scan_epics_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredEpi
                 let epic_id = path.file_name().unwrap_or_default().to_string_lossy().to_string();
                 let mut title = epic_id.clone();
                 let mut status = "In Progress".to_string();
+                let mut epic_order = None;
 
                 // Look for BRAIN-*.md
                 if let Ok(files) = std::fs::read_dir(&path) {
@@ -344,25 +357,34 @@ pub fn scan_epics_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredEpi
                         let fname = f.file_name().to_string_lossy().to_string();
                         if fname.starts_with("BRAIN-") && fname.ends_with(".md") {
                             if let Ok(content) = std::fs::read_to_string(f.path()) {
-                                let (_, fm_title, fm_status) = parse_frontmatter(&content);
+                                let (_, fm_title, fm_status, fm_order) = parse_frontmatter(&content);
                                 if let Some(t) = fm_title {
                                     title = t;
                                 }
                                 if let Some(s) = fm_status {
                                     status = s;
                                 }
+                                if let Some(o) = fm_order {
+                                    epic_order = Some(o);
+                                }
                             }
                         }
                     }
                 }
 
-                // Scan features and specs under specs/
+                // Scan features under features/ (with backward-compatible fallback to specs/)
                 let mut specs = Vec::new();
                 let mut features = Vec::new();
-                let specs_subdir = path.join("specs");
+                let features_subdir = if path.join("features").exists() && path.join("features").is_dir() {
+                    path.join("features")
+                } else if path.join("specs").exists() && path.join("specs").is_dir() {
+                    path.join("specs")
+                } else {
+                    path.join("features")
+                };
 
-                if specs_subdir.exists() && specs_subdir.is_dir() {
-                    if let Ok(spec_entries) = std::fs::read_dir(specs_subdir) {
+                if features_subdir.exists() && features_subdir.is_dir() {
+                    if let Ok(spec_entries) = std::fs::read_dir(features_subdir) {
                         let mut sorted_features: Vec<_> = spec_entries.flatten().collect();
                         sorted_features.sort_by_key(|e| e.path());
 
@@ -375,6 +397,7 @@ pub fn scan_epics_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredEpi
                                 let mut feat_plan_id = None;
                                 let mut feat_plan_title = None;
                                 let mut feat_status = "In Progress".to_string();
+                                let mut feat_order = None;
 
                                 if let Ok(sfiles) = std::fs::read_dir(&feat_path) {
                                     for sf in sfiles.flatten() {
@@ -385,7 +408,7 @@ pub fn scan_epics_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredEpi
                                             let mut s_status = "In Progress".to_string();
 
                                             if let Ok(scontent) = std::fs::read_to_string(sf.path()) {
-                                                let (fm_id, fm_title, fm_status) = parse_frontmatter(&scontent);
+                                                let (fm_id, fm_title, fm_status, fm_order) = parse_frontmatter(&scontent);
                                                 if let Some(fid) = fm_id {
                                                     s_id = fid;
                                                 }
@@ -394,6 +417,9 @@ pub fn scan_epics_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredEpi
                                                 }
                                                 if let Some(fstatus) = fm_status {
                                                     s_status = fstatus;
+                                                }
+                                                if let Some(forder) = fm_order {
+                                                    feat_order = Some(forder);
                                                 }
                                             }
 
@@ -406,18 +432,22 @@ pub fn scan_epics_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredEpi
                                                 title: s_title,
                                                 status: s_status,
                                                 path: sf.path().to_string_lossy().to_string(),
+                                                order: feat_order,
                                             });
                                         } else if sfname.starts_with("PLAN-") && sfname.ends_with(".md") {
                                             let mut p_id = sfname.trim_end_matches(".md").to_string();
                                             let mut p_title = p_id.clone();
 
                                             if let Ok(pcontent) = std::fs::read_to_string(sf.path()) {
-                                                let (fm_id, fm_title, _) = parse_frontmatter(&pcontent);
+                                                let (fm_id, fm_title, _, fm_order) = parse_frontmatter(&pcontent);
                                                 if let Some(fid) = fm_id {
                                                     p_id = fid;
                                                 }
                                                 if let Some(ftitle) = fm_title {
                                                     p_title = ftitle;
+                                                }
+                                                if feat_order.is_none() && fm_order.is_some() {
+                                                    feat_order = fm_order;
                                                 }
                                             }
 
@@ -440,11 +470,17 @@ pub fn scan_epics_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredEpi
                                     plan_id: feat_plan_id,
                                     plan_title: feat_plan_title,
                                     status: feat_status,
+                                    order: feat_order,
+                                    is_standalone: false,
                                 });
                             }
                         }
                     }
                 }
+
+                // Sort specs and features by order if present
+                specs.sort_by_key(|s| (s.order.unwrap_or(9999), s.id.clone()));
+                features.sort_by_key(|f| (f.order.unwrap_or(9999), f.id.clone()));
 
                 epics.push(DiscoveredEpic {
                     id: epic_id,
@@ -453,12 +489,103 @@ pub fn scan_epics_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredEpi
                     specs_count: specs.len(),
                     specs,
                     features,
+                    order: epic_order,
                 });
             }
         }
     }
 
+    epics.sort_by_key(|e| (e.order.unwrap_or(9999), e.id.clone()));
     epics
+}
+
+// Function to scan standalone features under <specs_path>/features/
+pub fn scan_standalone_features_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredFeatureInfo> {
+    let features_dir = specs_path.join("features");
+    if !features_dir.exists() || !features_dir.is_dir() {
+        return Vec::new();
+    }
+
+    let mut standalone = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(features_dir) {
+        let mut sorted: Vec<_> = entries.flatten().collect();
+        sorted.sort_by_key(|e| e.path());
+
+        for entry in sorted {
+            let path = entry.path();
+            if path.is_dir() {
+                let feat_id = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                let mut feat_spec_id = None;
+                let mut feat_spec_title = None;
+                let mut feat_plan_id = None;
+                let mut feat_plan_title = None;
+                let mut feat_status = "In Progress".to_string();
+                let mut feat_order = None;
+
+                if let Ok(files) = std::fs::read_dir(&path) {
+                    for f in files.flatten() {
+                        let fname = f.file_name().to_string_lossy().to_string();
+                        if fname.starts_with("SPEC-") && fname.ends_with(".md") {
+                            let mut s_id = fname.trim_end_matches(".md").to_string();
+                            let mut s_title = s_id.clone();
+                            let mut s_status = "In Progress".to_string();
+
+                            if let Ok(scontent) = std::fs::read_to_string(f.path()) {
+                                let (fm_id, fm_title, fm_status, fm_order) = parse_frontmatter(&scontent);
+                                if let Some(fid) = fm_id { s_id = fid; }
+                                if let Some(ftitle) = fm_title { s_title = ftitle; }
+                                if let Some(fstatus) = fm_status { s_status = fstatus; }
+                                if let Some(forder) = fm_order { feat_order = Some(forder); }
+                            }
+                            feat_spec_id = Some(s_id);
+                            feat_spec_title = Some(s_title);
+                            feat_status = s_status;
+                        } else if fname.starts_with("PLAN-") && fname.ends_with(".md") {
+                            let mut p_id = fname.trim_end_matches(".md").to_string();
+                            let mut p_title = p_id.clone();
+                            if let Ok(pcontent) = std::fs::read_to_string(f.path()) {
+                                let (fm_id, fm_title, _, fm_order) = parse_frontmatter(&pcontent);
+                                if let Some(fid) = fm_id { p_id = fid; }
+                                if let Some(ftitle) = fm_title { p_title = ftitle; }
+                                if feat_order.is_none() && fm_order.is_some() { feat_order = fm_order; }
+                            }
+                            feat_plan_id = Some(p_id);
+                            feat_plan_title = Some(p_title);
+                        }
+                    }
+                }
+
+                let feat_display_name = feat_spec_title.clone().unwrap_or_else(|| feat_id.clone());
+                standalone.push(DiscoveredFeatureInfo {
+                    id: feat_id,
+                    name: feat_display_name,
+                    epic_id: "standalone".to_string(),
+                    spec_id: feat_spec_id,
+                    spec_title: feat_spec_title,
+                    plan_id: feat_plan_id,
+                    plan_title: feat_plan_title,
+                    status: feat_status,
+                    order: feat_order,
+                    is_standalone: true,
+                });
+            }
+        }
+    }
+
+    standalone.sort_by_key(|f| (f.order.unwrap_or(9999), f.id.clone()));
+    standalone
+}
+
+// Function to scan all features (both epic-owned and standalone)
+pub fn scan_all_features_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredFeatureInfo> {
+    let mut all_features = Vec::new();
+    let epics = scan_epics_for_project(specs_path);
+    for epic in epics {
+        all_features.extend(epic.features);
+    }
+    let standalone = scan_standalone_features_for_project(specs_path);
+    all_features.extend(standalone);
+    all_features
 }
 
 // Function to scan ADRs for project
@@ -487,12 +614,7 @@ pub fn scan_adrs_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredAdrI
                 let mut status = "Accepted".to_string();
 
                 if let Ok(content) = std::fs::read_to_string(&path) {
-                    let (fm_id, fm_title, fm_status) = parse_frontmatter(&content);
-                    if let Some(id) = fm_id {
-                        if !id.is_empty() {
-                            // Can use frontmatter ID if present
-                        }
-                    }
+                    let (_, fm_title, fm_status, _) = parse_frontmatter(&content);
                     if let Some(t) = fm_title {
                         title = t;
                     }
@@ -532,6 +654,26 @@ async fn list_epics_handler(
     };
 
     Json(scan_epics_for_project(&target_path))
+}
+
+// @implements SPEC-CORE-007::REQ-001
+async fn list_features_handler(
+    State(state): State<AppState>,
+) -> Json<Vec<DiscoveredFeatureInfo>> {
+    let registry = state.registry.read().await;
+    let active_project = registry.get_active();
+
+    let target_path = if let Some(proj) = active_project {
+        if proj.specs_path.exists() {
+            proj.specs_path.clone()
+        } else {
+            std::path::PathBuf::from("d:/aico/aico-specs")
+        }
+    } else {
+        std::path::PathBuf::from("d:/aico/aico-specs")
+    };
+
+    Json(scan_all_features_for_project(&target_path))
 }
 
 // @implements SPEC-CORE-007::REQ-008

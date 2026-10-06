@@ -18,6 +18,7 @@ export interface DiscoveredFeatureNav {
   id: string;
   name: string;
   epicId: string;
+  isStandalone?: boolean;
 }
 
 export interface DiscoveredEpicNav {
@@ -50,42 +51,42 @@ export interface ShellLayoutProps {
 
 const defaultEpics: DiscoveredEpicNav[] = [
   {
-    id: '001-aico-core',
+    id: 'EC-core',
     title: 'AICO Core SDD Platform',
     status: 'In Progress',
     specs: [
-      { id: 'SPEC-CORE-001', title: 'Host Runtime & Local HTTP/WS Server' },
-      { id: 'SPEC-CORE-002', title: 'LAN Security & Local Authentication' },
-      { id: 'SPEC-CORE-003', title: 'Local Storage & Embedded Engine Lifecycle' },
-      { id: 'SPEC-CORE-004', title: 'Workspace & Multi-Project Discovery' },
-      { id: 'SPEC-CORE-005', title: 'Deterministic SDD Tool Registration' },
-      { id: 'SPEC-CORE-006', title: 'WebUI Workspace Shell & Dockable Layout' },
-      { id: 'SPEC-CORE-007', title: 'Single-Page Epic Hub & Lineage Graph' },
+      { id: 'SPEC-core-host-runtime', title: 'Host Runtime & Local HTTP/WS Server' },
+      { id: 'SPEC-core-security-auth', title: 'LAN Security & Local Authentication' },
+      { id: 'SPEC-core-local-storage', title: 'Local Storage & Embedded Engine Lifecycle' },
+      { id: 'SPEC-core-discovery', title: 'Workspace & Multi-Project Discovery' },
+      { id: 'SPEC-core-mcp-tools', title: 'Deterministic SDD Tool Registration' },
+      { id: 'SPEC-core-webui-shell', title: 'WebUI Workspace Shell & Dockable Layout' },
+      { id: 'SPEC-core-epic-hub', title: 'Single-Page Epic Hub & Lineage Graph' },
     ],
   },
   {
-    id: '002-aico-specs',
+    id: 'EC-specs',
     title: 'AICO SDD Blueprints & Migration',
     status: 'Completed',
     specs: [
-      { id: 'SPEC-SPECS-001', title: 'AICO SDD Blueprint Standards v0.1.1' },
-      { id: 'SPEC-SPECS-002', title: 'AICO Skills Evolution & 6-State Task Tracking' },
-      { id: 'SPEC-SPECS-003', title: 'AICO Spec Migration Engine v0.1.0 to v0.1.1' },
+      { id: 'SPEC-specs-blueprint-standards', title: 'AICO SDD Blueprint Standards v0.1.2' },
+      { id: 'SPEC-specs-skills-evolution', title: 'AICO Skills Evolution & Wave-Internal Tasks' },
+      { id: 'SPEC-specs-migration-engine', title: 'AICO Spec Migration Engine v0.1.2' },
     ],
   },
 ];
 
 const defaultFeatures: DiscoveredFeatureNav[] = [
-  { id: '01-host-runtime', name: 'Host Runtime & Local Server', epicId: '001-aico-core' },
-  { id: '02-security-auth', name: 'LAN Security & Local Auth', epicId: '001-aico-core' },
-  { id: '03-local-storage', name: 'Embedded Storage Engines', epicId: '001-aico-core' },
-  { id: '04-discovery', name: 'Multi-Project Discovery', epicId: '001-aico-core' },
-  { id: '05-mcp-tools', name: 'Deterministic SDD Tools', epicId: '001-aico-core' },
-  { id: '06-webui-shell', name: 'WebUI Shell & Dockable Panels', epicId: '001-aico-core' },
-  { id: '07-epic-hub', name: 'Single-Page Epic Hub & Graph', epicId: '001-aico-core' },
-  { id: '01-blueprint-standards', name: 'Blueprint Standards v0.1.1', epicId: '002-aico-specs' },
-  { id: '02-skills-evolution', name: 'Skills Evolution & 6-State DAG', epicId: '002-aico-specs' },
-  { id: '03-migration-engine', name: 'Migration Engine v0.1.0 to v0.1.1', epicId: '002-aico-specs' },
+  { id: 'core-host-runtime', name: 'Host Runtime & Local Server', epicId: 'EC-core' },
+  { id: 'core-security-auth', name: 'LAN Security & Local Auth', epicId: 'EC-core' },
+  { id: 'core-local-storage', name: 'Embedded Storage Engines', epicId: 'EC-core' },
+  { id: 'core-discovery', name: 'Multi-Project Discovery', epicId: 'EC-core' },
+  { id: 'core-mcp-tools', name: 'Deterministic SDD Tools', epicId: 'EC-core' },
+  { id: 'core-webui-shell', name: 'WebUI Shell & Dockable Panels', epicId: 'EC-core' },
+  { id: 'core-epic-hub', name: 'Single-Page Epic Hub & Graph', epicId: 'EC-core' },
+  { id: 'specs-blueprint-standards', name: 'Blueprint Standards v0.1.2', epicId: 'EC-specs' },
+  { id: 'specs-skills-evolution', name: 'Skills Evolution & Wave Tasks', epicId: 'EC-specs' },
+  { id: 'specs-migration-engine', name: 'Migration Engine v0.1.2', epicId: 'EC-specs' },
 ];
 
 const defaultCodeFiles = [
@@ -100,6 +101,7 @@ const defaultCodeFiles = [
   'frontend/src/App.tsx',
   'frontend/src/components/layout/ShellLayout.tsx',
   'frontend/src/features/epic-hub/EpicHubView.tsx',
+  'frontend/src/features/feature-viewer/FeatureViewer.tsx',
 ];
 
 const defaultAdrs: DiscoveredAdrNav[] = [
@@ -112,6 +114,7 @@ const defaultAdrs: DiscoveredAdrNav[] = [
   { id: 'ADR-0007', title: 'Multi-Modal Assets and Human-Gate Tasks', status: 'Accepted' },
   { id: 'ADR-0008', title: 'Unified Root Discovery and Project Manifest', status: 'Accepted' },
   { id: 'ADR-0009', title: 'SDD Artifact Schema and Task Lifecycle', status: 'Accepted' },
+  { id: 'ADR-0010', title: 'SDD Structural Grammar v0.1.2 & Standalone Features', status: 'Accepted' },
 ];
 
 // @implements SPEC-CORE-006::REQ-001
@@ -367,13 +370,18 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
                     <div
                       key={feat.id}
                       onClick={() => onSelectFeature?.(feat.id, feat.name)}
-                      className="py-1 px-2 hover:bg-zinc-800/60 rounded cursor-pointer truncate text-zinc-400 hover:text-zinc-200 transition-colors"
+                      className="py-1 px-2 hover:bg-zinc-800/60 rounded cursor-pointer flex items-center justify-between group transition-colors"
                       title={`${feat.id}: ${feat.name} (${feat.epicId})`}
                     >
-                      <span className="font-mono text-zinc-300 font-medium">{feat.id}</span>
-                      <span className="text-zinc-500 text-[10px] ml-1.5 truncate">
-                        {feat.name}
-                      </span>
+                      <div className="truncate flex items-center gap-1.5 min-w-0">
+                        <span className="font-mono text-zinc-300 font-medium shrink-0">{feat.id}</span>
+                        <span className="text-zinc-500 text-[10px] truncate">{feat.name}</span>
+                      </div>
+                      {(feat.isStandalone || feat.epicId === 'standalone') && (
+                        <span className="text-[9px] px-1 py-0.2 rounded bg-indigo-950 text-indigo-400 border border-indigo-800 shrink-0 ml-1">
+                          Standalone
+                        </span>
+                      )}
                     </div>
                   ))
                 )}

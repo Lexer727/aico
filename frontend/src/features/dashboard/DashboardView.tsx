@@ -27,7 +27,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenEpic, onOpen
               Workspace Overview
             </h1>
             <span className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-indigo-950/70 text-indigo-400 border border-indigo-800">
-              AICO v0.1.1 Standard
+              AICO v0.1.2 Standard
             </span>
           </div>
           <p className="text-xs text-zinc-400 mt-1">
@@ -50,7 +50,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenEpic, onOpen
             <Layers className="w-4 h-4 text-indigo-400" />
           </div>
           <div className="text-2xl font-bold font-mono text-zinc-100">2</div>
-          <div className="text-[11px] text-zinc-500">001-aico-core & 002-aico-specs</div>
+          <div className="text-[11px] text-zinc-500">EC-core & EC-specs</div>
         </div>
 
         <div className="p-4 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-2">
@@ -87,13 +87,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenEpic, onOpen
           Project Epics
         </h2>
         <div className="grid grid-cols-2 gap-4">
-          {/* Epic 001 Card */}
+          {/* EC-core Card */}
           <div className="p-5 bg-zinc-900/50 border border-zinc-800 rounded-xl space-y-4 hover:border-zinc-700 transition-colors">
             <div className="flex items-start justify-between">
               <div>
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs px-2 py-0.5 rounded bg-zinc-800 text-indigo-400 font-semibold">
-                    001-aico-core
+                    EC-core
                   </span>
                   <span className="text-[10px] px-2 py-0.5 rounded font-mono bg-amber-950 text-amber-400 border border-amber-800">
                     In Progress
@@ -104,7 +104,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenEpic, onOpen
                 </h3>
               </div>
               <button
-                onClick={() => onOpenEpic('001-aico-core')}
+                onClick={() => onOpenEpic('EC-core')}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors"
               >
                 <span>Open Epic</span>
@@ -123,7 +123,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenEpic, onOpen
                 <span className="font-mono text-emerald-400">100% Contract Covered</span>
               </div>
               <div className="flex flex-wrap gap-1.5 pt-1">
-                {['SPEC-CORE-001', 'SPEC-CORE-002', 'SPEC-CORE-003', 'SPEC-CORE-004', 'SPEC-CORE-005', 'SPEC-CORE-006', 'SPEC-CORE-007'].map((s) => (
+                {[
+                  'SPEC-core-host-runtime',
+                  'SPEC-core-security-auth',
+                  'SPEC-core-local-storage',
+                  'SPEC-core-discovery',
+                  'SPEC-core-mcp-tools',
+                  'SPEC-core-webui-shell',
+                  'SPEC-core-epic-hub'
+                ].map((s) => (
                   <button
                     key={s}
                     onClick={() => onOpenSpec(s, s)}
@@ -136,16 +144,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenEpic, onOpen
             </div>
           </div>
 
-          {/* Epic 002 Card */}
+          {/* EC-specs Card */}
           <div className="p-5 bg-zinc-900/50 border border-zinc-800 rounded-xl space-y-4 hover:border-zinc-700 transition-colors">
             <div className="flex items-start justify-between">
               <div>
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs px-2 py-0.5 rounded bg-zinc-800 text-indigo-400 font-semibold">
-                    002-aico-specs
+                    EC-specs
                   </span>
-                  <span className="text-[10px] px-2 py-0.5 rounded font-mono bg-amber-950 text-amber-400 border border-amber-800">
-                    In Progress
+                  <span className="text-[10px] px-2 py-0.5 rounded font-mono bg-emerald-950 text-emerald-400 border border-emerald-800">
+                    Completed
                   </span>
                 </div>
                 <h3 className="text-base font-bold text-zinc-100 mt-2">
@@ -153,7 +161,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenEpic, onOpen
                 </h3>
               </div>
               <button
-                onClick={() => onOpenEpic('002-aico-specs')}
+                onClick={() => onOpenEpic('EC-specs')}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors"
               >
                 <span>Open Epic</span>
@@ -162,8 +170,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenEpic, onOpen
             </div>
 
             <p className="text-xs text-zinc-400 leading-relaxed">
-              Standardization of SDD artifacts to version 0.1.1, universal YAML line-1 frontmatter,
-              relative path linking, and 6-state non-destructive task lifecycle tracking.
+              Standardization of SDD artifacts to version 0.1.2, universal YAML line-1 frontmatter with order,
+              standalone features support, relative path linking, and wave-internal task lifecycle.
             </p>
 
             <div className="space-y-1.5 pt-2 border-t border-zinc-800">
@@ -172,7 +180,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenEpic, onOpen
                 <span className="font-mono text-emerald-400">100% Contract Covered</span>
               </div>
               <div className="flex flex-wrap gap-1.5 pt-1">
-                {['SPEC-SPECS-001', 'SPEC-SPECS-002', 'SPEC-SPECS-003'].map((s) => (
+                {[
+                  'SPEC-specs-blueprint-standards',
+                  'SPEC-specs-skills-evolution',
+                  'SPEC-specs-migration-engine'
+                ].map((s) => (
                   <button
                     key={s}
                     onClick={() => onOpenSpec(s, s)}
