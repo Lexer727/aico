@@ -14,7 +14,7 @@ async fn test_project_management_rest_api() {
     let project = DiscoveredProject {
         id: "core-project".to_string(),
         name: "core-project".to_string(),
-        specs_path: PathBuf::from("d:/aico/core-specs"),
+        specs_path: PathBuf::from("d:/aico/aico-specs"),
         codebase_path: PathBuf::from("d:/aico/codebase/core"),
         manifest: ProjectManifest {
             name: "core-project".to_string(),
@@ -69,6 +69,28 @@ async fn test_project_management_rest_api() {
         .await
         .expect("Request should complete");
     assert_eq!(not_found_res.status(), 404);
+
+    // 4. GET /api/v1/stats
+    // @verifies SPEC-CORE-006::REQ-012
+    let stats_res = client
+        .get(format!("http://{}/api/v1/stats", addr))
+        .send()
+        .await
+        .expect("Stats request should succeed");
+    assert_eq!(stats_res.status(), 200);
+
+    // 5. GET /api/v1/epics
+    // @verifies SPEC-CORE-007::REQ-001
+    let epics_res = client
+        .get(format!("http://{}/api/v1/epics", addr))
+        .send()
+        .await
+        .expect("Epics request should succeed");
+    assert_eq!(epics_res.status(), 200);
+
+    let epics: Vec<serde_json::Value> = epics_res.json().await.expect("Should parse as JSON");
+    assert!(epics.iter().any(|e| e["id"] == "001-aico-core"));
+    assert!(epics.iter().any(|e| e["id"] == "002-aico-specs"));
 
     server_task.abort();
 }

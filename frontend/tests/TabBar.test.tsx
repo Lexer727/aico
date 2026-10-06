@@ -77,4 +77,24 @@ describe('TabBar and ProjectSwitcher', () => {
 
     openSpy.mockRestore();
   });
+
+  it('closes tab on middle mouse click but protects dashboard tab', () => {
+    const store = useTabStore.getState();
+    store.setActiveProject('project-test');
+    store.openTab('project-test', { id: 'tab-closable', title: 'Closable', type: 'spec' });
+
+    render(<TabBar />);
+
+    const closableTab = screen.getByTestId('tab-tab-closable');
+    expect(closableTab).toBeInTheDocument();
+
+    // Middle-click (button 1)
+    fireEvent.mouseDown(closableTab, { button: 1 });
+
+    // Closable tab should now be closed
+    expect(useTabStore.getState().getProjectTabs('project-test')).toHaveLength(0);
+
+    // Dashboard tab is permanent
+    expect(screen.getByTestId('tab-dashboard')).toBeInTheDocument();
+  });
 });

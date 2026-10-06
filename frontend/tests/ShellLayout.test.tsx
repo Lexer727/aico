@@ -21,9 +21,14 @@ describe('ShellLayout Component', () => {
     expect(sidebar.className).toContain('h-screen');
 
     // Navigation sections should be present
-    expect(screen.getByText(/epics/i)).toBeInTheDocument();
-    expect(screen.getByText(/specifications/i)).toBeInTheDocument();
-    expect(screen.getByText(/code/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/epics/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/specifications/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/code/i).length).toBeGreaterThanOrEqual(1);
+
+    // Sidebar search, activity monitor and settings should be present
+    expect(screen.getByTestId('sidebar-search-input')).toBeInTheDocument();
+    expect(screen.getByTestId('activity-monitor')).toBeInTheDocument();
+    expect(screen.getByTestId('settings-button')).toBeInTheDocument();
 
     // Accordion toggle behavior
     const epicToggle = screen.getByTestId('toggle-epics');

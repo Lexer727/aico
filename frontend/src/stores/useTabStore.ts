@@ -3,7 +3,7 @@ import { create } from 'zustand';
 export interface TabItem {
   id: string;
   title: string;
-  type: 'epic' | 'spec' | 'plan' | 'code' | 'adr';
+  type: 'epic' | 'feature' | 'spec' | 'plan' | 'code' | 'adr';
   path?: string;
 }
 
