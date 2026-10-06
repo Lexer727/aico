@@ -17,9 +17,11 @@ import {
 import { FileDropZone } from '../../components/common/FileDropZone';
 import {
   fetchFeature,
+  fetchGlossary,
   type FeatureTask,
   type FeatureRequirement,
   type TestSeamInfo,
+  type TermInfo,
 } from '../feature-task-data';
 
 export interface FeatureData {
@@ -49,6 +51,8 @@ export interface FeatureData {
   testSeams?: TestSeamInfo[];
   adrs?: string[];
   tasks?: FeatureTask[];
+  ubiquitous_language?: TermInfo[];
+  ubiquitousLanguage?: TermInfo[];
 }
 
 export interface FeatureViewerProps {
@@ -101,6 +105,7 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
             tasks: live.tasks && live.tasks.length > 0 ? live.tasks : prev.tasks,
             test_seams: live.test_seams && live.test_seams.length > 0 ? live.test_seams : prev.test_seams,
             adrs: live.adrs && live.adrs.length > 0 ? live.adrs : prev.adrs,
+            ubiquitous_language: live.ubiquitous_language && live.ubiquitous_language.length > 0 ? live.ubiquitous_language : prev.ubiquitous_language,
           }));
         }
       }
@@ -110,6 +115,24 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
       isMounted = false;
     };
   }, [initialFeature.id]);
+
+  // Ubiquitous domain terminology state
+  const [termsList, setTermsList] = useState<TermInfo[]>(
+    feature.ubiquitous_language || feature.ubiquitousLanguage || []
+  );
+
+  useEffect(() => {
+    const featureTerms = feature.ubiquitous_language || feature.ubiquitousLanguage;
+    if (featureTerms && featureTerms.length > 0) {
+      setTermsList(featureTerms);
+    } else {
+      fetchGlossary().then((data) => {
+        if (data && data.length > 0) {
+          setTermsList(data);
+        }
+      });
+    }
+  }, [feature.id, feature.ubiquitous_language, feature.ubiquitousLanguage]);
 
   // Accordion state:
   // Overview: open by default (false)
@@ -122,6 +145,7 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
     specifications: true,
     deepDive: true,
     lineage: true,
+    terminology: true,
     assets: true,
     taskPlan: false,
   });
@@ -225,15 +249,31 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
           </div>
         </div>
 
-        {/* Contract Seams Green KPI */}
-        <div className="text-right space-y-1">
-          <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-950/60 border border-emerald-800/80 text-emerald-400 text-xs font-medium">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>Contract Seams Green</span>
-          </span>
-          <p className="text-[11px] font-mono text-zinc-400">
-            {doneTasks}/{totalTasks} Tasks Done ({taskProgressPct}%)
-          </p>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => {
+              toggleSection('scopeBoundaries');
+              toggleSection('brainstorm');
+              toggleSection('specifications');
+              toggleSection('deepDive');
+              toggleSection('lineage');
+              toggleSection('terminology');
+              toggleSection('assets');
+            }}
+            className="text-xs px-3 py-1.5 rounded-lg border border-zinc-700 bg-zinc-800/60 hover:bg-zinc-800 text-zinc-300 transition-colors"
+          >
+            Toggle Left Accordions
+          </button>
+          {/* Contract Seams Green KPI */}
+          <div className="text-right space-y-1">
+            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-950/60 border border-emerald-800/80 text-emerald-400 text-xs font-medium">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Contract Seams Green</span>
+            </span>
+            <p className="text-[11px] font-mono text-zinc-400">
+              {doneTasks}/{totalTasks} Tasks Done ({taskProgressPct}%)
+            </p>
+          </div>
         </div>
       </div>
 
@@ -583,6 +623,64 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
                 ) : (
                   <p className="text-zinc-500 text-xs italic">
                     No derived ADR references declared in frontmatter.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Ubiquitous Domain Terminology Accordion */}
+          <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
+            <div
+              data-testid="toggle-feature-terminology"
+              onClick={() => toggleSection('terminology')}
+              className="flex items-center justify-between px-4 py-3 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors"
+            >
+              <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                {collapsedSections.terminology ? (
+                  <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                )}
+                <BookOpen className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                <span className="font-semibold text-sm text-zinc-200">
+                  Ubiquitous Domain Terminology ({termsList.length})
+                </span>
+                {collapsedSections.terminology && (
+                  <span className="text-xs text-zinc-500 truncate ml-2 italic">
+                    — GLOSSARY.md domain language definitions
+                  </span>
+                )}
+              </div>
+              <button
+                data-testid="popout-terminology"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPopOut?.(feature.id, 'terminology');
+                }}
+                title="Open in separate tab"
+                className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            {!collapsedSections.terminology && (
+              <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-2.5">
+                {termsList.length > 0 ? (
+                  <div className="space-y-2">
+                    {termsList.map((t, idx) => (
+                      <div
+                        key={idx}
+                        className="p-3 bg-zinc-900/80 rounded-lg border border-zinc-800 space-y-1"
+                      >
+                        <span className="font-semibold text-amber-400 text-xs">{t.term}</span>
+                        <p className="text-zinc-400 text-[11px] leading-relaxed">{t.definition}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-zinc-500 text-xs italic">
+                    Glossary terms defined in GLOSSARY.md.
                   </p>
                 )}
               </div>

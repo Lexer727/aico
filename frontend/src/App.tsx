@@ -13,6 +13,7 @@ import { type DiscoveredEpic, type DiscoveredFeature } from './features/feature-
 import { SpecViewer } from './features/spec-viewer/SpecViewer';
 import { CodeViewer } from './features/code-viewer/CodeViewer';
 import { AdrViewer } from './features/adr-viewer/AdrViewer';
+import { GlossaryViewer } from './features/glossary-viewer/GlossaryViewer';
 import { VisualLineageCanvas, type GraphNode, type GraphEdge } from './features/epic-hub/VisualLineageCanvas';
 import { WebSocketProvider, useWebSocket } from './context/WebSocketContext';
 import { useTabStore, type TabItem } from './stores/useTabStore';
@@ -201,6 +202,14 @@ const MainWorkspace: React.FC = () => {
     });
   };
 
+  const handleOpenGlossary = () => {
+    openTab(activeProjectId, {
+      id: 'glossary',
+      title: 'Domain Glossary',
+      type: 'glossary',
+    });
+  };
+
   // Find active tab object
   const projectTabs = getProjectTabs(activeProjectId);
   const activeTab: TabItem | undefined = projectTabs.find((t) => t.id === activeTabId);
@@ -212,6 +221,8 @@ const MainWorkspace: React.FC = () => {
         <DashboardView
           onOpenEpic={handleOpenEpic}
           onOpenSpec={handleOpenSpec}
+          onOpenGlossary={handleOpenGlossary}
+          ubiquitousLanguage={fullEpics[0]?.ubiquitous_language || fullEpics[0]?.ubiquitousLanguage}
         />
       );
     }
@@ -242,11 +253,15 @@ const MainWorkspace: React.FC = () => {
           <EpicHubView
             epic={currentEpicData}
             onPopOut={(epicId, section) => {
-              openTab(activeProjectId, {
-                id: `${epicId}-${section}`,
-                title: `${section.toUpperCase()} (${epicId})`,
-                type: 'spec',
-              });
+              if (section === 'terminology') {
+                handleOpenGlossary();
+              } else {
+                openTab(activeProjectId, {
+                  id: `${epicId}-${section}`,
+                  title: `${section.toUpperCase()} (${epicId})`,
+                  type: 'spec',
+                });
+              }
             }}
             onOpenSpec={handleOpenSpec}
             onOpenFeature={handleOpenFeature}
@@ -286,6 +301,7 @@ const MainWorkspace: React.FC = () => {
             test_seams: foundFeat.test_seams,
             adrs: foundFeat.adrs,
             tasks: foundFeat.tasks,
+            ubiquitous_language: foundFeat.ubiquitous_language || foundFeat.ubiquitousLanguage,
           }
         : {
             id: activeTab.id,
@@ -300,6 +316,26 @@ const MainWorkspace: React.FC = () => {
           onOpenSpec={handleOpenSpec}
           onOpenPlan={(planId, title) => handleOpenSpec(planId, title)}
           onOpenAdr={handleOpenAdr}
+          onPopOut={(featId, section) => {
+            if (section === 'terminology') {
+              handleOpenGlossary();
+            } else {
+              openTab(activeProjectId, {
+                id: `${featId}-${section}`,
+                title: `${section.toUpperCase()} (${featId})`,
+                type: 'spec',
+              });
+            }
+          }}
+        />
+      );
+    }
+
+    if (activeTab.type === 'glossary') {
+      return (
+        <GlossaryViewer
+          terms={fullEpics[0]?.ubiquitous_language || fullEpics[0]?.ubiquitousLanguage}
+          onBack={() => handleOpenEpic('ec-core')}
         />
       );
     }
@@ -326,6 +362,8 @@ const MainWorkspace: React.FC = () => {
       <DashboardView
         onOpenEpic={handleOpenEpic}
         onOpenSpec={handleOpenSpec}
+        onOpenGlossary={handleOpenGlossary}
+        ubiquitousLanguage={fullEpics[0]?.ubiquitous_language || fullEpics[0]?.ubiquitousLanguage}
       />
     );
   };

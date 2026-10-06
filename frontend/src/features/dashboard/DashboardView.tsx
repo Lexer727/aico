@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Layers,
   ShieldCheck,
@@ -6,17 +6,78 @@ import {
   ArrowRight,
   BookOpen,
   Activity,
+  ChevronDown,
+  ChevronRight,
+  Search,
 } from 'lucide-react';
+import { fetchGlossary, type TermInfo } from '../feature-task-data';
 
 interface DashboardViewProps {
   onOpenEpic: (epicId: string) => void;
   onOpenSpec: (specId: string, title: string) => void;
+  onOpenGlossary?: () => void;
+  ubiquitousLanguage?: TermInfo[];
 }
+
+const defaultTerms: TermInfo[] = [
+  {
+    term: 'Codebase Root',
+    definition: 'The configured root directory on the host machine containing all distinct implementation repositories.',
+  },
+  {
+    term: 'Project',
+    definition: 'A standalone application, library, or system codebase tracked by its own independent Git repository inside the Codebase Root, paired with its dedicated Specs Repository.',
+  },
+  {
+    term: 'Project Specs Repository',
+    definition: 'A dedicated, per-project Git repository (<project>-specs) housing all Spec-Driven Development artifacts, architecture decisions, and domain glossaries for a specific Project, organized by Epic.',
+  },
+  {
+    term: 'Epic',
+    definition: 'A cohesive, overarching engineering effort or capability within a Project that encapsulates an idea from conception to verified code, serving as the parent container for all associated SDD artifacts.',
+  },
+  {
+    term: 'Epic Hub',
+    definition: 'The primary unified tab view in the UI for a specific Epic, consolidating its high-level summary, Brainstorm, Deep Dive, Specifications, and Task Plans into clean, collapsible accordion sections.',
+  },
+  {
+    term: 'Context Asset',
+    definition: 'Any multi-modal file dropped into the project, epic, or chat to provide context or assets for implementation.',
+  },
+];
 
 // @implements SPEC-CORE-007::REQ-001
 // @implements SPEC-CORE-007::REQ-002
 // @implements SPEC-CORE-007::REQ-007
-export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenEpic, onOpenSpec }) => {
+export const DashboardView: React.FC<DashboardViewProps> = ({
+  onOpenEpic,
+  onOpenSpec,
+  onOpenGlossary,
+  ubiquitousLanguage,
+}) => {
+  const [terms, setTerms] = useState<TermInfo[]>(
+    ubiquitousLanguage && ubiquitousLanguage.length > 0 ? ubiquitousLanguage : defaultTerms
+  );
+  const [isTerminologyOpen, setIsTerminologyOpen] = useState(false);
+  const [searchFilter, setSearchFilter] = useState('');
+
+  useEffect(() => {
+    if (ubiquitousLanguage && ubiquitousLanguage.length > 0) {
+      setTerms(ubiquitousLanguage);
+    } else {
+      fetchGlossary().then((data) => {
+        if (data && data.length > 0) {
+          setTerms(data);
+        }
+      });
+    }
+  }, [ubiquitousLanguage]);
+
+  const q = searchFilter.trim().toLowerCase();
+  const filteredTerms = terms.filter(
+    (t) => !q || t.term.toLowerCase().includes(q) || t.definition.toLowerCase().includes(q)
+  );
+
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6 text-zinc-100">
       {/* Workspace Hero Header */}
@@ -43,7 +104,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenEpic, onOpen
       </div>
 
       {/* High-Level Workspace Stat Cards */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <div className="p-4 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-2">
           <div className="flex items-center justify-between text-zinc-400 text-xs font-semibold">
             <span>Discovered Epics</span>
@@ -60,6 +121,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenEpic, onOpen
           </div>
           <div className="text-2xl font-bold font-mono text-zinc-100">10</div>
           <div className="text-[11px] text-zinc-500">Strict EARS Syntax & Tags</div>
+        </div>
+
+        <div
+          data-testid="stat-card-glossary"
+          onClick={() => setIsTerminologyOpen((prev) => !prev)}
+          className="p-4 bg-zinc-900/60 border border-zinc-800 hover:border-amber-500/50 rounded-xl space-y-2 cursor-pointer transition-colors group"
+        >
+          <div className="flex items-center justify-between text-zinc-400 text-xs font-semibold">
+            <span>Ubiquitous Language</span>
+            <BookOpen className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
+          </div>
+          <div className="text-2xl font-bold font-mono text-amber-400">{terms.length} Terms</div>
+          <div className="text-[11px] text-amber-500/80 group-hover:text-amber-400">
+            {isTerminologyOpen ? 'Click to collapse' : 'Click to inspect definitions'}
+          </div>
         </div>
 
         <div className="p-4 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-2">
@@ -197,6 +273,81 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenEpic, onOpen
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Ubiquitous Domain Terminology Accordion (Openable / Collapsible) */}
+      <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
+        <div
+          data-testid="toggle-dashboard-terminology"
+          onClick={() => setIsTerminologyOpen((prev) => !prev)}
+          className="flex items-center justify-between px-5 py-3.5 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors"
+        >
+          <div className="flex items-center gap-2.5 flex-1 min-w-0">
+            {isTerminologyOpen ? (
+              <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+            ) : (
+              <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+            )}
+            <BookOpen className="w-4 h-4 text-amber-400 flex-shrink-0" />
+            <span className="font-semibold text-sm text-zinc-200">
+              Ubiquitous Domain Terminology ({terms.length})
+            </span>
+            <span className="text-xs text-zinc-500 truncate ml-2 italic">
+              — Shared domain language and concepts from GLOSSARY.md
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            {onOpenGlossary && (
+              <button
+                data-testid="open-full-glossary"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenGlossary();
+                }}
+                className="text-xs px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 transition-colors flex items-center gap-1"
+              >
+                <span>Open Full Page</span>
+                <ArrowRight className="w-3 h-3 text-zinc-400" />
+              </button>
+            )}
+            <span className="text-xs text-zinc-400 font-mono px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700/60">
+              {isTerminologyOpen ? 'Collapse' : 'Expand'}
+            </span>
+          </div>
+        </div>
+
+        {isTerminologyOpen && (
+          <div className="p-5 border-t border-zinc-800/80 bg-zinc-950/30 space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="relative flex-1 max-w-sm">
+                <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  data-testid="dashboard-terminology-search"
+                  value={searchFilter}
+                  onChange={(e) => setSearchFilter(e.target.value)}
+                  placeholder="Search domain concepts, definitions..."
+                  className="w-full pl-9 pr-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-amber-500/60"
+                />
+              </div>
+              <span className="text-xs text-zinc-500 font-mono">
+                Showing {filteredTerms.length} of {terms.length} terms
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {filteredTerms.map((t, idx) => (
+                <div
+                  key={idx}
+                  className="p-3 bg-zinc-900/80 rounded-lg border border-zinc-800 space-y-1.5 hover:border-zinc-700 transition-colors"
+                >
+                  <span className="font-semibold text-amber-400 text-xs block">{t.term}</span>
+                  <p className="text-zinc-400 text-[11px] leading-relaxed">{t.definition}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Active DAG Frontier & System Diagnostics */}

@@ -129,8 +129,20 @@ async fn test_project_management_rest_api() {
     assert!(feat_obj["description"].is_string());
     assert!(!feat_obj["requirements"].as_array().unwrap().is_empty());
     assert!(!feat_obj["tasks"].as_array().unwrap().is_empty());
+    assert!(!feat_obj["ubiquitous_language"].as_array().unwrap().is_empty());
 
-    // 9. GET /api/v1/adrs/ADR-0001
+    // 9. GET /api/v1/glossary
+    let glossary_res = client
+        .get(format!("http://{}/api/v1/glossary", addr))
+        .send()
+        .await
+        .expect("Glossary request should succeed");
+    assert_eq!(glossary_res.status(), 200);
+    let glossary_arr: Vec<serde_json::Value> = glossary_res.json().await.expect("Should parse as JSON");
+    assert!(!glossary_arr.is_empty());
+    assert!(glossary_arr.iter().any(|t| t["term"] == "Codebase Root" || t["term"] == "Epic"));
+
+    // 10. GET /api/v1/adrs/ADR-0001
     let single_adr_res = client
         .get(format!("http://{}/api/v1/adrs/ADR-0001", addr))
         .send()
@@ -141,7 +153,7 @@ async fn test_project_management_rest_api() {
     assert_eq!(adr_obj["id"], "ADR-0001");
     assert!(adr_obj["context"].is_string());
 
-    // 10. GET /api/v1/raw
+    // 11. GET /api/v1/raw
     let raw_res = client
         .get(format!("http://{}/api/v1/raw?path=features/ft-fast-trace/spec-ft-fast-trace.md", addr))
         .send()

@@ -63,6 +63,8 @@ export interface DiscoveredFeature {
   rawSpecContent?: string;
   raw_plan_content?: string;
   rawPlanContent?: string;
+  ubiquitous_language?: TermInfo[];
+  ubiquitousLanguage?: TermInfo[];
 }
 
 export interface DiscoveredEpic {
@@ -209,3 +211,23 @@ export async function fetchAdr(adrId: string): Promise<DiscoveredAdr | null> {
 
   return null;
 }
+
+/**
+ * Fetch the complete project glossary from the Axum backend dynamically
+ */
+export async function fetchGlossary(): Promise<TermInfo[]> {
+  try {
+    const res = await fetch(getApiUrl('/api/v1/glossary'));
+    if (res.ok) {
+      const data: TermInfo[] = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        return data;
+      }
+    }
+  } catch {
+    // Graceful offline fallback
+  }
+
+  return [];
+}
+

@@ -163,6 +163,7 @@ impl HostServer {
             .route("/api/v1/features/:id", get(get_feature_handler))
             .route("/api/v1/adrs", get(list_adrs_handler))
             .route("/api/v1/adrs/:id", get(get_adr_handler))
+            .route("/api/v1/glossary", get(get_glossary_handler))
             .route("/api/v1/stats", get(get_stats_handler))
             .route("/api/v1/raw", get(get_raw_file_handler))
             .route("/ws", get(ws_handler))
@@ -333,6 +334,8 @@ pub struct DiscoveredFeatureInfo {
     pub raw_spec_content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_plan_content: Option<String>,
+    #[serde(default)]
+    pub ubiquitous_language: Vec<TermInfo>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -774,6 +777,18 @@ pub fn parse_glossary_terms(content: &str) -> Vec<TermInfo> {
     terms
 }
 
+/// Load glossary definitions from GLOSSARY.md for a given specs path
+pub fn load_project_glossary(specs_path: &std::path::Path) -> Vec<TermInfo> {
+    let glossary_path = specs_path.join("GLOSSARY.md");
+    if glossary_path.exists() {
+        std::fs::read_to_string(&glossary_path)
+            .map(|c| parse_glossary_terms(&c))
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    }
+}
+
 /// Helper function to scan a feature directory and build a complete DiscoveredFeatureInfo
 pub fn scan_feature_dir(feat_path: &std::path::Path, epic_id: &str, is_standalone: bool) -> Option<DiscoveredFeatureInfo> {
     if !feat_path.is_dir() {
@@ -866,6 +881,7 @@ pub fn scan_feature_dir(feat_path: &std::path::Path, epic_id: &str, is_standalon
         tasks,
         raw_spec_content,
         raw_plan_content,
+        ubiquitous_language: Vec::new(),
     })
 }
 
@@ -876,14 +892,7 @@ pub fn scan_epics_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredEpi
         return Vec::new();
     }
 
-    let glossary_path = specs_path.join("GLOSSARY.md");
-    let ubiquitous_language = if glossary_path.exists() {
-        std::fs::read_to_string(&glossary_path)
-            .map(|c| parse_glossary_terms(&c))
-            .unwrap_or_default()
-    } else {
-        Vec::new()
-    };
+    let ubiquitous_language = load_project_glossary(specs_path);
 
     let mut epics = Vec::new();
     if let Ok(entries) = std::fs::read_dir(epics_dir) {
@@ -943,7 +952,8 @@ pub fn scan_epics_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredEpi
                         for feat_entry in sorted_features {
                             let feat_path = feat_entry.path();
                             if feat_path.is_dir() {
-                                if let Some(feat_info) = scan_feature_dir(&feat_path, &epic_id, false) {
+                                if let Some(mut feat_info) = scan_feature_dir(&feat_path, &epic_id, false) {
+                                    feat_info.ubiquitous_language = ubiquitous_language.clone();
                                     if let Some(ref sid) = feat_info.spec_id {
                                         specs.push(DiscoveredSpecInfo {
                                             id: sid.clone(),
@@ -991,6 +1001,7 @@ pub fn scan_standalone_features_for_project(specs_path: &std::path::Path) -> Vec
         return Vec::new();
     }
 
+    let ubiquitous_language = load_project_glossary(specs_path);
     let mut standalone = Vec::new();
     if let Ok(entries) = std::fs::read_dir(features_dir) {
         let mut sorted: Vec<_> = entries.flatten().collect();
@@ -999,7 +1010,8 @@ pub fn scan_standalone_features_for_project(specs_path: &std::path::Path) -> Vec
         for entry in sorted {
             let path = entry.path();
             if path.is_dir() {
-                if let Some(feat_info) = scan_feature_dir(&path, "", true) {
+                if let Some(mut feat_info) = scan_feature_dir(&path, "", true) {
+                    feat_info.ubiquitous_language = ubiquitous_language.clone();
                     standalone.push(feat_info);
                 }
             }
@@ -1219,6 +1231,26 @@ async fn get_adr_handler(
     } else {
         Err(StatusCode::NOT_FOUND)
     }
+}
+
+// @implements SPEC-CORE-007::REQ-001
+async fn get_glossary_handler(
+    State(state): State<AppState>,
+) -> Json<Vec<TermInfo>> {
+    let registry = state.registry.read().await;
+    let active_project = registry.get_active();
+
+    let target_path = if let Some(proj) = active_project {
+        if proj.specs_path.exists() {
+            proj.specs_path.clone()
+        } else {
+            std::path::PathBuf::from("d:/aico/aico-specs")
+        }
+    } else {
+        std::path::PathBuf::from("d:/aico/aico-specs")
+    };
+
+    Json(load_project_glossary(&target_path))
 }
 
 // @implements SPEC-CORE-007::REQ-001

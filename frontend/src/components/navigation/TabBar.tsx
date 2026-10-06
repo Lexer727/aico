@@ -22,6 +22,8 @@ export const TabBar: React.FC = () => {
         return <Code2 className="w-3.5 h-3.5 text-amber-400" />;
       case 'adr':
         return <FileText className="w-3.5 h-3.5 text-amber-400" />;
+      case 'glossary':
+        return <BookOpen className="w-3.5 h-3.5 text-amber-400" />;
       default:
         return <Package className="w-3.5 h-3.5 text-indigo-400" />;
     }

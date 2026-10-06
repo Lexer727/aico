@@ -488,6 +488,17 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
                   </span>
                 )}
               </div>
+              <button
+                data-testid="popout-terminology"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPopOut?.(epic.id, 'terminology');
+                }}
+                title="Open in separate tab"
+                className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+              </button>
             </div>
             {!collapsedSections.terminology && (
               <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-2.5">

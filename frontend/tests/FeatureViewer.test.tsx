@@ -94,4 +94,35 @@ describe('FeatureViewer Component', () => {
     expect(screen.getByText('In-scope item 2')).toBeInTheDocument();
     expect(screen.getByText('Out-of-scope item 1')).toBeInTheDocument();
   });
+
+  it('renders Ubiquitous Domain Terminology on left accordion and allows expanding', () => {
+    const onPopOut = vi.fn();
+    const featureWithTerms = {
+      ...mockFeature,
+      ubiquitous_language: [
+        { term: 'Designated Test Seam', definition: 'Public interface contract for testing' },
+        { term: 'Vertical Tracer-Bullet', definition: 'End-to-end atomic task execution' },
+      ],
+    };
+
+    render(<FeatureViewer feature={featureWithTerms} onPopOut={onPopOut} />);
+
+    // Accordion header shows term count and is closed by default
+    const termsAccordion = screen.getByText(/Ubiquitous Domain Terminology \(2\)/);
+    expect(termsAccordion).toBeInTheDocument();
+    expect(screen.queryByText('Designated Test Seam')).toBeNull();
+
+    // Click to open terminology
+    fireEvent.click(termsAccordion);
+
+    // Terms and definitions are visible
+    expect(screen.getByText('Designated Test Seam')).toBeInTheDocument();
+    expect(screen.getByText('Public interface contract for testing')).toBeInTheDocument();
+    expect(screen.getByText('Vertical Tracer-Bullet')).toBeInTheDocument();
+
+    // Popout button works
+    const popoutBtn = screen.getByTestId('popout-terminology');
+    fireEvent.click(popoutBtn);
+    expect(onPopOut).toHaveBeenCalledWith('01-host-runtime', 'terminology');
+  });
 });
