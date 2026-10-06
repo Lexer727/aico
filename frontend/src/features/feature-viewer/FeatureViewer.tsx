@@ -12,6 +12,7 @@ import {
   ArrowRight,
   CheckCircle2,
   BookOpen,
+  Crosshair,
 } from 'lucide-react';
 import { FileDropZone } from '../../components/common/FileDropZone';
 import {
@@ -116,6 +117,7 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
   // Right column (Task Plan): open by default (false)
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
     overview: false,
+    scopeBoundaries: true,
     brainstorm: true,
     specifications: true,
     deepDive: true,
@@ -269,7 +271,7 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
         </div>
 
         {!collapsedSections.overview && (
-          <div className="p-5 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-4">
+          <div className="p-5 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30">
             {/* Executive Summary */}
             <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800">
               <h4 className="text-xs font-semibold text-zinc-200 mb-1">Executive Summary</h4>
@@ -277,40 +279,88 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
                 {feature.description || 'Autonomous Intelligent Code Orchestrator (AICO) feature module enforcing deterministic contract seams, vertical tracer-bullet DAG execution, and strict EARS behavioral invariants.'}
               </p>
             </div>
-
-            {/* In-Scope & Out-of-Scope parsed directly from SDD specification */}
-            {(inScopeList.length > 0 || outOfScopeList.length > 0) && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {inScopeList.length > 0 && (
-                  <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-lg space-y-1.5">
-                    <span className="font-semibold text-indigo-400 text-xs block">In-Scope Boundaries</span>
-                    <ul className="list-disc list-inside text-zinc-400 text-[11px] leading-relaxed space-y-1">
-                      {inScopeList.map((item, idx) => (
-                        <li key={idx}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {outOfScopeList.length > 0 && (
-                  <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-lg space-y-1.5">
-                    <span className="font-semibold text-amber-400 text-xs block">Out-of-Scope Boundaries</span>
-                    <ul className="list-disc list-inside text-zinc-400 text-[11px] leading-relaxed space-y-1">
-                      {outOfScopeList.map((item, idx) => (
-                        <li key={idx}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         )}
       </div>
 
-      {/* 2-COLUMN SECTION: Left = Brainstorm, Specs, Deep Dive, Lineage, Assets | Right = Task Plan */}
+      {/* 2-COLUMN SECTION: Left = Scope Boundaries, Brainstorm, Specs, Deep Dive, Lineage, Assets | Right = Task Plan */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
         {/* LEFT COLUMN (All Closed by Default) */}
         <div className="space-y-3">
+          {/* Scope Boundaries Accordion (Closed by default) */}
+          <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
+            <div
+              onClick={() => toggleSection('scopeBoundaries')}
+              className="flex items-center justify-between px-4 py-3 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors"
+            >
+              <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                {collapsedSections.scopeBoundaries ? (
+                  <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                )}
+                <Crosshair className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+                <span className="font-semibold text-sm text-zinc-200">
+                  Scope Boundaries ({inScopeList.length + outOfScopeList.length})
+                </span>
+                {collapsedSections.scopeBoundaries && (
+                  <span className="text-xs text-zinc-500 truncate ml-2 italic">
+                    — In-Scope and Out-of-Scope boundaries
+                  </span>
+                )}
+              </div>
+              <button
+                data-testid="popout-scope-boundaries"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPopOut?.(feature.id, 'scope-boundaries');
+                }}
+                title="Open in separate tab"
+                className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            {!collapsedSections.scopeBoundaries && (
+              <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-3">
+                <div className="grid grid-cols-1 gap-3">
+                  <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-lg space-y-1.5">
+                    <span className="font-semibold text-indigo-400 text-xs block">
+                      In-Scope Boundaries ({inScopeList.length})
+                    </span>
+                    {inScopeList.length > 0 ? (
+                      <ul className="list-disc list-inside text-zinc-400 text-[11px] leading-relaxed space-y-1">
+                        {inScopeList.map((item, idx) => (
+                          <li key={idx}>{item}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-zinc-500 text-[11px] italic">
+                        No explicit in-scope items defined in specification.
+                      </p>
+                    )}
+                  </div>
+                  <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-lg space-y-1.5">
+                    <span className="font-semibold text-amber-400 text-xs block">
+                      Out-of-Scope Boundaries ({outOfScopeList.length})
+                    </span>
+                    {outOfScopeList.length > 0 ? (
+                      <ul className="list-disc list-inside text-zinc-400 text-[11px] leading-relaxed space-y-1">
+                        {outOfScopeList.map((item, idx) => (
+                          <li key={idx}>{item}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-zinc-500 text-[11px] italic">
+                        No explicit out-of-scope items defined in specification.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Brainstorm Accordion */}
           <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
             <div

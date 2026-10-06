@@ -38,4 +38,33 @@ describe('FeatureViewer Component', () => {
     fireEvent.click(openSpecBtn);
     expect(onOpenSpec).toHaveBeenCalledWith('SPEC-CORE-001', 'Host Runtime & Local HTTP/WebSocket Server');
   });
+
+  it('renders Scope Boundaries on left accordion and Executive Summary in overview', () => {
+    const featureWithScopes = {
+      ...mockFeature,
+      description: 'Custom Executive Summary for feature',
+      in_scope: ['In-scope item 1', 'In-scope item 2'],
+      out_of_scope: ['Out-of-scope item 1'],
+    };
+
+    render(<FeatureViewer feature={featureWithScopes} />);
+
+    // Executive summary in overview is visible
+    expect(screen.getByText('Custom Executive Summary for feature')).toBeInTheDocument();
+
+    // Scope Boundaries accordion header is visible
+    const scopeAccordion = screen.getByText(/Scope Boundaries \(3\)/);
+    expect(scopeAccordion).toBeInTheDocument();
+
+    // Initially closed: in-scope items not visible
+    expect(screen.queryByText('In-scope item 1')).toBeNull();
+
+    // Click to open Scope Boundaries
+    fireEvent.click(scopeAccordion);
+
+    // In-Scope and Out-of-Scope items become visible
+    expect(screen.getByText('In-scope item 1')).toBeInTheDocument();
+    expect(screen.getByText('In-scope item 2')).toBeInTheDocument();
+    expect(screen.getByText('Out-of-scope item 1')).toBeInTheDocument();
+  });
 });
