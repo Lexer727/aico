@@ -11,6 +11,7 @@ import {
   FolderArchive,
   ArrowRight,
   Package,
+  BookOpen,
 } from 'lucide-react';
 import { FileDropZone } from '../../components/common/FileDropZone';
 
@@ -39,61 +40,61 @@ interface EpicHubViewProps {
   onFileUpload?: (file: File) => void;
 }
 
-// Features definition for EC-core
+// Features definition for ec-core
 const coreFeaturesList = [
   {
     id: 'core-host-runtime',
     name: 'Host Runtime & Local HTTP/WS Server',
-    specId: 'SPEC-core-host-runtime',
-    planId: 'PLAN-core-host-runtime',
+    specId: 'spec-core-host-runtime',
+    planId: 'plan-core-host-runtime',
     status: 'Completed',
     desc: 'Axum embedded server on port 4242 with SPA fallback and WebSocket broadcast hub.',
   },
   {
     id: 'core-security-auth',
     name: 'LAN Security & Local Authentication',
-    specId: 'SPEC-core-security-auth',
-    planId: 'PLAN-core-security-auth',
+    specId: 'spec-core-security-auth',
+    planId: 'plan-core-security-auth',
     status: 'Completed',
     desc: 'Strict loopback binding, QR pairing, and SHA-256 HMAC token gate.',
   },
   {
     id: 'core-local-storage',
     name: 'Local Storage & Embedded Engine Lifecycle',
-    specId: 'SPEC-core-local-storage',
-    planId: 'PLAN-core-local-storage',
+    specId: 'spec-core-local-storage',
+    planId: 'plan-core-local-storage',
     status: 'Completed',
     desc: 'In-process LanceDB vector search and Kùzu graph without Docker or background daemons.',
   },
   {
     id: 'core-discovery',
     name: 'Workspace & Multi-Project Discovery',
-    specId: 'SPEC-core-discovery',
-    planId: 'PLAN-core-discovery',
+    specId: 'spec-core-discovery',
+    planId: 'plan-core-discovery',
     status: 'Completed',
     desc: 'Project manifest scanning and active workspace registry synchronization.',
   },
   {
     id: 'core-mcp-tools',
     name: 'Deterministic SDD Tool Registration',
-    specId: 'SPEC-core-mcp-tools',
-    planId: 'PLAN-core-mcp-tools',
+    specId: 'spec-core-mcp-tools',
+    planId: 'plan-core-mcp-tools',
     status: 'Completed',
     desc: 'In-process Model Context Protocol tool gates enforcing strict SDD contracts.',
   },
   {
     id: 'core-webui-shell',
     name: 'WebUI Workspace Shell & Dockable Layout',
-    specId: 'SPEC-core-webui-shell',
-    planId: 'PLAN-core-webui-shell',
+    specId: 'spec-core-webui-shell',
+    planId: 'plan-core-webui-shell',
     status: 'In Progress',
     desc: '100vh Shell, sidebar tree search, 5 filter scopes, activity monitor, and multi-terminals.',
   },
   {
     id: 'core-epic-hub',
     name: 'Single-Page Epic Hub & Lineage Graph',
-    specId: 'SPEC-core-epic-hub',
-    planId: 'PLAN-core-epic-hub',
+    specId: 'spec-core-epic-hub',
+    planId: 'plan-core-epic-hub',
     status: 'In Progress',
     desc: '2-column overview, visual wave-internal task plan with progress bars, and lineage graph.',
   },
@@ -103,75 +104,75 @@ const specsFeaturesList = [
   {
     id: 'specs-blueprint-standards',
     name: 'AICO SDD Blueprint Standards v0.1.2',
-    specId: 'SPEC-specs-blueprint-standards',
-    planId: 'PLAN-specs-blueprint-standards',
+    specId: 'spec-specs-blueprint-standards',
+    planId: 'plan-specs-blueprint-standards',
     status: 'Completed',
     desc: 'Normalized YAML frontmatters with order attribute, relative links, and clean single-source metadata.',
   },
   {
     id: 'specs-skills-evolution',
     name: 'Skills Suite Evolution & Triage System',
-    specId: 'SPEC-specs-skills-evolution',
-    planId: 'PLAN-specs-skills-evolution',
+    specId: 'spec-specs-skills-evolution',
+    planId: 'plan-specs-skills-evolution',
     status: 'Completed',
     desc: 'Front-door triage via /aico-start, standalone /aico-feature orchestration, and wave-internal planning.',
   },
   {
     id: 'specs-migration-engine',
     name: 'SDD v0.1.1 to v0.1.2 Migration Engine',
-    specId: 'SPEC-specs-migration-engine',
-    planId: 'PLAN-specs-migration-engine',
+    specId: 'spec-specs-migration-engine',
+    planId: 'plan-specs-migration-engine',
     status: 'Completed',
-    desc: 'Automated artifact migrator for renaming epics (EC-), specs/ to features/, and updating frontmatters.',
+    desc: 'Automated artifact migrator for renaming epics (ec-), specs/ to features/, and updating frontmatters.',
   },
 ];
 
-// Specs definitions for EC-core
+// Specs definitions for ec-core
 const coreSpecsList = [
   {
-    id: 'SPEC-core-host-runtime',
+    id: 'spec-core-host-runtime',
     title: 'Host Runtime & Local HTTP/WebSocket Server',
     status: 'Completed',
     reqs: 10,
     seam: 'crates/aico-server/src/server.rs',
   },
   {
-    id: 'SPEC-core-security-auth',
+    id: 'spec-core-security-auth',
     title: 'LAN Security & Local Authentication',
     status: 'Completed',
     reqs: 8,
     seam: 'crates/aico-server/src/auth.rs',
   },
   {
-    id: 'SPEC-core-local-storage',
+    id: 'spec-core-local-storage',
     title: 'Local Storage & Embedded Engine Lifecycle',
     status: 'Completed',
     reqs: 8,
     seam: 'crates/aico-storage/src/embedded.rs',
   },
   {
-    id: 'SPEC-core-discovery',
+    id: 'spec-core-discovery',
     title: 'Workspace & Multi-Project Discovery',
     status: 'Completed',
     reqs: 11,
     seam: 'crates/aico-core/src/scanner.rs',
   },
   {
-    id: 'SPEC-core-mcp-tools',
+    id: 'spec-core-mcp-tools',
     title: 'Deterministic SDD Tool Registration',
     status: 'Completed',
     reqs: 9,
     seam: 'crates/aico-mcp/src/registry.rs',
   },
   {
-    id: 'SPEC-core-webui-shell',
+    id: 'spec-core-webui-shell',
     title: 'WebUI Workspace Shell & Dockable Layout',
     status: 'In Progress',
     reqs: 13,
     seam: 'frontend/src/components/layout/ShellLayout.tsx',
   },
   {
-    id: 'SPEC-core-epic-hub',
+    id: 'spec-core-epic-hub',
     title: 'Single-Page Epic Hub & Lineage Graph',
     status: 'In Progress',
     reqs: 11,
@@ -181,21 +182,21 @@ const coreSpecsList = [
 
 const specsSpecsList = [
   {
-    id: 'SPEC-specs-blueprint-standards',
+    id: 'spec-specs-blueprint-standards',
     title: 'AICO SDD Blueprint Standards v0.1.2',
     status: 'Completed',
     reqs: 8,
     seam: 'aico-specs/adr/0010.md',
   },
   {
-    id: 'SPEC-specs-skills-evolution',
+    id: 'spec-specs-skills-evolution',
     title: 'Skills Suite Evolution & Triage System',
     status: 'Completed',
     reqs: 6,
     seam: 'skills/aico-start/SKILL.md',
   },
   {
-    id: 'SPEC-specs-migration-engine',
+    id: 'spec-specs-migration-engine',
     title: 'SDD v0.1.1 to v0.1.2 Migration Engine',
     status: 'Completed',
     reqs: 6,
@@ -583,13 +584,15 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
 }) => {
   // Layout states:
   // Overview: open by default (collapsed = false)
-  // Left column (Brainstorm, Specs, Deep Dive, Assets): closed by default (collapsed = true)
+  // Left column (Features, Brainstorm, Specs, Deep Dive, Terminology, Assets): closed by default (collapsed = true)
   // Right column (Task Plan): open by default (collapsed = false)
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
     overview: false,
+    features: true,
     brainstorm: true,
     specifications: true,
     deepDive: true,
+    terminology: true,
     assets: true,
     taskPlan: false,
   });
@@ -601,7 +604,7 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
     }));
   };
 
-  const isSpecsEpic = epic.id === 'EC-specs' || epic.id === '002-aico-specs';
+  const isSpecsEpic = epic.id.toLowerCase() === 'ec-specs' || epic.id === '002-aico-specs';
   const currentFeaturesList = isSpecsEpic ? specsFeaturesList : coreFeaturesList;
   const currentSpecsList = isSpecsEpic ? specsSpecsList : coreSpecsList;
   const currentTaskGroups = isSpecsEpic ? specsTaskGroups : coreTaskGroups;
@@ -640,7 +643,7 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
         </div>
       </div>
 
-      {/* TOP SECTION: Overview (Open by default across full width) */}
+      {/* TOP SECTION: Overview (Open by default across full width, Executive Summary ONLY) */}
       <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
         <div
           onClick={() => toggleSection('overview')}
@@ -674,7 +677,7 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
         </div>
 
         {!collapsedSections.overview && (
-          <div className="p-5 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-5">
+          <div className="p-5 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30">
             {/* Executive Summary */}
             <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800">
               <h4 className="text-xs font-semibold text-zinc-200 mb-1">Executive Summary</h4>
@@ -684,79 +687,64 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
                 MCP tool gates, and strict EARS contracts guarantee architectural consistency and zero cloud amnesia.
               </p>
             </div>
-
-            {/* Features in this Epic (Openable feature bundles) */}
-            <div className="space-y-2">
-              <h4 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
-                <Package className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Features in this Epic ({currentFeaturesList.length})</span>
-              </h4>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5">
-                {currentFeaturesList.map((feat) => (
-                  <div
-                    key={feat.id}
-                    onClick={() => onOpenFeature?.(feat.id, feat.name)}
-                    className="p-3 bg-zinc-900 border border-zinc-800 hover:border-indigo-500/60 rounded-lg cursor-pointer transition-colors space-y-1 group"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-mono text-[11px] font-bold text-indigo-400 group-hover:text-indigo-300">
-                        {feat.id}
-                      </span>
-                      <span className="text-[9px] px-1.5 py-0.2 rounded font-mono bg-zinc-800 text-zinc-400">
-                        {feat.status}
-                      </span>
-                    </div>
-                    <div className="font-semibold text-xs text-zinc-200 group-hover:text-white truncate">
-                      {feat.name}
-                    </div>
-                    <div className="text-[10px] text-zinc-500 font-mono">
-                      {feat.specId} • {feat.planId}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Ubiquitous Domain Terminology */}
-            <div className="space-y-2">
-              <h4 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">
-                Ubiquitous Domain Terminology
-              </h4>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="p-2.5 bg-zinc-900 border border-zinc-800 rounded">
-                  <span className="font-semibold text-indigo-400 block">Local-First SDD</span>
-                  <span className="text-zinc-400 text-[11px]">
-                    Zero external daemons. LanceDB vector search and Kùzu graph run in-process.
-                  </span>
-                </div>
-                <div className="p-2.5 bg-zinc-900 border border-zinc-800 rounded">
-                  <span className="font-semibold text-sky-400 block">EARS Syntax</span>
-                  <span className="text-zinc-400 text-[11px]">
-                    Easy Approach to Requirements Syntax: Ubiquitous, Event-driven, State-driven.
-                  </span>
-                </div>
-                <div className="p-2.5 bg-zinc-900 border border-zinc-800 rounded">
-                  <span className="font-semibold text-emerald-400 block">Tracer Bullets</span>
-                  <span className="text-zinc-400 text-[11px]">
-                    Vertical task slices penetrating every layer end-to-end to verify architectural feasibility.
-                  </span>
-                </div>
-                <div className="p-2.5 bg-zinc-900 border border-zinc-800 rounded">
-                  <span className="font-semibold text-amber-400 block">Designated Test Seams</span>
-                  <span className="text-zinc-400 text-[11px]">
-                    Deterministic test interfaces tagged with @verifies and verified via automated suites.
-                  </span>
-                </div>
-              </div>
-            </div>
           </div>
         )}
       </div>
 
-      {/* 2-COLUMN SECTION: Left = Brainstorm, Specs, Deep Dive, Assets | Right = Task Plan */}
+      {/* 2-COLUMN SECTION: Left = Features, Brainstorm, Specs, Deep Dive, Terminology, Assets | Right = Task Plan */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-        {/* LEFT COLUMN: Brainstorm, Specs, Deep Dive, Assets (All Closed by Default) */}
+        {/* LEFT COLUMN (All Closed by Default) */}
         <div className="space-y-3">
+          {/* Features in this Epic Accordion */}
+          <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
+            <div
+              onClick={() => toggleSection('features')}
+              className="flex items-center justify-between px-4 py-3 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors"
+            >
+              <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                {collapsedSections.features ? (
+                  <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                )}
+                <Package className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+                <span className="font-semibold text-sm text-zinc-200">Features in this Epic ({currentFeaturesList.length})</span>
+                {collapsedSections.features && (
+                  <span className="text-xs text-zinc-500 truncate ml-2 italic">
+                    — Component feature bundles and specifications
+                  </span>
+                )}
+              </div>
+            </div>
+            {!collapsedSections.features && (
+              <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                  {currentFeaturesList.map((feat) => (
+                    <div
+                      key={feat.id}
+                      onClick={() => onOpenFeature?.(feat.id, feat.name)}
+                      className="p-3 bg-zinc-900 border border-zinc-800 hover:border-indigo-500/60 rounded-lg cursor-pointer transition-colors space-y-1 group"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-[11px] font-bold text-indigo-400 group-hover:text-indigo-300">
+                          {feat.id}
+                        </span>
+                        <span className="text-[9px] px-1.5 py-0.2 rounded font-mono bg-zinc-800 text-zinc-400">
+                          {feat.status}
+                        </span>
+                      </div>
+                      <div className="font-semibold text-xs text-zinc-200 group-hover:text-white truncate">
+                        {feat.name}
+                      </div>
+                      <div className="text-[10px] text-zinc-500 font-mono">
+                        {feat.specId} • {feat.planId}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
           {/* Brainstorm Accordion */}
           <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
             <div
@@ -936,6 +924,61 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
                       <span className="text-emerald-400 font-semibold">frontend::ShellLayout.tsx</span>
                       <div className="text-zinc-500 text-[10px]">Integrated sidebar tree search with 5 scope filters</div>
                     </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Ubiquitous Domain Terminology Accordion */}
+          <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
+            <div
+              onClick={() => toggleSection('terminology')}
+              className="flex items-center justify-between px-4 py-3 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors"
+            >
+              <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                {collapsedSections.terminology ? (
+                  <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                )}
+                <BookOpen className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                <span className="font-semibold text-sm text-zinc-200">
+                  Ubiquitous Domain Terminology
+                </span>
+                {collapsedSections.terminology && (
+                  <span className="text-xs text-zinc-500 truncate ml-2 italic">
+                    — Local-First SDD, EARS Syntax, Tracer Bullets, Test Seams
+                  </span>
+                )}
+              </div>
+            </div>
+            {!collapsedSections.terminology && (
+              <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                  <div className="p-2.5 bg-zinc-900 border border-zinc-800 rounded">
+                    <span className="font-semibold text-indigo-400 block">Local-First SDD</span>
+                    <span className="text-zinc-400 text-[11px]">
+                      Zero external daemons. LanceDB vector search and Kùzu graph run in-process.
+                    </span>
+                  </div>
+                  <div className="p-2.5 bg-zinc-900 border border-zinc-800 rounded">
+                    <span className="font-semibold text-sky-400 block">EARS Syntax</span>
+                    <span className="text-zinc-400 text-[11px]">
+                      Easy Approach to Requirements Syntax: Ubiquitous, Event-driven, State-driven.
+                    </span>
+                  </div>
+                  <div className="p-2.5 bg-zinc-900 border border-zinc-800 rounded">
+                    <span className="font-semibold text-emerald-400 block">Tracer Bullets</span>
+                    <span className="text-zinc-400 text-[11px]">
+                      Vertical task slices penetrating every layer end-to-end to verify architectural feasibility.
+                    </span>
+                  </div>
+                  <div className="p-2.5 bg-zinc-900 border border-zinc-800 rounded">
+                    <span className="font-semibold text-amber-400 block">Designated Test Seams</span>
+                    <span className="text-zinc-400 text-[11px]">
+                      Deterministic test interfaces tagged with @verifies and verified via automated suites.
+                    </span>
                   </div>
                 </div>
               </div>

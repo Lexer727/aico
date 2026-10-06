@@ -50,7 +50,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenEpic, onOpen
             <Layers className="w-4 h-4 text-indigo-400" />
           </div>
           <div className="text-2xl font-bold font-mono text-zinc-100">2</div>
-          <div className="text-[11px] text-zinc-500">EC-core & EC-specs</div>
+          <div className="text-[11px] text-zinc-500">ec-core & ec-specs</div>
         </div>
 
         <div className="p-4 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-2">
@@ -87,13 +87,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenEpic, onOpen
           Project Epics
         </h2>
         <div className="grid grid-cols-2 gap-4">
-          {/* EC-core Card */}
+          {/* ec-core Card */}
           <div className="p-5 bg-zinc-900/50 border border-zinc-800 rounded-xl space-y-4 hover:border-zinc-700 transition-colors">
             <div className="flex items-start justify-between">
               <div>
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs px-2 py-0.5 rounded bg-zinc-800 text-indigo-400 font-semibold">
-                    EC-core
+                    ec-core
                   </span>
                   <span className="text-[10px] px-2 py-0.5 rounded font-mono bg-amber-950 text-amber-400 border border-amber-800">
                     In Progress
@@ -104,7 +104,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenEpic, onOpen
                 </h3>
               </div>
               <button
-                onClick={() => onOpenEpic('EC-core')}
+                onClick={() => onOpenEpic('ec-core')}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors"
               >
                 <span>Open Epic</span>
@@ -124,13 +124,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenEpic, onOpen
               </div>
               <div className="flex flex-wrap gap-1.5 pt-1">
                 {[
-                  'SPEC-core-host-runtime',
-                  'SPEC-core-security-auth',
-                  'SPEC-core-local-storage',
-                  'SPEC-core-discovery',
-                  'SPEC-core-mcp-tools',
-                  'SPEC-core-webui-shell',
-                  'SPEC-core-epic-hub'
+                  'spec-core-host-runtime',
+                  'spec-core-security-auth',
+                  'spec-core-local-storage',
+                  'spec-core-discovery',
+                  'spec-core-mcp-tools',
+                  'spec-core-webui-shell',
+                  'spec-core-epic-hub'
                 ].map((s) => (
                   <button
                     key={s}
@@ -144,13 +144,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenEpic, onOpen
             </div>
           </div>
 
-          {/* EC-specs Card */}
+          {/* ec-specs Card */}
           <div className="p-5 bg-zinc-900/50 border border-zinc-800 rounded-xl space-y-4 hover:border-zinc-700 transition-colors">
             <div className="flex items-start justify-between">
               <div>
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs px-2 py-0.5 rounded bg-zinc-800 text-indigo-400 font-semibold">
-                    EC-specs
+                    ec-specs
                   </span>
                   <span className="text-[10px] px-2 py-0.5 rounded font-mono bg-emerald-950 text-emerald-400 border border-emerald-800">
                     Completed
@@ -161,7 +161,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenEpic, onOpen
                 </h3>
               </div>
               <button
-                onClick={() => onOpenEpic('EC-specs')}
+                onClick={() => onOpenEpic('ec-specs')}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors"
               >
                 <span>Open Epic</span>
@@ -181,9 +181,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenEpic, onOpen
               </div>
               <div className="flex flex-wrap gap-1.5 pt-1">
                 {[
-                  'SPEC-specs-blueprint-standards',
-                  'SPEC-specs-skills-evolution',
-                  'SPEC-specs-migration-engine'
+                  'spec-specs-blueprint-standards',
+                  'spec-specs-skills-evolution',
+                  'spec-specs-migration-engine'
                 ].map((s) => (
                   <button
                     key={s}

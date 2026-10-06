@@ -51,42 +51,43 @@ export interface ShellLayoutProps {
 
 const defaultEpics: DiscoveredEpicNav[] = [
   {
-    id: 'EC-core',
+    id: 'ec-core',
     title: 'AICO Core SDD Platform',
     status: 'In Progress',
     specs: [
-      { id: 'SPEC-core-host-runtime', title: 'Host Runtime & Local HTTP/WS Server' },
-      { id: 'SPEC-core-security-auth', title: 'LAN Security & Local Authentication' },
-      { id: 'SPEC-core-local-storage', title: 'Local Storage & Embedded Engine Lifecycle' },
-      { id: 'SPEC-core-discovery', title: 'Workspace & Multi-Project Discovery' },
-      { id: 'SPEC-core-mcp-tools', title: 'Deterministic SDD Tool Registration' },
-      { id: 'SPEC-core-webui-shell', title: 'WebUI Workspace Shell & Dockable Layout' },
-      { id: 'SPEC-core-epic-hub', title: 'Single-Page Epic Hub & Lineage Graph' },
+      { id: 'spec-core-host-runtime', title: 'Host Runtime & Local HTTP/WS Server' },
+      { id: 'spec-core-security-auth', title: 'LAN Security & Local Authentication' },
+      { id: 'spec-core-local-storage', title: 'Local Storage & Embedded Engine Lifecycle' },
+      { id: 'spec-core-discovery', title: 'Workspace & Multi-Project Discovery' },
+      { id: 'spec-core-mcp-tools', title: 'Deterministic SDD Tool Registration' },
+      { id: 'spec-core-webui-shell', title: 'WebUI Workspace Shell & Dockable Layout' },
+      { id: 'spec-core-epic-hub', title: 'Single-Page Epic Hub & Lineage Graph' },
     ],
   },
   {
-    id: 'EC-specs',
+    id: 'ec-specs',
     title: 'AICO SDD Blueprints & Migration',
     status: 'Completed',
     specs: [
-      { id: 'SPEC-specs-blueprint-standards', title: 'AICO SDD Blueprint Standards v0.1.2' },
-      { id: 'SPEC-specs-skills-evolution', title: 'AICO Skills Evolution & Wave-Internal Tasks' },
-      { id: 'SPEC-specs-migration-engine', title: 'AICO Spec Migration Engine v0.1.2' },
+      { id: 'spec-specs-blueprint-standards', title: 'AICO SDD Blueprint Standards v0.1.2' },
+      { id: 'spec-specs-skills-evolution', title: 'AICO Skills Evolution & Wave-Internal Tasks' },
+      { id: 'spec-specs-migration-engine', title: 'AICO Spec Migration Engine v0.1.2' },
     ],
   },
 ];
 
 const defaultFeatures: DiscoveredFeatureNav[] = [
-  { id: 'core-host-runtime', name: 'Host Runtime & Local Server', epicId: 'EC-core' },
-  { id: 'core-security-auth', name: 'LAN Security & Local Auth', epicId: 'EC-core' },
-  { id: 'core-local-storage', name: 'Embedded Storage Engines', epicId: 'EC-core' },
-  { id: 'core-discovery', name: 'Multi-Project Discovery', epicId: 'EC-core' },
-  { id: 'core-mcp-tools', name: 'Deterministic SDD Tools', epicId: 'EC-core' },
-  { id: 'core-webui-shell', name: 'WebUI Shell & Dockable Panels', epicId: 'EC-core' },
-  { id: 'core-epic-hub', name: 'Single-Page Epic Hub & Graph', epicId: 'EC-core' },
-  { id: 'specs-blueprint-standards', name: 'Blueprint Standards v0.1.2', epicId: 'EC-specs' },
-  { id: 'specs-skills-evolution', name: 'Skills Evolution & Wave Tasks', epicId: 'EC-specs' },
-  { id: 'specs-migration-engine', name: 'Migration Engine v0.1.2', epicId: 'EC-specs' },
+  { id: 'core-host-runtime', name: 'Host Runtime & Local Server', epicId: 'ec-core' },
+  { id: 'core-security-auth', name: 'LAN Security & Local Auth', epicId: 'ec-core' },
+  { id: 'core-local-storage', name: 'Embedded Storage Engines', epicId: 'ec-core' },
+  { id: 'core-discovery', name: 'Multi-Project Discovery', epicId: 'ec-core' },
+  { id: 'core-mcp-tools', name: 'Deterministic SDD Tools', epicId: 'ec-core' },
+  { id: 'core-webui-shell', name: 'WebUI Shell & Dockable Panels', epicId: 'ec-core' },
+  { id: 'core-epic-hub', name: 'Single-Page Epic Hub & Graph', epicId: 'ec-core' },
+  { id: 'specs-blueprint-standards', name: 'Blueprint Standards v0.1.2', epicId: 'ec-specs' },
+  { id: 'specs-skills-evolution', name: 'Skills Evolution & Wave Tasks', epicId: 'ec-specs' },
+  { id: 'specs-migration-engine', name: 'Migration Engine v0.1.2', epicId: 'ec-specs' },
+  { id: 'fast-trace', name: 'Fast-Trace Binary Parser', epicId: '', isStandalone: true },
 ];
 
 const defaultCodeFiles = [

@@ -89,8 +89,8 @@ async fn test_project_management_rest_api() {
     assert_eq!(epics_res.status(), 200);
 
     let epics: Vec<serde_json::Value> = epics_res.json().await.expect("Should parse as JSON");
-    assert!(epics.iter().any(|e| e["id"] == "EC-core"));
-    assert!(epics.iter().any(|e| e["id"] == "EC-specs"));
+    assert!(epics.iter().any(|e| e["id"] == "ec-core"));
+    assert!(epics.iter().any(|e| e["id"] == "ec-specs"));
 
     // 6. GET /api/v1/features
     let feat_res = client
@@ -103,6 +103,7 @@ async fn test_project_management_rest_api() {
     let features: Vec<serde_json::Value> = feat_res.json().await.expect("Should parse as JSON");
     assert!(features.iter().any(|f| f["id"] == "core-host-runtime"));
     assert!(features.iter().any(|f| f["id"] == "specs-blueprint-standards"));
+    assert!(features.iter().any(|f| f["id"] == "fast-trace"));
 
     server_task.abort();
 }

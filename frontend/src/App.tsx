@@ -23,8 +23,8 @@ const mockProjects = [
 ];
 
 const mockEpicsData: Record<string, EpicData> = {
-  'EC-core': {
-    id: 'EC-core',
+  'ec-core': {
+    id: 'ec-core',
     title: 'AICO Core SDD Platform',
     status: 'In Progress',
     verifiedCount: 48,
@@ -38,8 +38,8 @@ const mockEpicsData: Record<string, EpicData> = {
       assets: 'Multi-modal reference designs, mockups, and assets.',
     },
   },
-  'EC-specs': {
-    id: 'EC-specs',
+  'ec-specs': {
+    id: 'ec-specs',
     title: 'AICO SDD Blueprints & Migration',
     status: 'Completed',
     verifiedCount: 12,
@@ -59,10 +59,10 @@ const defaultFeaturesData: Record<string, FeatureData> = {
   'core-host-runtime': {
     id: 'core-host-runtime',
     name: 'Host Runtime & Local HTTP/WS Server',
-    epicId: 'EC-core',
-    specId: 'SPEC-core-host-runtime',
+    epicId: 'ec-core',
+    specId: 'spec-core-host-runtime',
     specTitle: 'Host Runtime & Local HTTP/WebSocket Server',
-    planId: 'PLAN-core-host-runtime',
+    planId: 'plan-core-host-runtime',
     planTitle: 'Host Runtime & Local Axum Server',
     status: 'Completed',
     order: 1,
@@ -70,10 +70,10 @@ const defaultFeaturesData: Record<string, FeatureData> = {
   'core-security-auth': {
     id: 'core-security-auth',
     name: 'LAN Security & Local Authentication',
-    epicId: 'EC-core',
-    specId: 'SPEC-core-security-auth',
+    epicId: 'ec-core',
+    specId: 'spec-core-security-auth',
     specTitle: 'LAN Security & Local Authentication',
-    planId: 'PLAN-core-security-auth',
+    planId: 'plan-core-security-auth',
     planTitle: 'LAN Security & Local Authentication',
     status: 'Completed',
     order: 2,
@@ -81,10 +81,10 @@ const defaultFeaturesData: Record<string, FeatureData> = {
   'core-local-storage': {
     id: 'core-local-storage',
     name: 'Local Storage & Embedded Engine Lifecycle',
-    epicId: 'EC-core',
-    specId: 'SPEC-core-local-storage',
+    epicId: 'ec-core',
+    specId: 'spec-core-local-storage',
     specTitle: 'Local Storage & Embedded Engine Lifecycle',
-    planId: 'PLAN-core-local-storage',
+    planId: 'plan-core-local-storage',
     planTitle: 'Local Storage & Embedded Engine Lifecycle',
     status: 'Completed',
     order: 3,
@@ -92,10 +92,10 @@ const defaultFeaturesData: Record<string, FeatureData> = {
   'core-discovery': {
     id: 'core-discovery',
     name: 'Workspace & Multi-Project Discovery',
-    epicId: 'EC-core',
-    specId: 'SPEC-core-discovery',
+    epicId: 'ec-core',
+    specId: 'spec-core-discovery',
     specTitle: 'Workspace & Multi-Project Discovery',
-    planId: 'PLAN-core-discovery',
+    planId: 'plan-core-discovery',
     planTitle: 'Workspace & Multi-Project Discovery',
     status: 'Completed',
     order: 4,
@@ -103,10 +103,10 @@ const defaultFeaturesData: Record<string, FeatureData> = {
   'core-mcp-tools': {
     id: 'core-mcp-tools',
     name: 'Deterministic SDD Tool Registration',
-    epicId: 'EC-core',
-    specId: 'SPEC-core-mcp-tools',
+    epicId: 'ec-core',
+    specId: 'spec-core-mcp-tools',
     specTitle: 'Deterministic SDD Tool Registration',
-    planId: 'PLAN-core-mcp-tools',
+    planId: 'plan-core-mcp-tools',
     planTitle: 'Deterministic SDD Tool Registration',
     status: 'Completed',
     order: 5,
@@ -114,10 +114,10 @@ const defaultFeaturesData: Record<string, FeatureData> = {
   'core-webui-shell': {
     id: 'core-webui-shell',
     name: 'WebUI Workspace Shell & Dockable Layout',
-    epicId: 'EC-core',
-    specId: 'SPEC-core-webui-shell',
+    epicId: 'ec-core',
+    specId: 'spec-core-webui-shell',
     specTitle: 'WebUI Workspace Shell & Dockable Layout',
-    planId: 'PLAN-core-webui-shell',
+    planId: 'plan-core-webui-shell',
     planTitle: 'WebUI Workspace Shell & Dockable Layout',
     status: 'Completed',
     order: 6,
@@ -125,10 +125,10 @@ const defaultFeaturesData: Record<string, FeatureData> = {
   'core-epic-hub': {
     id: 'core-epic-hub',
     name: 'Single-Page Epic Hub & Lineage Graph',
-    epicId: 'EC-core',
-    specId: 'SPEC-core-epic-hub',
+    epicId: 'ec-core',
+    specId: 'spec-core-epic-hub',
     specTitle: 'Single-Page Epic Hub & Lineage Graph',
-    planId: 'PLAN-core-epic-hub',
+    planId: 'plan-core-epic-hub',
     planTitle: 'Single-Page Epic Hub & Lineage Graph',
     status: 'Completed',
     order: 7,
@@ -136,10 +136,10 @@ const defaultFeaturesData: Record<string, FeatureData> = {
   'specs-blueprint-standards': {
     id: 'specs-blueprint-standards',
     name: 'AICO SDD Blueprint Standards v0.1.2',
-    epicId: 'EC-specs',
-    specId: 'SPEC-specs-blueprint-standards',
+    epicId: 'ec-specs',
+    specId: 'spec-specs-blueprint-standards',
     specTitle: 'AICO SDD Blueprint Standards v0.1.2',
-    planId: 'PLAN-specs-blueprint-standards',
+    planId: 'plan-specs-blueprint-standards',
     planTitle: 'AICO SDD Blueprint Standards v0.1.2',
     status: 'Completed',
     order: 1,
@@ -147,10 +147,10 @@ const defaultFeaturesData: Record<string, FeatureData> = {
   'specs-skills-evolution': {
     id: 'specs-skills-evolution',
     name: 'AICO Skills Evolution & Wave-Internal Tasks',
-    epicId: 'EC-specs',
-    specId: 'SPEC-specs-skills-evolution',
+    epicId: 'ec-specs',
+    specId: 'spec-specs-skills-evolution',
     specTitle: 'AICO Skills Evolution & Wave-Internal Tasks',
-    planId: 'PLAN-specs-skills-evolution',
+    planId: 'plan-specs-skills-evolution',
     planTitle: 'AICO Skills Evolution & Wave-Internal Tasks',
     status: 'Completed',
     order: 2,
@@ -158,13 +158,24 @@ const defaultFeaturesData: Record<string, FeatureData> = {
   'specs-migration-engine': {
     id: 'specs-migration-engine',
     name: 'AICO Spec Migration Engine v0.1.2',
-    epicId: 'EC-specs',
-    specId: 'SPEC-specs-migration-engine',
+    epicId: 'ec-specs',
+    specId: 'spec-specs-migration-engine',
     specTitle: 'AICO Spec Migration Engine v0.1.2',
-    planId: 'PLAN-specs-migration-engine',
+    planId: 'plan-specs-migration-engine',
     planTitle: 'AICO Spec Migration Engine v0.1.2',
     status: 'Completed',
     order: 3,
+  },
+  'fast-trace': {
+    id: 'fast-trace',
+    name: 'Fast-Trace Binary Parser',
+    isStandalone: true,
+    specId: 'spec-fast-trace',
+    specTitle: 'Fast-Trace Binary Parser',
+    planId: 'plan-fast-trace',
+    planTitle: 'Fast-Trace Binary Parser',
+    status: 'Completed',
+    order: 1,
   },
 };
 
@@ -417,12 +428,25 @@ const MainWorkspace: React.FC = () => {
     }
 
     if (activeTab.type === 'feature') {
-      const featData = defaultFeaturesData[activeTab.id] || {
-        id: activeTab.id,
-        name: activeTab.title,
-        epicId: 'EC-core',
-        status: 'In Progress',
-      };
+      const disc = discoveredFeatures.find((f) => f.id === activeTab.id);
+      const isStandalone = Boolean(
+        disc?.isStandalone || activeTab.id === 'fast-trace' || defaultFeaturesData[activeTab.id]?.isStandalone
+      );
+      const featData: FeatureData = defaultFeaturesData[activeTab.id]
+        ? { ...defaultFeaturesData[activeTab.id] }
+        : {
+            id: activeTab.id,
+            name: activeTab.title,
+            epicId: isStandalone ? undefined : (disc?.epicId || 'ec-core'),
+            isStandalone,
+            status: 'In Progress',
+          };
+
+      if (isStandalone) {
+        featData.isStandalone = true;
+        featData.epicId = undefined;
+      }
+
       return (
         <FeatureViewer
           feature={featData}
@@ -438,7 +462,7 @@ const MainWorkspace: React.FC = () => {
         <SpecViewer
           specId={activeTab.id}
           title={activeTab.title}
-          onBack={() => handleOpenEpic('001-aico-core')}
+          onBack={() => handleOpenEpic('ec-core')}
         />
       );
     }

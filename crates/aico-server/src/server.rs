@@ -351,11 +351,12 @@ pub fn scan_epics_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredEpi
                 let mut status = "In Progress".to_string();
                 let mut epic_order = None;
 
-                // Look for BRAIN-*.md
+                // Look for brain-*.md or BRAIN-*.md
                 if let Ok(files) = std::fs::read_dir(&path) {
                     for f in files.flatten() {
                         let fname = f.file_name().to_string_lossy().to_string();
-                        if fname.starts_with("BRAIN-") && fname.ends_with(".md") {
+                        let fname_lower = fname.to_lowercase();
+                        if fname_lower.starts_with("brain-") && fname_lower.ends_with(".md") {
                             if let Ok(content) = std::fs::read_to_string(f.path()) {
                                 let (_, fm_title, fm_status, fm_order) = parse_frontmatter(&content);
                                 if let Some(t) = fm_title {
@@ -391,7 +392,7 @@ pub fn scan_epics_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredEpi
                         for feat_entry in sorted_features {
                             let feat_path = feat_entry.path();
                             if feat_path.is_dir() {
-                                let feat_id = feat_path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                                let feat_id = feat_path.file_name().unwrap_or_default().to_string_lossy().to_string().to_lowercase();
                                 let mut feat_spec_id = None;
                                 let mut feat_spec_title = None;
                                 let mut feat_plan_id = None;
@@ -402,15 +403,16 @@ pub fn scan_epics_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredEpi
                                 if let Ok(sfiles) = std::fs::read_dir(&feat_path) {
                                     for sf in sfiles.flatten() {
                                         let sfname = sf.file_name().to_string_lossy().to_string();
-                                        if sfname.starts_with("SPEC-") && sfname.ends_with(".md") {
-                                            let mut s_id = sfname.trim_end_matches(".md").to_string();
+                                        let sfname_lower = sfname.to_lowercase();
+                                        if sfname_lower.starts_with("spec-") && sfname_lower.ends_with(".md") {
+                                            let mut s_id = sfname.trim_end_matches(".md").to_string().to_lowercase();
                                             let mut s_title = s_id.clone();
                                             let mut s_status = "In Progress".to_string();
 
                                             if let Ok(scontent) = std::fs::read_to_string(sf.path()) {
                                                 let (fm_id, fm_title, fm_status, fm_order) = parse_frontmatter(&scontent);
                                                 if let Some(fid) = fm_id {
-                                                    s_id = fid;
+                                                    s_id = fid.to_lowercase();
                                                 }
                                                 if let Some(ftitle) = fm_title {
                                                     s_title = ftitle;
@@ -434,14 +436,14 @@ pub fn scan_epics_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredEpi
                                                 path: sf.path().to_string_lossy().to_string(),
                                                 order: feat_order,
                                             });
-                                        } else if sfname.starts_with("PLAN-") && sfname.ends_with(".md") {
-                                            let mut p_id = sfname.trim_end_matches(".md").to_string();
+                                        } else if sfname_lower.starts_with("plan-") && sfname_lower.ends_with(".md") {
+                                            let mut p_id = sfname.trim_end_matches(".md").to_string().to_lowercase();
                                             let mut p_title = p_id.clone();
 
                                             if let Ok(pcontent) = std::fs::read_to_string(sf.path()) {
                                                 let (fm_id, fm_title, _, fm_order) = parse_frontmatter(&pcontent);
                                                 if let Some(fid) = fm_id {
-                                                    p_id = fid;
+                                                    p_id = fid.to_lowercase();
                                                 }
                                                 if let Some(ftitle) = fm_title {
                                                     p_title = ftitle;
@@ -514,7 +516,7 @@ pub fn scan_standalone_features_for_project(specs_path: &std::path::Path) -> Vec
         for entry in sorted {
             let path = entry.path();
             if path.is_dir() {
-                let feat_id = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                let feat_id = path.file_name().unwrap_or_default().to_string_lossy().to_string().to_lowercase();
                 let mut feat_spec_id = None;
                 let mut feat_spec_title = None;
                 let mut feat_plan_id = None;
@@ -525,14 +527,15 @@ pub fn scan_standalone_features_for_project(specs_path: &std::path::Path) -> Vec
                 if let Ok(files) = std::fs::read_dir(&path) {
                     for f in files.flatten() {
                         let fname = f.file_name().to_string_lossy().to_string();
-                        if fname.starts_with("SPEC-") && fname.ends_with(".md") {
-                            let mut s_id = fname.trim_end_matches(".md").to_string();
+                        let fname_lower = fname.to_lowercase();
+                        if fname_lower.starts_with("spec-") && fname_lower.ends_with(".md") {
+                            let mut s_id = fname.trim_end_matches(".md").to_string().to_lowercase();
                             let mut s_title = s_id.clone();
                             let mut s_status = "In Progress".to_string();
 
                             if let Ok(scontent) = std::fs::read_to_string(f.path()) {
                                 let (fm_id, fm_title, fm_status, fm_order) = parse_frontmatter(&scontent);
-                                if let Some(fid) = fm_id { s_id = fid; }
+                                if let Some(fid) = fm_id { s_id = fid.to_lowercase(); }
                                 if let Some(ftitle) = fm_title { s_title = ftitle; }
                                 if let Some(fstatus) = fm_status { s_status = fstatus; }
                                 if let Some(forder) = fm_order { feat_order = Some(forder); }
@@ -540,12 +543,12 @@ pub fn scan_standalone_features_for_project(specs_path: &std::path::Path) -> Vec
                             feat_spec_id = Some(s_id);
                             feat_spec_title = Some(s_title);
                             feat_status = s_status;
-                        } else if fname.starts_with("PLAN-") && fname.ends_with(".md") {
-                            let mut p_id = fname.trim_end_matches(".md").to_string();
+                        } else if fname_lower.starts_with("plan-") && fname_lower.ends_with(".md") {
+                            let mut p_id = fname.trim_end_matches(".md").to_string().to_lowercase();
                             let mut p_title = p_id.clone();
                             if let Ok(pcontent) = std::fs::read_to_string(f.path()) {
                                 let (fm_id, fm_title, _, fm_order) = parse_frontmatter(&pcontent);
-                                if let Some(fid) = fm_id { p_id = fid; }
+                                if let Some(fid) = fm_id { p_id = fid.to_lowercase(); }
                                 if let Some(ftitle) = fm_title { p_title = ftitle; }
                                 if feat_order.is_none() && fm_order.is_some() { feat_order = fm_order; }
                             }
@@ -559,7 +562,7 @@ pub fn scan_standalone_features_for_project(specs_path: &std::path::Path) -> Vec
                 standalone.push(DiscoveredFeatureInfo {
                     id: feat_id,
                     name: feat_display_name,
-                    epic_id: "standalone".to_string(),
+                    epic_id: "".to_string(),
                     spec_id: feat_spec_id,
                     spec_title: feat_spec_title,
                     plan_id: feat_plan_id,

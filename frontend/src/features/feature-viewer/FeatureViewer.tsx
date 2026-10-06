@@ -1,14 +1,19 @@
 import React, { useState } from 'react';
 import {
-  BookOpen,
-  CheckSquare,
-  ShieldCheck,
-  ArrowRight,
-  Sparkles,
+  ExternalLink,
+  ChevronDown,
+  ChevronRight,
   Layers,
+  FileText,
+  CheckSquare,
+  GitFork,
+  ShieldCheck,
+  FolderArchive,
+  ArrowRight,
   CheckCircle2,
-  Code2
+  BookOpen,
 } from 'lucide-react';
+import { FileDropZone } from '../../components/common/FileDropZone';
 
 export interface FeatureRequirement {
   id: string; // e.g. "REQ-001"
@@ -19,26 +24,32 @@ export interface FeatureRequirement {
 }
 
 export interface FeatureTaskWave {
+  waveNumber: number;
   name: string;
+  stage: 'Scaffolding' | 'Implementation' | 'Verification';
   description: string;
-  status: 'Done' | 'In Progress' | 'Pending';
+  tasks: Array<{
+    id: string;
+    title: string;
+    status: 'Done' | 'In Progress' | 'Pending' | 'Blocked';
+    seam?: string;
+    deps?: string[];
+  }>;
 }
 
 export interface FeatureTask {
-  id: string; // e.g. "TASK-core-runtime-01"
+  id: string;
   title: string;
   status: 'Done' | 'In Progress' | 'Pending' | 'Blocked' | 'Skipped/Canceled' | 'Rewritten';
   blockedBy?: string[];
   waves?: FeatureTaskWave[];
   verificationSeam?: string;
-  reason?: string;
-  rewriteTarget?: string;
 }
 
 export interface FeatureData {
-  id: string; // e.g. "core-host-runtime"
+  id: string; // e.g. "core-host-runtime" or "fast-trace"
   name: string;
-  epicId?: string; // e.g. "EC-core" or "standalone"
+  epicId?: string; // e.g. "ec-core" or undefined/""
   specId?: string;
   specTitle?: string;
   planId?: string;
@@ -53,600 +64,881 @@ export interface FeatureData {
   adrs?: Array<{ id: string; title: string }>;
 }
 
-interface FeatureViewerProps {
+export interface FeatureViewerProps {
   feature: FeatureData;
+  onPopOut?: (featureId: string, section: string) => void;
   onOpenSpec?: (specId: string, title: string) => void;
   onOpenPlan?: (planId: string, title: string) => void;
   onOpenAdr?: (adrId: string) => void;
+  uploadedFiles?: string[];
+  onFileUpload?: (file: File) => void;
 }
 
 // @implements SPEC-CORE-007::REQ-001
 // @implements SPEC-CORE-007::REQ-004
 export const FeatureViewer: React.FC<FeatureViewerProps> = ({
   feature,
+  onPopOut,
   onOpenSpec,
   onOpenPlan,
   onOpenAdr,
+  uploadedFiles = [],
+  onFileUpload,
 }) => {
-  const [activeView, setActiveView] = useState<'overview' | 'requirements' | 'waves' | 'spec' | 'plan'>('overview');
-  const [selectedPattern, setSelectedPattern] = useState<string>('All');
+  // Accordion state mirroring EpicHubView:
+  // Overview: open by default (collapsed = false)
+  // Left column (Brainstorm, Specs, Deep Dive, Lineage, Assets): closed by default (collapsed = true)
+  // Right column (Task Plan): open by default (collapsed = false)
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
+    overview: false,
+    brainstorm: true,
+    specifications: true,
+    deepDive: true,
+    lineage: true,
+    assets: true,
+    taskPlan: false,
+  });
 
-  // Compute stats
-  const totalTasks = feature.tasks?.length || 6;
-  const doneTasks = feature.tasks?.filter((t) => t.status === 'Done').length || (feature.status === 'Completed' ? totalTasks : 2);
-  const taskProgressPct = Math.round((doneTasks / totalTasks) * 100);
+  const toggleSection = (section: string) => {
+    setCollapsedSections((prev) => ({
+      ...prev,
+      [section]: !prev[section],
+    }));
+  };
 
-  const defaultReqs: FeatureRequirement[] = [
-    {
-      id: 'REQ-001',
-      pattern: 'Ubiquitous',
-      statement: 'The HostDaemon shall acquire a single-instance file lock on startup to prevent conflicting processes.',
-      status: 'Verified',
-      seam: 'crates/aico-server/tests/server_test.rs::test_server_binds_to_available_port',
-    },
-    {
-      id: 'REQ-002',
-      pattern: 'Event-Driven',
-      statement: 'When started, the HostDaemon shall bind to a free TCP port in the 4242..4252 range.',
-      status: 'Verified',
-      seam: 'crates/aico-server/tests/server_test.rs::test_server_binds_to_available_port',
-    },
-    {
-      id: 'REQ-003',
-      pattern: 'Event-Driven',
-      statement: 'When receiving SIGTERM or Ctrl+C, the HostDaemon shall broadcast graceful drain events and exit within 500ms.',
-      status: 'Verified',
-      seam: 'crates/aico-server/tests/shutdown_test.rs::test_server_graceful_shutdown_broadcasts_and_drains',
-    },
-    {
-      id: 'REQ-004',
-      pattern: 'State-Driven',
-      statement: 'While the server is running, the WebSocketHub shall maintain real-time bi-directional streaming across connected WebUI clients.',
-      status: 'Verified',
-      seam: 'crates/aico-server/tests/ws_test.rs::test_websocket_connect_and_broadcast',
-    },
-    {
-      id: 'REQ-005',
-      pattern: 'Ubiquitous',
-      statement: 'The HealthProbe shall respond with HTTP 200 and uptime metrics at /api/v1/health.',
-      status: 'Verified',
-      seam: 'crates/aico-server/tests/server_test.rs::test_health_check_endpoint',
-    },
-    {
-      id: 'REQ-006',
-      pattern: 'Unwanted Behavior',
-      statement: 'If a socket fails to bind or authentication token is malformed, then the SecurityGate shall reject connection with 401 Unauthorized.',
-      status: 'Verified',
-      seam: 'crates/aico-server/tests/auth_test.rs::test_lan_authenticator_token_generation_and_validation',
-    },
-  ];
+  const isStandalone = Boolean(
+    feature.isStandalone ||
+      !feature.epicId ||
+      feature.epicId === 'standalone' ||
+      feature.epicId === ''
+  );
+
+  const isFastTrace = feature.id.toLowerCase() === 'fast-trace';
+
+  // Default EARS requirements
+  const defaultReqs: FeatureRequirement[] = isFastTrace
+    ? [
+        {
+          id: 'REQ-001',
+          pattern: 'Ubiquitous',
+          statement:
+            'The system SHALL scan all workspace source files for @implements <spec_id>::<req_id> annotations upon request.',
+          status: 'Verified',
+          seam: 'crates/aico-core/src/trace.rs::scan_workspace_annotations',
+        },
+        {
+          id: 'REQ-002',
+          pattern: 'Event-Driven',
+          statement:
+            'WHEN a source annotation is encountered, the system SHALL cross-reference the requirement ID against parsed specifications in the active project.',
+          status: 'Verified',
+          seam: 'crates/aico-core/src/trace.rs::validate_requirement_references',
+        },
+        {
+          id: 'REQ-003',
+          pattern: 'Unwanted Behavior',
+          statement:
+            'IF an annotation references a non-existent specification or requirement ID, THEN the system SHALL report an unresolved diagnostic warning with the exact source path and line number.',
+          status: 'Verified',
+          seam: 'crates/aico-core/tests/trace_test.rs::test_broken_annotation_diagnostics',
+        },
+      ]
+    : [
+        {
+          id: 'REQ-001',
+          pattern: 'Ubiquitous',
+          statement:
+            'The HostDaemon shall acquire a single-instance file lock on startup to prevent conflicting processes.',
+          status: 'Verified',
+          seam: 'crates/aico-server/tests/server_test.rs::test_server_binds_to_available_port',
+        },
+        {
+          id: 'REQ-002',
+          pattern: 'Event-Driven',
+          statement:
+            'When started, the HostDaemon shall bind to a free TCP port in the 4242..4252 range.',
+          status: 'Verified',
+          seam: 'crates/aico-server/tests/server_test.rs::test_server_binds_to_available_port',
+        },
+        {
+          id: 'REQ-003',
+          pattern: 'Event-Driven',
+          statement:
+            'When receiving SIGTERM or Ctrl+C, the HostDaemon shall broadcast graceful drain events and exit within 500ms.',
+          status: 'Verified',
+          seam: 'crates/aico-server/tests/shutdown_test.rs::test_server_graceful_shutdown_broadcasts_and_drains',
+        },
+        {
+          id: 'REQ-004',
+          pattern: 'State-Driven',
+          statement:
+            'While the server is running, the WebSocketHub shall maintain real-time bi-directional streaming across connected WebUI clients.',
+          status: 'Verified',
+          seam: 'crates/aico-server/tests/ws_test.rs::test_websocket_connect_and_broadcast',
+        },
+        {
+          id: 'REQ-005',
+          pattern: 'Ubiquitous',
+          statement:
+            'The HealthProbe shall respond with HTTP 200 and uptime metrics at /api/v1/health.',
+          status: 'Verified',
+          seam: 'crates/aico-server/tests/server_test.rs::test_health_check_endpoint',
+        },
+        {
+          id: 'REQ-006',
+          pattern: 'Unwanted Behavior',
+          statement:
+            'If a socket fails to bind or authentication token is malformed, then the SecurityGate shall reject connection with 401 Unauthorized.',
+          status: 'Verified',
+          seam: 'crates/aico-server/tests/auth_test.rs::test_lan_authenticator_token_generation_and_validation',
+        },
+      ];
 
   const requirementsList = feature.requirements || defaultReqs;
-  const filteredReqs = selectedPattern === 'All'
-    ? requirementsList
-    : requirementsList.filter((r) => r.pattern === selectedPattern);
 
-  const defaultTasks: FeatureTask[] = [
-    {
-      id: `TASK-${feature.id}-01`,
-      title: 'Scaffold trait interfaces and designated public test seams',
-      status: 'Done',
-      waves: [
-        { name: 'Wave 1 (Scaffolding)', description: 'Scaffold HostDaemon trait & red integration tests', status: 'Done' },
-        { name: 'Wave 2 (Implementation)', description: 'Implement PID lock and TCP port scanner', status: 'Done' },
-        { name: 'Wave 3 (Verification)', description: 'Verify duplicate process collision handling', status: 'Done' },
-      ],
-      verificationSeam: 'crates/aico-server/tests/server_test.rs::test_server_binds_to_available_port',
-    },
-    {
-      id: `TASK-${feature.id}-02`,
-      title: 'Axum HTTP routes, health probe, and graceful shutdown signal drain',
-      status: 'Done',
-      waves: [
-        { name: 'Wave 1 (Scaffolding)', description: 'Failing probe tests at /api/v1/health', status: 'Done' },
-        { name: 'Wave 2 (Implementation)', description: 'Router setup and shutdown broadcast loop', status: 'Done' },
-        { name: 'Wave 3 (Verification)', description: 'Assert 500ms timeout on graceful exit', status: 'Done' },
-      ],
-      verificationSeam: 'crates/aico-server/tests/shutdown_test.rs::test_server_graceful_shutdown_broadcasts_and_drains',
-    },
-    {
-      id: `TASK-${feature.id}-03`,
-      title: 'WebSocket duplex broadcast hub and client subscription channels',
-      status: 'Done',
-      waves: [
-        { name: 'Wave 1 (Scaffolding)', description: 'Red WebSocket mock client connection tests', status: 'Done' },
-        { name: 'Wave 2 (Implementation)', description: 'Broadcast channel hub & topic routing', status: 'Done' },
-        { name: 'Wave 3 (Verification)', description: 'Stress-test concurrent client broadcasts', status: 'Done' },
-      ],
-      verificationSeam: 'crates/aico-server/tests/ws_test.rs::test_websocket_connect_and_broadcast',
-    },
-  ];
+  // Execution waves for this feature's Task Plan
+  const defaultWaves: FeatureTaskWave[] = isFastTrace
+    ? [
+        {
+          waveNumber: 1,
+          name: 'Wave 1: Seam Scaffolding / Red Tests',
+          stage: 'Scaffolding',
+          description: 'Define annotation types and failing red test seams',
+          tasks: [
+            {
+              id: 'TASK-FAST-TRACE-001',
+              title: 'Scaffold traceability scanner interfaces & test harnesses',
+              status: 'Done',
+              seam: 'crates/aico-core/src/trace.rs',
+              deps: ['None'],
+            },
+          ],
+        },
+        {
+          waveNumber: 2,
+          name: 'Wave 2: Domain Implementation / Green',
+          stage: 'Implementation',
+          description: 'Single-pass regex & Tree-sitter annotation parser',
+          tasks: [
+            {
+              id: 'TASK-FAST-TRACE-002',
+              title: 'AST annotation parser & specification cross-referencing',
+              status: 'Done',
+              seam: 'crates/aico-core/src/trace.rs',
+              deps: ['TASK-FAST-TRACE-001'],
+            },
+          ],
+        },
+        {
+          waveNumber: 3,
+          name: 'Wave 3: Seam Verification / Hardening',
+          stage: 'Verification',
+          description: 'Orphan diagnostics and automated regression test suite',
+          tasks: [
+            {
+              id: 'TASK-FAST-TRACE-003',
+              title: 'Validate broken references & diagnostic output tests',
+              status: 'Done',
+              seam: 'crates/aico-core/tests/trace_test.rs',
+              deps: ['TASK-FAST-TRACE-002'],
+            },
+          ],
+        },
+      ]
+    : [
+        {
+          waveNumber: 1,
+          name: 'Wave 1: Seam Scaffolding / Red Tests',
+          stage: 'Scaffolding',
+          description: 'Define public trait seams and failing integration tests',
+          tasks: [
+            {
+              id: `TASK-${feature.id.toUpperCase()}-001`,
+              title: 'Scaffold trait interfaces and designated public test seams',
+              status: 'Done',
+              seam: `crates/aico-server/tests/server_test.rs`,
+              deps: ['None'],
+            },
+          ],
+        },
+        {
+          waveNumber: 2,
+          name: 'Wave 2: Domain Implementation / Green',
+          stage: 'Implementation',
+          description: 'Core domain logic, route handlers, and state management',
+          tasks: [
+            {
+              id: `TASK-${feature.id.toUpperCase()}-002`,
+              title: 'Domain implementation & state transition handlers',
+              status: 'Done',
+              seam: `crates/aico-server/src/server.rs`,
+              deps: [`TASK-${feature.id.toUpperCase()}-001`],
+            },
+          ],
+        },
+        {
+          waveNumber: 3,
+          name: 'Wave 3: Seam Verification / Hardening',
+          stage: 'Verification',
+          description: 'Boundary contract tests and regression verification',
+          tasks: [
+            {
+              id: `TASK-${feature.id.toUpperCase()}-003`,
+              title: 'Automated contract verification & edge-case coverage',
+              status: 'Done',
+              seam: `crates/aico-server/tests/shutdown_test.rs`,
+              deps: [`TASK-${feature.id.toUpperCase()}-002`],
+            },
+          ],
+        },
+      ];
 
-  const tasksList = feature.tasks || defaultTasks;
+  const totalTasks = defaultWaves.reduce((acc, w) => acc + w.tasks.length, 0);
+  const doneTasks = defaultWaves.reduce(
+    (acc, w) => acc + w.tasks.filter((t) => t.status === 'Done').length,
+    0
+  );
+  const taskProgressPct = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 100;
 
-  const defaultAdrs = [
-    { id: 'ADR-0001', title: 'Host Runtime & Network Topology' },
-    { id: 'ADR-0003', title: 'Security & Auto-Mode Enforcement' },
-    { id: 'ADR-0008', title: 'Unified Discovery & Project Manifest' },
-    { id: 'ADR-0010', title: 'SDD Structural Grammar v0.1.2' },
-  ];
+  const defaultAdrs = isFastTrace
+    ? [
+        { id: 'ADR-0010', title: 'SDD Structural Grammar, Standalone Features & Naming' },
+        { id: 'ADR-0008', title: 'Unified Discovery & Project Manifest' },
+      ]
+    : [
+        { id: 'ADR-0001', title: 'Host Runtime & Network Topology' },
+        { id: 'ADR-0003', title: 'Security & Auto-Mode Enforcement' },
+        { id: 'ADR-0008', title: 'Unified Discovery & Project Manifest' },
+        { id: 'ADR-0010', title: 'SDD Structural Grammar v0.1.2' },
+      ];
   const adrsList = feature.adrs || defaultAdrs;
 
-  const isStandalone = feature.isStandalone || feature.epicId === 'standalone' || !feature.epicId;
+  const specIdentifier = feature.specId || `spec-${feature.id}`;
+  const specDisplayName = feature.specTitle || feature.name;
+  const planIdentifier = feature.planId || `plan-${feature.id}`;
+  const planDisplayName = feature.planTitle || `${feature.name} Plan`;
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6 text-zinc-100">
-      {/* 1. Header Banner */}
-      <div className="bg-zinc-900/90 border border-zinc-800 rounded-xl p-6 shadow-sm space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <span className="font-mono text-xs px-2.5 py-1 rounded bg-zinc-800 text-indigo-400 font-bold border border-zinc-700">
-                FEATURE: {feature.id}
+    <div className="p-6 max-w-7xl mx-auto space-y-6 text-zinc-100">
+      {/* 1. Feature Header Banner */}
+      <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+        <div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="font-mono text-xs px-2.5 py-0.5 rounded bg-zinc-800 text-indigo-400 font-bold border border-zinc-700">
+              FEATURE: {feature.id}
+            </span>
+            <span
+              className={`text-[10px] px-2.5 py-0.5 rounded-full font-mono font-semibold ${
+                feature.status === 'Completed' || feature.status === 'Done'
+                  ? 'bg-emerald-950/70 text-emerald-400 border border-emerald-800'
+                  : 'bg-amber-950/70 text-amber-400 border border-amber-800'
+              }`}
+            >
+              {feature.status}
+            </span>
+            {isStandalone ? (
+              <span className="text-[10px] px-2.5 py-0.5 rounded-full font-mono font-semibold bg-purple-950/70 text-purple-400 border border-purple-800">
+                Standalone Feature
               </span>
-              <span
-                className={`text-[10px] px-2 py-0.5 rounded font-mono font-semibold ${
-                  feature.status === 'Completed' || feature.status === 'Done'
-                    ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                    : 'bg-amber-950 text-amber-400 border border-amber-800'
-                }`}
-              >
-                {feature.status}
+            ) : (
+              <span className="text-[10px] px-2.5 py-0.5 rounded-full font-mono bg-zinc-800 text-zinc-400 border border-zinc-700">
+                Epic: <span className="text-indigo-400 font-semibold">{feature.epicId}</span>
               </span>
-              {isStandalone ? (
-                <span className="text-[10px] px-2 py-0.5 rounded font-mono bg-purple-950 text-purple-400 border border-purple-800">
-                  Standalone Feature
-                </span>
-              ) : (
-                <span className="text-[10px] px-2 py-0.5 rounded font-mono bg-zinc-800 text-zinc-400 border border-zinc-700">
-                  Epic: <span className="text-indigo-400 font-semibold">{feature.epicId}</span>
-                </span>
-              )}
-              {feature.order && (
-                <span className="text-[10px] px-2 py-0.5 rounded font-mono bg-zinc-800/60 text-zinc-400 border border-zinc-700/60">
-                  Order #{feature.order}
-                </span>
-              )}
-            </div>
-            <h1 className="text-2xl font-bold tracking-tight text-zinc-100">
-              {feature.name}
-            </h1>
+            )}
+            {feature.order && (
+              <span className="text-[10px] px-2 py-0.5 rounded font-mono bg-zinc-800/60 text-zinc-400 border border-zinc-700/60">
+                Order #{feature.order}
+              </span>
+            )}
           </div>
 
-          {/* View Switcher Tabs */}
-          <div className="flex items-center bg-zinc-950 border border-zinc-800 rounded-lg p-1 text-xs shrink-0 self-start md:self-auto overflow-x-auto">
-            <button
-              onClick={() => setActiveView('overview')}
-              className={`px-3 py-1.5 rounded font-medium transition-colors ${
-                activeView === 'overview'
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              Overview
-            </button>
-            <button
-              onClick={() => setActiveView('requirements')}
-              className={`px-3 py-1.5 rounded font-medium transition-colors ${
-                activeView === 'requirements'
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              EARS Requirements ({requirementsList.length})
-            </button>
-            <button
-              onClick={() => setActiveView('waves')}
-              className={`px-3 py-1.5 rounded font-medium transition-colors ${
-                activeView === 'waves'
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              Tasks & Waves ({tasksList.length})
-            </button>
-            <button
-              onClick={() => setActiveView('spec')}
-              className={`px-3 py-1.5 rounded font-medium transition-colors ${
-                activeView === 'spec'
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              Specification
-            </button>
-            <button
-              onClick={() => setActiveView('plan')}
-              className={`px-3 py-1.5 rounded font-medium transition-colors ${
-                activeView === 'plan'
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              Plan DAG
-            </button>
+          <h1 className="text-2xl font-bold tracking-tight text-zinc-100 mt-2">
+            {feature.name}
+          </h1>
+
+          {/* Quick Jump Spec / Plan Badges */}
+          <div className="flex items-center gap-2 mt-2">
+            <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-sky-950/50 border border-sky-800/60 text-sky-400">
+              {specIdentifier}
+            </span>
+            <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-emerald-950/50 border border-emerald-800/60 text-emerald-400">
+              {planIdentifier}
+            </span>
+            {onOpenSpec && (
+              <button
+                onClick={() => onOpenSpec(specIdentifier, specDisplayName)}
+                className="flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors ml-1 font-medium"
+              >
+                <span>Open Spec Document</span>
+                <ArrowRight className="w-3 h-3 text-zinc-400" />
+              </button>
+            )}
+            {onOpenPlan && (
+              <button
+                onClick={() => onOpenPlan(planIdentifier, planDisplayName)}
+                className="flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors font-medium"
+              >
+                <span>Open Implementation Plan</span>
+                <ArrowRight className="w-3 h-3 text-zinc-400" />
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Feature Progress Bar */}
-        <div className="pt-2 border-t border-zinc-800/80 space-y-1.5">
-          <div className="flex items-center justify-between text-xs text-zinc-400 font-mono">
-            <div className="flex items-center gap-3">
-              <span>Progress: <strong className="text-zinc-200">{taskProgressPct}%</strong></span>
-              <span>•</span>
-              <span>{doneTasks} / {totalTasks} Tasks Done</span>
-              <span>•</span>
-              <span>{requirementsList.length} / {requirementsList.length} Reqs Verified</span>
-            </div>
-            <span className="text-[11px] text-emerald-400 flex items-center gap-1 font-sans">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              Contract Seams Green
-            </span>
-          </div>
-          <div className="w-full bg-zinc-800 h-2 rounded-full overflow-hidden">
-            <div
-              className="bg-emerald-500 h-full rounded-full transition-all duration-500"
-              style={{ width: `${taskProgressPct}%` }}
-            />
-          </div>
+        {/* Contract Seams Green KPI */}
+        <div className="text-right space-y-1">
+          <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-950/60 border border-emerald-800/80 text-emerald-400 text-xs font-medium">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            <span>Contract Seams Green</span>
+          </span>
+          <p className="text-[11px] font-mono text-zinc-400">
+            {doneTasks}/{totalTasks} Tasks Done ({taskProgressPct}%)
+          </p>
         </div>
       </div>
 
-      {/* 2. Overview Tab Content */}
-      {activeView === 'overview' && (
-        <div className="space-y-6">
-          {/* KPI Summary Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 space-y-1">
-              <div className="flex items-center justify-between text-sky-400 text-xs font-semibold">
-                <span className="flex items-center gap-1.5">
-                  <BookOpen className="w-4 h-4" />
-                  EARS Reqs
-                </span>
-                <span className="font-mono text-xs">{requirementsList.length}</span>
-              </div>
-              <p className="text-xs text-zinc-400">Formal behavioral requirements</p>
+      {/* TOP SECTION: Overview (Open by default across full width) */}
+      <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
+        <div
+          onClick={() => toggleSection('overview')}
+          className="flex items-center justify-between px-4 py-3 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors"
+        >
+          <div className="flex items-center gap-2.5 flex-1 min-w-0">
+            {collapsedSections.overview ? (
+              <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+            ) : (
+              <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+            )}
+            <FileText className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+            <span className="font-semibold text-sm text-zinc-200">Overview</span>
+            {collapsedSections.overview && (
+              <span className="text-xs text-zinc-500 truncate ml-2 italic">
+                — {feature.description || 'Executive summary and domain invariants'}
+              </span>
+            )}
+          </div>
+          <button
+            data-testid="popout-overview"
+            onClick={(e) => {
+              e.stopPropagation();
+              onPopOut?.(feature.id, 'overview');
+            }}
+            title="Open in separate tab"
+            className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {!collapsedSections.overview && (
+          <div className="p-5 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-4">
+            {/* Executive Summary */}
+            <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800">
+              <h4 className="text-xs font-semibold text-zinc-200 mb-1">Executive Summary</h4>
+              <p className="text-zinc-400 text-xs leading-relaxed">
+                {isFastTrace
+                  ? 'Provides instantaneous CLI and in-editor validation of @implements and @verifies code comment annotations against formal EARS requirement identifiers across the repository without requiring full test suite execution.'
+                  : feature.description ||
+                    'Autonomous Intelligent Code Orchestrator (AICO) feature module enforcing deterministic contract seams, vertical tracer-bullet DAG execution, and strict EARS behavioral invariants.'}
+              </p>
             </div>
 
-            <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 space-y-1">
-              <div className="flex items-center justify-between text-emerald-400 text-xs font-semibold">
-                <span className="flex items-center gap-1.5">
-                  <CheckSquare className="w-4 h-4" />
-                  Tasks
-                </span>
-                <span className="font-mono text-xs">{doneTasks}/{totalTasks}</span>
+            {/* Domain Invariants & Boundaries */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-lg space-y-1">
+                <span className="font-semibold text-indigo-400 text-xs block">In-Scope Boundaries</span>
+                <p className="text-zinc-400 text-[11px] leading-relaxed">
+                  {isFastTrace
+                    ? 'Single-pass Tree-sitter & regex parsing of source files for SDD tags; cross-referencing against active project specification requirements; orphan reference reporting.'
+                    : 'Encapsulated vertical tracer-bullet execution across public seams; strict EARS behavioral contracts; verified integration test suites.'}
+                </p>
               </div>
-              <p className="text-xs text-zinc-400">Vertical tracer-bullet DAG</p>
-            </div>
-
-            <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 space-y-1">
-              <div className="flex items-center justify-between text-purple-400 text-xs font-semibold">
-                <span className="flex items-center gap-1.5">
-                  <Code2 className="w-4 h-4" />
-                  Test Seams
-                </span>
-                <span className="font-mono text-xs">100% Green</span>
+              <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-lg space-y-1">
+                <span className="font-semibold text-amber-400 text-xs block">Architectural Guarantees</span>
+                <p className="text-zinc-400 text-[11px] leading-relaxed">
+                  {isFastTrace
+                    ? '< 15ms per project scan latency; zero external background daemons; strict backward compatibility with v0.1.2 SDD standard.'
+                    : 'Zero external background daemons; single PID lock; deterministic Model Context Protocol tool gates.'}
+                </p>
               </div>
-              <p className="text-xs text-zinc-400">Designated public contract seams</p>
-            </div>
-
-            <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 space-y-1">
-              <div className="flex items-center justify-between text-amber-400 text-xs font-semibold">
-                <span className="flex items-center gap-1.5">
-                  <Layers className="w-4 h-4" />
-                  Lineage
-                </span>
-                <span className="font-mono text-xs">{adrsList.length} ADRs</span>
-              </div>
-              <p className="text-xs text-zinc-400">Architecture Decision Records</p>
             </div>
           </div>
+        )}
+      </div>
 
-          {/* Architecture Boundaries & Invariants */}
-          <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5 space-y-3">
-            <h3 className="font-semibold text-zinc-200 text-sm flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span>Domain Invariants & System Boundaries</span>
-            </h3>
-            <p className="text-xs text-zinc-300 leading-relaxed">
-              {feature.description ||
-                `This capability encapsulates a single, cohesive vertical slice with verified public seams. All behaviors conform to strict EARS patterns and maintain backward-compatible contracts.`}
-            </p>
-          </div>
-
-          {/* Quick Jump Spec & Plan Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-4 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-xs font-bold text-sky-400 flex items-center gap-1.5">
-                  <BookOpen className="w-4 h-4" />
-                  {feature.specId || `SPEC-${feature.id}`}
-                </span>
-                <span className="text-[10px] text-zinc-500 font-mono">EARS Contract</span>
+      {/* 2-COLUMN SECTION: Left = Brainstorm, Specs, Deep Dive, Lineage, Assets | Right = Task Plan */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+        {/* LEFT COLUMN (All Closed by Default) */}
+        <div className="space-y-3">
+          {/* Brainstorm Accordion */}
+          <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
+            <div
+              onClick={() => toggleSection('brainstorm')}
+              className="flex items-center justify-between px-4 py-3 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors"
+            >
+              <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                {collapsedSections.brainstorm ? (
+                  <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                )}
+                <Layers className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+                <span className="font-semibold text-sm text-zinc-200">Brainstorm</span>
+                {collapsedSections.brainstorm && (
+                  <span className="text-xs text-zinc-500 truncate ml-2 italic">
+                    — Architectural trade-offs and decision matrix
+                  </span>
+                )}
               </div>
-              <p className="text-xs text-zinc-300 font-medium">{feature.specTitle || feature.name}</p>
-              {feature.specId && onOpenSpec && (
-                <button
-                  onClick={() => onOpenSpec(feature.specId!, feature.specTitle || feature.name)}
-                  className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 font-medium pt-1"
-                >
-                  <span>Open Spec Document</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              )}
+              <button
+                data-testid="popout-brainstorm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPopOut?.(feature.id, 'brainstorm');
+                }}
+                title="Open in separate tab"
+                className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+              </button>
             </div>
-
-            <div className="p-4 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-xs font-bold text-emerald-400 flex items-center gap-1.5">
-                  <CheckSquare className="w-4 h-4" />
-                  {feature.planId || `PLAN-${feature.id}`}
-                </span>
-                <span className="text-[10px] text-zinc-500 font-mono">6-State DAG</span>
-              </div>
-              <p className="text-xs text-zinc-300 font-medium">{feature.planTitle || `${feature.name} Plan`}</p>
-              {feature.planId && onOpenPlan && (
-                <button
-                  onClick={() => onOpenPlan(feature.planId!, feature.planTitle || feature.name)}
-                  className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 font-medium pt-1"
-                >
-                  <span>Open Implementation Plan</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Derived Architecture Decision Records (ADRs) */}
-          <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5 space-y-3">
-            <h3 className="font-semibold text-zinc-200 text-sm flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-amber-400" />
-              <span>Architecture Lineage (Derived ADRs)</span>
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {adrsList.map((adr) => (
-                <div
-                  key={adr.id}
-                  onClick={() => onOpenAdr?.(adr.id)}
-                  className="p-2.5 rounded bg-zinc-950/60 border border-zinc-800/80 hover:border-indigo-500/50 cursor-pointer transition-colors flex items-center justify-between group"
-                >
-                  <div className="space-y-0.5">
-                    <span className="font-mono text-[11px] text-indigo-400 font-bold group-hover:text-indigo-300">
-                      {adr.id}
-                    </span>
-                    <p className="text-xs text-zinc-300">{adr.title}</p>
+            {!collapsedSections.brainstorm && (
+              <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-3">
+                <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800 space-y-2">
+                  <h4 className="text-xs font-semibold text-zinc-200">Architectural Trade-Offs</h4>
+                  <div className="overflow-x-auto">
+                    {isFastTrace ? (
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-zinc-800 text-zinc-400">
+                            <th className="pb-1.5 font-medium">Dimension</th>
+                            <th className="pb-1.5 font-medium">Tree-Sitter Pass</th>
+                            <th className="pb-1.5 font-medium">Test Suite Run</th>
+                            <th className="pb-1.5 font-medium">External CLI</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-800/60 text-zinc-300 text-[11px]">
+                          <tr>
+                            <td className="py-1.5 text-indigo-400 font-mono font-semibold">Latency</td>
+                            <td className="py-1.5 text-emerald-400">&lt; 15ms scan</td>
+                            <td className="py-1.5 text-zinc-400">5-15 seconds</td>
+                            <td className="py-1.5 text-zinc-400">200-500ms</td>
+                          </tr>
+                          <tr>
+                            <td className="py-1.5 text-indigo-400 font-mono font-semibold">Dependencies</td>
+                            <td className="py-1.5 text-emerald-400">Zero external runtime</td>
+                            <td className="py-1.5 text-zinc-400">Rust toolchain</td>
+                            <td className="py-1.5 text-zinc-400">Node/Python env</td>
+                          </tr>
+                          <tr>
+                            <td className="py-1.5 text-indigo-400 font-mono font-semibold">Precision</td>
+                            <td className="py-1.5 text-emerald-400">Exact AST node spans</td>
+                            <td className="py-1.5 text-zinc-400">Exit-code only</td>
+                            <td className="py-1.5 text-zinc-400">Regex approximations</td>
+                          </tr>
+                          <tr>
+                            <td className="py-1.5 text-indigo-400 font-mono font-semibold">Decision</td>
+                            <td className="py-1.5 text-emerald-400 font-semibold">Chosen (In-process)</td>
+                            <td className="py-1.5 text-zinc-400">Retain for CI gate</td>
+                            <td className="py-1.5 text-red-400">Reject</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    ) : (
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-zinc-800 text-zinc-400">
+                            <th className="pb-1.5 font-medium">Vector</th>
+                            <th className="pb-1.5 font-medium">Approach</th>
+                            <th className="pb-1.5 font-medium">Rationale</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-800/60 text-zinc-300 text-[11px]">
+                          <tr>
+                            <td className="py-1.5 text-indigo-400 font-mono">Architecture</td>
+                            <td className="py-1.5">In-Process Engine</td>
+                            <td className="py-1.5 text-zinc-400">Zero Docker setup, zero daemon latency.</td>
+                          </tr>
+                          <tr>
+                            <td className="py-1.5 text-indigo-400 font-mono">Verification</td>
+                            <td className="py-1.5">Public Seam Contracts</td>
+                            <td className="py-1.5 text-zinc-400">Tagged with @verifies and validated in CI.</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    )}
                   </div>
-                  <ArrowRight className="w-3.5 h-3.5 text-zinc-600 group-hover:text-zinc-300" />
                 </div>
-              ))}
+              </div>
+            )}
+          </div>
+
+          {/* Specifications Accordion */}
+          <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
+            <div
+              onClick={() => toggleSection('specifications')}
+              className="flex items-center justify-between px-4 py-3 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors"
+            >
+              <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                {collapsedSections.specifications ? (
+                  <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                )}
+                <ShieldCheck className="w-4 h-4 text-sky-400 flex-shrink-0" />
+                <span className="font-semibold text-sm text-zinc-200">
+                  Specifications ({requirementsList.length} Reqs)
+                </span>
+                {collapsedSections.specifications && (
+                  <span className="text-xs text-zinc-500 truncate ml-2 italic">
+                    — Strict EARS syntax and test seams
+                  </span>
+                )}
+              </div>
+              <button
+                data-testid="popout-specifications"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPopOut?.(feature.id, 'specifications');
+                }}
+                title="Open in separate tab"
+                className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+              </button>
             </div>
+            {!collapsedSections.specifications && (
+              <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-2.5">
+                {requirementsList.map((req) => (
+                  <div
+                    key={req.id}
+                    className="p-3 bg-zinc-900/80 rounded-lg border border-zinc-800 space-y-1.5"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs font-bold text-sky-400">{req.id}</span>
+                        <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-300">
+                          {req.pattern}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" />
+                        {req.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-300 leading-relaxed">{req.statement}</p>
+                    {req.seam && (
+                      <div className="text-[10px] text-zinc-500 font-mono pt-1 border-t border-zinc-800/60">
+                        Seam: <span className="text-indigo-400">{req.seam}</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Deep Dive Accordion */}
+          <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
+            <div
+              onClick={() => toggleSection('deepDive')}
+              className="flex items-center justify-between px-4 py-3 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors"
+            >
+              <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                {collapsedSections.deepDive ? (
+                  <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                )}
+                <GitFork className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+                <span className="font-semibold text-sm text-zinc-200">Deep Dive</span>
+                {collapsedSections.deepDive && (
+                  <span className="text-xs text-zinc-500 truncate ml-2 italic">
+                    — Designated test seams and boundary contracts
+                  </span>
+                )}
+              </div>
+              <button
+                data-testid="popout-deepDive"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPopOut?.(feature.id, 'deepDive');
+                }}
+                title="Open in separate tab"
+                className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            {!collapsedSections.deepDive && (
+              <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-2">
+                <div className="p-3 bg-zinc-950/60 rounded-lg border border-zinc-800 space-y-2">
+                  <h4 className="text-xs font-semibold text-zinc-200">Designated Contract Seams</h4>
+                  <div className="space-y-1.5 text-[11px] font-mono text-zinc-400">
+                    {isFastTrace ? (
+                      <>
+                        <div className="p-2 bg-zinc-900 rounded border border-zinc-800">
+                          <span className="text-emerald-400 font-semibold">
+                            crates/aico-core::trace.rs
+                          </span>
+                          <div className="text-zinc-500 text-[10px]">
+                            Single-pass regex & Tree-sitter extractor for SDD annotation tags
+                          </div>
+                        </div>
+                        <div className="p-2 bg-zinc-900 rounded border border-zinc-800">
+                          <span className="text-emerald-400 font-semibold">
+                            crates/aico-core::tests/trace_test.rs
+                          </span>
+                          <div className="text-zinc-500 text-[10px]">
+                            Automated validation for valid, broken, and orphan requirement identifiers
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="p-2 bg-zinc-900 rounded border border-zinc-800">
+                          <span className="text-emerald-400 font-semibold">
+                            crates/aico-server::server.rs
+                          </span>
+                          <div className="text-zinc-500 text-[10px]">
+                            Axum REST routes and dynamic socket listener bindings
+                          </div>
+                        </div>
+                        <div className="p-2 bg-zinc-900 rounded border border-zinc-800">
+                          <span className="text-emerald-400 font-semibold">
+                            crates/aico-server::ws_hub.rs
+                          </span>
+                          <div className="text-zinc-500 text-[10px]">
+                            WebSocket real-time broadcast and subscription topic router
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Lineage / ADRs Accordion */}
+          <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
+            <div
+              onClick={() => toggleSection('lineage')}
+              className="flex items-center justify-between px-4 py-3 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors"
+            >
+              <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                {collapsedSections.lineage ? (
+                  <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                )}
+                <BookOpen className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                <span className="font-semibold text-sm text-zinc-200">
+                  Lineage ({adrsList.length} ADRs)
+                </span>
+                {collapsedSections.lineage && (
+                  <span className="text-xs text-zinc-500 truncate ml-2 italic">
+                    — Architecture Decision Records
+                  </span>
+                )}
+              </div>
+            </div>
+            {!collapsedSections.lineage && (
+              <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30">
+                <div className="grid grid-cols-1 gap-2">
+                  {adrsList.map((adr) => (
+                    <div
+                      key={adr.id}
+                      onClick={() => onOpenAdr?.(adr.id)}
+                      className="p-2.5 rounded bg-zinc-900 border border-zinc-800 hover:border-indigo-500/50 cursor-pointer transition-colors flex items-center justify-between group"
+                    >
+                      <div className="space-y-0.5">
+                        <span className="font-mono text-[11px] text-indigo-400 font-bold group-hover:text-indigo-300">
+                          {adr.id}
+                        </span>
+                        <p className="text-xs text-zinc-300">{adr.title}</p>
+                      </div>
+                      <ArrowRight className="w-3.5 h-3.5 text-zinc-600 group-hover:text-zinc-300" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Assets Accordion */}
+          <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
+            <div
+              onClick={() => toggleSection('assets')}
+              className="flex items-center justify-between px-4 py-3 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors"
+            >
+              <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                {collapsedSections.assets ? (
+                  <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                )}
+                <FolderArchive className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                <span className="font-semibold text-sm text-zinc-200">Assets</span>
+                {collapsedSections.assets && (
+                  <span className="text-xs text-zinc-500 truncate ml-2 italic">
+                    — Attached artifacts and multimodal drops
+                  </span>
+                )}
+              </div>
+              <button
+                data-testid="popout-assets"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPopOut?.(feature.id, 'assets');
+                }}
+                title="Open in separate tab"
+                className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            {!collapsedSections.assets && (
+              <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-3">
+                <div className="pt-1">
+                  <FileDropZone onFileUpload={(f) => onFileUpload?.(f)}>
+                    <span>Drag & drop design mockups, logs, or audio files for this feature</span>
+                  </FileDropZone>
+                  {uploadedFiles.length > 0 && (
+                    <div className="text-[11px] text-zinc-400 mt-2">
+                      Attached: {uploadedFiles.join(', ')}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
-      )}
 
-      {/* 3. Requirements (EARS) Tab Content */}
-      {activeView === 'requirements' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-bold text-zinc-100 flex items-center gap-2">
-              <BookOpen className="w-4 h-4 text-sky-400" />
-              <span>Formal EARS Requirements Contract</span>
-            </h2>
-
-            {/* Pattern Filter Pills */}
-            <div className="flex items-center gap-1.5 text-[11px] overflow-x-auto">
-              {['All', 'Ubiquitous', 'Event-Driven', 'State-Driven', 'Unwanted Behavior', 'Optional Feature'].map((pat) => (
-                <button
-                  key={pat}
-                  onClick={() => setSelectedPattern(pat)}
-                  className={`px-2.5 py-1 rounded transition-colors ${
-                    selectedPattern === pat
-                      ? 'bg-zinc-700 text-zinc-100 font-medium'
-                      : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200'
-                  }`}
-                >
-                  {pat}
-                </button>
-              ))}
+        {/* RIGHT COLUMN: Task Plan (Alone on the right, open by default, with internal waves) */}
+        <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50 flex flex-col">
+          <div
+            onClick={() => toggleSection('taskPlan')}
+            className="flex items-center justify-between px-4 py-3 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors"
+          >
+            <div className="flex items-center gap-2.5 flex-1 min-w-0">
+              {collapsedSections.taskPlan ? (
+                <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+              )}
+              <CheckSquare className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+              <span className="font-semibold text-sm text-zinc-200">Task Plan</span>
+              {collapsedSections.taskPlan && (
+                <span className="text-xs text-zinc-500 truncate ml-2 italic">
+                  — Vertical tracer-bullet task DAG with internal waves
+                </span>
+              )}
             </div>
+            <button
+              data-testid="popout-taskPlan"
+              onClick={(e) => {
+                e.stopPropagation();
+                onPopOut?.(feature.id, 'taskPlan');
+              }}
+              title="Open in separate tab"
+              className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+            </button>
           </div>
 
-          <div className="space-y-3">
-            {filteredReqs.map((req) => (
-              <div
-                key={req.id}
-                className="p-4 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-2 hover:border-zinc-700 transition-colors"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs font-bold text-sky-400 px-2 py-0.5 rounded bg-sky-950/60 border border-sky-800">
-                      {req.id}
+          {!collapsedSections.taskPlan && (
+            <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-4">
+              {/* Feature Task Progress Bar */}
+              <div className="p-3.5 bg-zinc-950/80 rounded-xl border border-zinc-800 space-y-2">
+                <div className="flex items-center justify-between text-xs font-semibold">
+                  <span className="text-zinc-200">Task Execution Progress</span>
+                  <span className="font-mono text-emerald-400">
+                    {doneTasks} / {totalTasks} Tasks Done ({taskProgressPct}%)
+                  </span>
+                </div>
+                <div className="w-full bg-zinc-900 rounded-full h-2.5 overflow-hidden border border-zinc-800">
+                  <div
+                    className="bg-emerald-500 h-full rounded-full transition-all duration-300"
+                    style={{ width: `${taskProgressPct}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Feature Task Card with Internal Waves */}
+              <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/60 p-4 space-y-4">
+                <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
+                  <div>
+                    <span className="font-mono text-xs font-bold text-indigo-400 block">
+                      TASK-{feature.id.toUpperCase()}
                     </span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-300">
-                      {req.pattern}
-                    </span>
+                    <span className="text-xs font-semibold text-zinc-200">{feature.name} Execution Plan</span>
                   </div>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" />
-                    {req.status}
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 font-semibold">
+                    Done
                   </span>
                 </div>
 
-                <p className="text-xs text-zinc-200 leading-relaxed font-sans pl-1">
-                  {req.statement}
-                </p>
-
-                {req.seam && (
-                  <div className="pt-1.5 border-t border-zinc-800/60 flex items-center gap-2 text-[10px] text-zinc-500 font-mono">
-                    <span className="text-zinc-400">Verification Seam:</span>
-                    <code className="text-indigo-400 bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800">
-                      {req.seam}
-                    </code>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* 4. Tasks & Execution Waves Tab Content */}
-      {activeView === 'waves' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-base font-bold text-zinc-100 flex items-center gap-2">
-                <CheckSquare className="w-4 h-4 text-emerald-400" />
-                <span>Task Execution DAG & Wave Progression</span>
-              </h2>
-              <p className="text-xs text-zinc-400">
-                Tasks structure work into internal execution waves: Scaffolding (Red) $\to$ Implementation (Green) $\to$ Verification.
-              </p>
-            </div>
-            <span className="text-xs font-mono px-2.5 py-1 rounded bg-zinc-800 text-zinc-300">
-              Active Frontier: <strong className="text-emerald-400">All Tasks Done</strong>
-            </span>
-          </div>
-
-          <div className="space-y-4">
-            {tasksList.map((task) => (
-              <div
-                key={task.id}
-                className="p-5 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-3"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <span className="font-mono text-xs font-bold text-indigo-400">
-                      {task.id}
-                    </span>
-                    <span
-                      className={`text-[10px] font-mono px-2 py-0.5 rounded ${
-                        task.status === 'Done'
-                          ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                          : task.status === 'In Progress'
-                          ? 'bg-amber-950 text-amber-400 border border-amber-800'
-                          : 'bg-zinc-800 text-zinc-400'
-                      }`}
+                {/* Waves Breakdown */}
+                <div className="space-y-3">
+                  {defaultWaves.map((wave) => (
+                    <div
+                      key={wave.waveNumber}
+                      className="p-3 bg-zinc-950/70 border border-zinc-800/80 rounded-lg space-y-2"
                     >
-                      {task.status}
-                    </span>
-                  </div>
-                  {task.verificationSeam && (
-                    <span className="text-[10px] text-zinc-500 font-mono">
-                      Seam Verified
-                    </span>
-                  )}
-                </div>
-
-                <h3 className="text-sm font-semibold text-zinc-100">
-                  {task.title}
-                </h3>
-
-                {/* Internal Waves Breakdown */}
-                {task.waves && task.waves.length > 0 && (
-                  <div className="bg-zinc-950/60 border border-zinc-800/80 rounded-lg p-3 space-y-2">
-                    <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider block">
-                      Internal Execution Waves
-                    </span>
-                    <div className="space-y-1.5">
-                      {task.waves.map((w, idx) => (
-                        <div key={idx} className="flex items-start gap-2 text-xs">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                          <div className="space-y-0.5">
-                            <span className="font-mono font-medium text-zinc-300 text-[11px]">{w.name}: </span>
-                            <span className="text-zinc-400 text-xs">{w.description}</span>
-                          </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-zinc-200 text-xs">
+                            {wave.name}
+                          </span>
+                          <span
+                            className={`text-[9px] px-1.5 py-0.2 rounded font-mono ${
+                              wave.stage === 'Scaffolding'
+                                ? 'bg-rose-950 text-rose-400 border border-rose-800'
+                                : wave.stage === 'Implementation'
+                                ? 'bg-sky-950 text-sky-400 border border-sky-800'
+                                : 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                            }`}
+                          >
+                            {wave.stage}
+                          </span>
                         </div>
-                      ))}
+                        <span className="text-[10px] font-mono text-emerald-400 font-semibold">
+                          100%
+                        </span>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        {wave.tasks.map((task) => (
+                          <div
+                            key={task.id}
+                            className="p-2 bg-zinc-900/80 border border-zinc-800 rounded text-xs space-y-1"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-mono text-[11px] text-indigo-400 font-bold">
+                                {task.id}
+                              </span>
+                              <span className="text-[9px] px-1.5 py-0.2 rounded font-mono bg-emerald-950 text-emerald-400 border border-emerald-800">
+                                {task.status}
+                              </span>
+                            </div>
+                            <div className="text-zinc-200 text-xs font-medium">{task.title}</div>
+                            <div className="flex items-center justify-between text-[10px] text-zinc-500 font-mono pt-1 border-t border-zinc-800/60">
+                              <span>Seam: {task.seam}</span>
+                              <span>Deps: {task.deps?.join(', ') || 'None'}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
-
-                {task.verificationSeam && (
-                  <div className="flex items-center gap-2 text-[10px] text-zinc-500 font-mono">
-                    <span className="text-zinc-400">Designated Seam:</span>
-                    <code className="text-indigo-400 bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800">
-                      {task.verificationSeam}
-                    </code>
-                  </div>
-                )}
+                  ))}
+                </div>
               </div>
-            ))}
-          </div>
+            </div>
+          )}
         </div>
-      )}
-
-      {/* 5. Specification Viewer Tab Content */}
-      {activeView === 'spec' && (
-        <div className="p-6 bg-zinc-900/50 border border-zinc-800 rounded-xl space-y-4 text-xs">
-          <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-            <div>
-              <span className="font-mono text-sky-400 font-bold text-sm block">
-                {feature.specId || `SPEC-${feature.id}`}
-              </span>
-              <span className="text-zinc-300 font-medium text-xs">
-                {feature.specTitle || feature.name}
-              </span>
-            </div>
-            {feature.specId && onOpenSpec && (
-              <button
-                onClick={() => onOpenSpec(feature.specId!, feature.specTitle || feature.name)}
-                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-medium transition-colors"
-              >
-                Open in Full Spec Editor Tab
-              </button>
-            )}
-          </div>
-          <div className="prose prose-invert max-w-none text-zinc-300 space-y-3 leading-relaxed">
-            <p>
-              This specification declares formal EARS requirements, designated test seams, and system boundaries
-              for the <strong>{feature.name}</strong> capability.
-            </p>
-            <div className="bg-zinc-950 p-4 rounded-lg border border-zinc-800 font-mono text-zinc-400 text-[11px] space-y-1">
-              <div># Feature Specification: {feature.name}</div>
-              <div>## 1. Problem Statement & User Value</div>
-              <div>...</div>
-              <div>## 3. Functional Requirements (EARS)</div>
-              <div>- Total Requirements: {requirementsList.length}</div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 6. Plan Viewer Tab Content */}
-      {activeView === 'plan' && (
-        <div className="p-6 bg-zinc-900/50 border border-zinc-800 rounded-xl space-y-4 text-xs">
-          <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-            <div>
-              <span className="font-mono text-emerald-400 font-bold text-sm block">
-                {feature.planId || `PLAN-${feature.id}`}
-              </span>
-              <span className="text-zinc-300 font-medium text-xs">
-                {feature.planTitle || `${feature.name} Plan`}
-              </span>
-            </div>
-            {feature.planId && onOpenPlan && (
-              <button
-                onClick={() => onOpenPlan(feature.planId!, feature.planTitle || feature.name)}
-                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-medium transition-colors"
-              >
-                Open in Full Plan Tab
-              </button>
-            )}
-          </div>
-          <div className="prose prose-invert max-w-none text-zinc-300 space-y-3 leading-relaxed">
-            <p>
-              Execution plan tracking vertical tracer-bullet tasks, internal wave progression, prerequisites, and automated seam tests.
-            </p>
-            <div className="bg-zinc-950 p-4 rounded-lg border border-zinc-800 font-mono text-zinc-400 text-[11px] space-y-1">
-              <div># Implementation Plan: {feature.name}</div>
-              <div>## 1. Technical Architecture & Decisions</div>
-              <div>## 2. Tracer-Bullet Task Execution Plan</div>
-              <div>- Total Tasks: {tasksList.length} (100% Completed)</div>
-            </div>
-          </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 };
