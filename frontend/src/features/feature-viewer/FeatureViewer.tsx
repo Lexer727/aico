@@ -14,6 +14,10 @@ import {
   BookOpen,
 } from 'lucide-react';
 import { FileDropZone } from '../../components/common/FileDropZone';
+import {
+  getFeatureDefinition,
+  type FeatureTask as SharedFeatureTask,
+} from '../feature-task-data';
 
 export interface FeatureRequirement {
   id: string; // e.g. "REQ-001"
@@ -196,108 +200,39 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
 
   const requirementsList = feature.requirements || defaultReqs;
 
-  // Execution waves for this feature's Task Plan
-  const defaultWaves: FeatureTaskWave[] = isFastTrace
-    ? [
-        {
-          waveNumber: 1,
-          name: 'Wave 1: Seam Scaffolding / Red Tests',
-          stage: 'Scaffolding',
-          description: 'Define annotation types and failing red test seams',
-          tasks: [
-            {
-              id: 'TASK-FAST-TRACE-001',
-              title: 'Scaffold traceability scanner interfaces & test harnesses',
-              status: 'Done',
-              seam: 'crates/aico-core/src/trace.rs',
-              deps: ['None'],
-            },
-          ],
-        },
-        {
-          waveNumber: 2,
-          name: 'Wave 2: Domain Implementation / Green',
-          stage: 'Implementation',
-          description: 'Single-pass regex & Tree-sitter annotation parser',
-          tasks: [
-            {
-              id: 'TASK-FAST-TRACE-002',
-              title: 'AST annotation parser & specification cross-referencing',
-              status: 'Done',
-              seam: 'crates/aico-core/src/trace.rs',
-              deps: ['TASK-FAST-TRACE-001'],
-            },
-          ],
-        },
-        {
-          waveNumber: 3,
-          name: 'Wave 3: Seam Verification / Hardening',
-          stage: 'Verification',
-          description: 'Orphan diagnostics and automated regression test suite',
-          tasks: [
-            {
-              id: 'TASK-FAST-TRACE-003',
-              title: 'Validate broken references & diagnostic output tests',
-              status: 'Done',
-              seam: 'crates/aico-core/tests/trace_test.rs',
-              deps: ['TASK-FAST-TRACE-002'],
-            },
-          ],
-        },
-      ]
-    : [
-        {
-          waveNumber: 1,
-          name: 'Wave 1: Seam Scaffolding / Red Tests',
-          stage: 'Scaffolding',
-          description: 'Define public trait seams and failing integration tests',
-          tasks: [
-            {
-              id: `TASK-${feature.id.toUpperCase()}-001`,
-              title: 'Scaffold trait interfaces and designated public test seams',
-              status: 'Done',
-              seam: `crates/aico-server/tests/server_test.rs`,
-              deps: ['None'],
-            },
-          ],
-        },
-        {
-          waveNumber: 2,
-          name: 'Wave 2: Domain Implementation / Green',
-          stage: 'Implementation',
-          description: 'Core domain logic, route handlers, and state management',
-          tasks: [
-            {
-              id: `TASK-${feature.id.toUpperCase()}-002`,
-              title: 'Domain implementation & state transition handlers',
-              status: 'Done',
-              seam: `crates/aico-server/src/server.rs`,
-              deps: [`TASK-${feature.id.toUpperCase()}-001`],
-            },
-          ],
-        },
-        {
-          waveNumber: 3,
-          name: 'Wave 3: Seam Verification / Hardening',
-          stage: 'Verification',
-          description: 'Boundary contract tests and regression verification',
-          tasks: [
-            {
-              id: `TASK-${feature.id.toUpperCase()}-003`,
-              title: 'Automated contract verification & edge-case coverage',
-              status: 'Done',
-              seam: `crates/aico-server/tests/shutdown_test.rs`,
-              deps: [`TASK-${feature.id.toUpperCase()}-002`],
-            },
-          ],
-        },
-      ];
+  // Execution tasks and waves for this feature's Task Plan
+  const def = getFeatureDefinition(feature.id);
+  const tasksList: SharedFeatureTask[] =
+    feature.tasks && feature.tasks.length > 0
+      ? (feature.tasks as unknown as SharedFeatureTask[])
+      : def?.tasks || [
+          {
+            id: `TASK-${feature.id.toUpperCase()}-001`,
+            title: `${feature.name} Scaffolding & Public Seams`,
+            status: 'Done',
+            seam: 'crates/aico-server/tests/server_test.rs',
+            deps: ['None'],
+            waves: [
+              {
+                waveNumber: 1,
+                name: 'Wave 1 (Scaffolding)',
+                stage: 'Scaffolding',
+                description: 'Scaffold public trait/type signatures and red contract tests',
+                status: 'Done',
+              },
+              {
+                waveNumber: 2,
+                name: 'Wave 2 (Implementation)',
+                stage: 'Implementation',
+                description: 'Minimal core logic turning tests green',
+                status: 'Done',
+              },
+            ],
+          },
+        ];
 
-  const totalTasks = defaultWaves.reduce((acc, w) => acc + w.tasks.length, 0);
-  const doneTasks = defaultWaves.reduce(
-    (acc, w) => acc + w.tasks.filter((t) => t.status === 'Done').length,
-    0
-  );
+  const totalTasks = tasksList.length;
+  const doneTasks = tasksList.filter((t) => t.status === 'Done').length;
   const taskProgressPct = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 100;
 
   const defaultAdrs = isFastTrace
@@ -866,74 +801,107 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
                 </div>
               </div>
 
-              {/* Feature Task Card with Internal Waves */}
-              <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/60 p-4 space-y-4">
-                <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
-                  <div>
-                    <span className="font-mono text-xs font-bold text-indigo-400 block">
-                      TASK-{feature.id.toUpperCase()}
-                    </span>
-                    <span className="text-xs font-semibold text-zinc-200">{feature.name} Execution Plan</span>
-                  </div>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 font-semibold">
-                    Done
-                  </span>
-                </div>
+              {/* Sequential Task Cards with Internal Waves */}
+              <div className="space-y-3.5">
+                {tasksList.map((task) => {
+                  const taskWavesTotal = task.waves ? task.waves.length : 0;
+                  const taskWavesDone = task.waves
+                    ? task.waves.filter((w) => w.status === 'Done').length
+                    : 0;
+                  const taskPct =
+                    taskWavesTotal > 0
+                      ? Math.round((taskWavesDone / taskWavesTotal) * 100)
+                      : task.status === 'Done'
+                      ? 100
+                      : 0;
 
-                {/* Waves Breakdown */}
-                <div className="space-y-3">
-                  {defaultWaves.map((wave) => (
+                  return (
                     <div
-                      key={wave.waveNumber}
-                      className="p-3 bg-zinc-950/70 border border-zinc-800/80 rounded-lg space-y-2"
+                      key={task.id}
+                      className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/60 p-4 space-y-3"
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-zinc-200 text-xs">
-                            {wave.name}
+                      {/* Task Card Header */}
+                      <div className="space-y-1 pb-2 border-b border-zinc-800">
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono text-xs font-bold text-indigo-400 block">
+                            {task.id}
                           </span>
                           <span
-                            className={`text-[9px] px-1.5 py-0.2 rounded font-mono ${
-                              wave.stage === 'Scaffolding'
-                                ? 'bg-rose-950 text-rose-400 border border-rose-800'
-                                : wave.stage === 'Implementation'
-                                ? 'bg-sky-950 text-sky-400 border border-sky-800'
-                                : 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                            className={`text-[10px] font-mono px-2 py-0.5 rounded font-semibold ${
+                              task.status === 'Done'
+                                ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                                : task.status === 'In Progress'
+                                ? 'bg-amber-950 text-amber-400 border border-amber-800'
+                                : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
                             }`}
                           >
-                            {wave.stage}
+                            {task.status}
                           </span>
                         </div>
-                        <span className="text-[10px] font-mono text-emerald-400 font-semibold">
-                          100%
-                        </span>
+                        <div className="text-xs font-semibold text-zinc-200">{task.title}</div>
+                        <div className="flex items-center justify-between text-[10px] text-zinc-500 font-mono pt-1">
+                          <span>Seam: {task.seam || (task as any).verificationSeam || 'N/A'}</span>
+                          <span>
+                            {taskWavesDone}/{taskWavesTotal} Waves ({taskPct}%)
+                          </span>
+                        </div>
+                        <div className="w-full bg-zinc-950 rounded-full h-1 overflow-hidden">
+                          <div
+                            className="bg-emerald-500 h-full rounded-full transition-all duration-200"
+                            style={{ width: `${taskPct}%` }}
+                          />
+                        </div>
                       </div>
 
-                      <div className="space-y-1.5">
-                        {wave.tasks.map((task) => (
-                          <div
-                            key={task.id}
-                            className="p-2 bg-zinc-900/80 border border-zinc-800 rounded text-xs space-y-1"
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="font-mono text-[11px] text-indigo-400 font-bold">
-                                {task.id}
-                              </span>
-                              <span className="text-[9px] px-1.5 py-0.2 rounded font-mono bg-emerald-950 text-emerald-400 border border-emerald-800">
-                                {task.status}
-                              </span>
+                      {/* Declared Internal Waves */}
+                      {task.waves && task.waves.length > 0 && (
+                        <div className="space-y-2">
+                          {task.waves.map((wave) => (
+                            <div
+                              key={wave.waveNumber}
+                              className="p-2.5 bg-zinc-950/70 border border-zinc-800/80 rounded-lg space-y-1.5"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-semibold text-zinc-200 text-xs">
+                                    {wave.name}
+                                  </span>
+                                  <span
+                                    className={`text-[9px] px-1.5 py-0.2 rounded font-mono ${
+                                      wave.stage === 'Scaffolding'
+                                        ? 'bg-rose-950 text-rose-400 border border-rose-800'
+                                        : wave.stage === 'Implementation'
+                                        ? 'bg-sky-950 text-sky-400 border border-sky-800'
+                                        : wave.stage === 'Verification'
+                                        ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                                        : 'bg-amber-950 text-amber-400 border border-amber-800'
+                                    }`}
+                                  >
+                                    {wave.stage}
+                                  </span>
+                                </div>
+                                <span
+                                  className={`text-[9px] font-mono px-1 py-0.2 rounded ${
+                                    wave.status === 'Done'
+                                      ? 'text-emerald-400 font-semibold'
+                                      : wave.status === 'In Progress'
+                                      ? 'text-amber-400'
+                                      : 'text-zinc-500'
+                                  }`}
+                                >
+                                  {wave.status}
+                                </span>
+                              </div>
+                              <p className="text-zinc-400 text-[11px] leading-relaxed">
+                                {wave.description}
+                              </p>
                             </div>
-                            <div className="text-zinc-200 text-xs font-medium">{task.title}</div>
-                            <div className="flex items-center justify-between text-[10px] text-zinc-500 font-mono pt-1 border-t border-zinc-800/60">
-                              <span>Seam: {task.seam}</span>
-                              <span>Deps: {task.deps?.join(', ') || 'None'}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
             </div>
           )}

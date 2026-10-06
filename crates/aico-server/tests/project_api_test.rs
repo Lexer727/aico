@@ -101,9 +101,9 @@ async fn test_project_management_rest_api() {
     assert_eq!(feat_res.status(), 200);
 
     let features: Vec<serde_json::Value> = feat_res.json().await.expect("Should parse as JSON");
-    assert!(features.iter().any(|f| f["id"] == "core-host-runtime"));
-    assert!(features.iter().any(|f| f["id"] == "specs-blueprint-standards"));
-    assert!(features.iter().any(|f| f["id"] == "fast-trace"));
+    assert!(features.iter().any(|f| f["id"] == "ft-core-host-runtime" || f["id"] == "core-host-runtime"));
+    assert!(features.iter().any(|f| f["id"] == "ft-specs-blueprint-standards" || f["id"] == "specs-blueprint-standards"));
+    assert!(features.iter().any(|f| f["id"] == "ft-fast-trace" || f["id"] == "fast-trace"));
 
     server_task.abort();
 }

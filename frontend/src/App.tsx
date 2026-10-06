@@ -9,6 +9,7 @@ import { TerminalConsole } from './components/terminal/TerminalConsole';
 import { DashboardView } from './features/dashboard/DashboardView';
 import { EpicHubView, type EpicData } from './features/epic-hub/EpicHubView';
 import { FeatureViewer, type FeatureData } from './features/feature-viewer/FeatureViewer';
+import { getFeatureDefinition } from './features/feature-task-data';
 import { SpecViewer } from './features/spec-viewer/SpecViewer';
 import { CodeViewer } from './features/code-viewer/CodeViewer';
 import { AdrViewer } from './features/adr-viewer/AdrViewer';
@@ -55,129 +56,7 @@ const mockEpicsData: Record<string, EpicData> = {
   },
 };
 
-const defaultFeaturesData: Record<string, FeatureData> = {
-  'core-host-runtime': {
-    id: 'core-host-runtime',
-    name: 'Host Runtime & Local HTTP/WS Server',
-    epicId: 'ec-core',
-    specId: 'spec-core-host-runtime',
-    specTitle: 'Host Runtime & Local HTTP/WebSocket Server',
-    planId: 'plan-core-host-runtime',
-    planTitle: 'Host Runtime & Local Axum Server',
-    status: 'Completed',
-    order: 1,
-  },
-  'core-security-auth': {
-    id: 'core-security-auth',
-    name: 'LAN Security & Local Authentication',
-    epicId: 'ec-core',
-    specId: 'spec-core-security-auth',
-    specTitle: 'LAN Security & Local Authentication',
-    planId: 'plan-core-security-auth',
-    planTitle: 'LAN Security & Local Authentication',
-    status: 'Completed',
-    order: 2,
-  },
-  'core-local-storage': {
-    id: 'core-local-storage',
-    name: 'Local Storage & Embedded Engine Lifecycle',
-    epicId: 'ec-core',
-    specId: 'spec-core-local-storage',
-    specTitle: 'Local Storage & Embedded Engine Lifecycle',
-    planId: 'plan-core-local-storage',
-    planTitle: 'Local Storage & Embedded Engine Lifecycle',
-    status: 'Completed',
-    order: 3,
-  },
-  'core-discovery': {
-    id: 'core-discovery',
-    name: 'Workspace & Multi-Project Discovery',
-    epicId: 'ec-core',
-    specId: 'spec-core-discovery',
-    specTitle: 'Workspace & Multi-Project Discovery',
-    planId: 'plan-core-discovery',
-    planTitle: 'Workspace & Multi-Project Discovery',
-    status: 'Completed',
-    order: 4,
-  },
-  'core-mcp-tools': {
-    id: 'core-mcp-tools',
-    name: 'Deterministic SDD Tool Registration',
-    epicId: 'ec-core',
-    specId: 'spec-core-mcp-tools',
-    specTitle: 'Deterministic SDD Tool Registration',
-    planId: 'plan-core-mcp-tools',
-    planTitle: 'Deterministic SDD Tool Registration',
-    status: 'Completed',
-    order: 5,
-  },
-  'core-webui-shell': {
-    id: 'core-webui-shell',
-    name: 'WebUI Workspace Shell & Dockable Layout',
-    epicId: 'ec-core',
-    specId: 'spec-core-webui-shell',
-    specTitle: 'WebUI Workspace Shell & Dockable Layout',
-    planId: 'plan-core-webui-shell',
-    planTitle: 'WebUI Workspace Shell & Dockable Layout',
-    status: 'Completed',
-    order: 6,
-  },
-  'core-epic-hub': {
-    id: 'core-epic-hub',
-    name: 'Single-Page Epic Hub & Lineage Graph',
-    epicId: 'ec-core',
-    specId: 'spec-core-epic-hub',
-    specTitle: 'Single-Page Epic Hub & Lineage Graph',
-    planId: 'plan-core-epic-hub',
-    planTitle: 'Single-Page Epic Hub & Lineage Graph',
-    status: 'Completed',
-    order: 7,
-  },
-  'specs-blueprint-standards': {
-    id: 'specs-blueprint-standards',
-    name: 'AICO SDD Blueprint Standards v0.1.2',
-    epicId: 'ec-specs',
-    specId: 'spec-specs-blueprint-standards',
-    specTitle: 'AICO SDD Blueprint Standards v0.1.2',
-    planId: 'plan-specs-blueprint-standards',
-    planTitle: 'AICO SDD Blueprint Standards v0.1.2',
-    status: 'Completed',
-    order: 1,
-  },
-  'specs-skills-evolution': {
-    id: 'specs-skills-evolution',
-    name: 'AICO Skills Evolution & Wave-Internal Tasks',
-    epicId: 'ec-specs',
-    specId: 'spec-specs-skills-evolution',
-    specTitle: 'AICO Skills Evolution & Wave-Internal Tasks',
-    planId: 'plan-specs-skills-evolution',
-    planTitle: 'AICO Skills Evolution & Wave-Internal Tasks',
-    status: 'Completed',
-    order: 2,
-  },
-  'specs-migration-engine': {
-    id: 'specs-migration-engine',
-    name: 'AICO Spec Migration Engine v0.1.2',
-    epicId: 'ec-specs',
-    specId: 'spec-specs-migration-engine',
-    specTitle: 'AICO Spec Migration Engine v0.1.2',
-    planId: 'plan-specs-migration-engine',
-    planTitle: 'AICO Spec Migration Engine v0.1.2',
-    status: 'Completed',
-    order: 3,
-  },
-  'fast-trace': {
-    id: 'fast-trace',
-    name: 'Fast-Trace Binary Parser',
-    isStandalone: true,
-    specId: 'spec-fast-trace',
-    specTitle: 'Fast-Trace Binary Parser',
-    planId: 'plan-fast-trace',
-    planTitle: 'Fast-Trace Binary Parser',
-    status: 'Completed',
-    order: 1,
-  },
-};
+
 
 const mockNodes: GraphNode[] = [
   { id: 'epic-1', type: 'epic', label: 'Epic 001', isFrontier: false },
@@ -428,12 +307,25 @@ const MainWorkspace: React.FC = () => {
     }
 
     if (activeTab.type === 'feature') {
-      const disc = discoveredFeatures.find((f) => f.id === activeTab.id);
+      const def = getFeatureDefinition(activeTab.id);
+      const disc = discoveredFeatures.find((f) => f.id === activeTab.id || f.id === def?.id);
       const isStandalone = Boolean(
-        disc?.isStandalone || activeTab.id === 'fast-trace' || defaultFeaturesData[activeTab.id]?.isStandalone
+        def?.isStandalone || disc?.isStandalone || activeTab.id.includes('fast-trace')
       );
-      const featData: FeatureData = defaultFeaturesData[activeTab.id]
-        ? { ...defaultFeaturesData[activeTab.id] }
+      const featData: FeatureData = def
+        ? {
+            id: def.id,
+            name: def.name,
+            epicId: isStandalone ? undefined : def.epicId,
+            isStandalone,
+            status: def.status,
+            specId: def.specId,
+            specTitle: def.specTitle,
+            planId: def.planId,
+            planTitle: def.planTitle,
+            description: def.description,
+            tasks: def.tasks as any,
+          }
         : {
             id: activeTab.id,
             name: activeTab.title,
