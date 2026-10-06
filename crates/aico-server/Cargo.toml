@@ -17,6 +17,8 @@ tracing-subscriber.workspace = true
 rand.workspace = true
 rust-embed = "8.5"
 mime_guess = "2.0"
+futures-util = "0.3.34"
 
 [dev-dependencies]
 reqwest.workspace = true
+tokio-tungstenite = "0.30.0"

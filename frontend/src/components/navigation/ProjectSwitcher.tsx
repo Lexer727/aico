@@ -36,6 +36,16 @@ export const ProjectSwitcher: React.FC<ProjectSwitcherProps> = ({ projects }) =>
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const handleSelectProject = (projectId: string) => {
+    setActiveProject(projectId);
+    setIsOpen(false);
+    fetch('/api/v1/projects/active', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project_id: projectId }),
+    }).catch(() => {});
+  };
+
   return (
     <div className="relative inline-block text-left" ref={dropdownRef}>
       <button
@@ -53,10 +63,7 @@ export const ProjectSwitcher: React.FC<ProjectSwitcherProps> = ({ projects }) =>
           {projects.map((project) => (
             <div
               key={project.id}
-              onClick={() => {
-                setActiveProject(project.id);
-                setIsOpen(false);
-              }}
+              onClick={() => handleSelectProject(project.id)}
               className="flex items-center justify-between px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800/80 hover:text-white cursor-pointer transition-colors"
             >
               <span className="font-medium truncate">{project.name}</span>

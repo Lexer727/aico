@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ShellLayout } from './components/layout/ShellLayout';
 import { DockablePanel } from './components/layout/DockablePanel';
 import { TabBar } from './components/navigation/TabBar';
@@ -49,10 +49,47 @@ const mockEdges: GraphEdge[] = [
 ];
 
 const MainWorkspace: React.FC = () => {
-  const { status, reconnect } = useWebSocket();
+  const { status, reconnect, lastMessage } = useWebSocket();
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
-  const { openTab, activeProjectId } = useTabStore();
+  const [projects, setProjects] = useState(mockProjects);
+  const { openTab, activeProjectId, setActiveProject } = useTabStore();
+
+  const fetchProjects = useCallback(async () => {
+    try {
+      const res = await fetch('/api/v1/projects');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          const mapped = data.map((p: { id: string; name?: string }) => ({
+            id: p.id,
+            name: p.name || p.id,
+          }));
+          setProjects(mapped);
+          if (activeProjectId === 'default' || !mapped.some((p: { id: string }) => p.id === activeProjectId)) {
+            setActiveProject(mapped[0].id);
+          }
+        }
+      }
+    } catch {
+      // Fallback to mock projects when offline
+    }
+  }, [activeProjectId, setActiveProject]);
+
+  useEffect(() => {
+    fetchProjects();
+  }, [fetchProjects]);
+
+  useEffect(() => {
+    if (lastMessage && typeof lastMessage === 'object') {
+      const msg = lastMessage as { topic?: string; payload?: string };
+      if (msg.topic === 'active_project_changed' && msg.payload) {
+        setActiveProject(msg.payload);
+      } else if (msg.topic === 'projects_updated') {
+        fetchProjects();
+      }
+    }
+  }, [lastMessage, setActiveProject, fetchProjects]);
 
   const handleFileUpload = (file: File) => {
     setUploadedFiles((prev) => [...prev, file.name]);
@@ -71,7 +108,7 @@ const MainWorkspace: React.FC = () => {
       {/* Top Application Bar */}
       <header className="h-12 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between px-4 gap-4">
         <div className="flex items-center gap-3">
-          <ProjectSwitcher projects={mockProjects} />
+          <ProjectSwitcher projects={projects} />
           <button
             onClick={() => setIsSearchOpen(true)}
             className="flex items-center gap-2 px-3 py-1.5 text-xs text-zinc-400 bg-zinc-950/60 border border-zinc-800 rounded-md hover:border-zinc-700 hover:text-zinc-200 transition-colors"

@@ -1,9 +1,14 @@
 use axum::{
-    extract::State,
+    extract::{
+        ws::{Message, WebSocket, WebSocketUpgrade},
+        State,
+    },
     http::StatusCode,
+    response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
+use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -141,13 +146,16 @@ impl HostServer {
     }
 
     // @implements SPEC-CORE-001::REQ-002
+    // @implements SPEC-CORE-001::REQ-003
     // @implements SPEC-CORE-001::REQ-006
+    // @implements SPEC-CORE-001::REQ-007
     // @implements SPEC-CORE-004::REQ-008
     pub fn build_router(state: AppState) -> Router {
         Router::new()
             .route("/api/v1/health", get(health_check_handler))
             .route("/api/v1/projects", get(list_projects_handler))
             .route("/api/v1/projects/active", post(set_active_project_handler))
+            .route("/ws", get(ws_handler))
             .fallback(crate::assets::static_asset_handler)
             .with_state(state)
     }
@@ -226,3 +234,61 @@ async fn set_active_project_handler(
         Err(StatusCode::NOT_FOUND)
     }
 }
+
+// @implements SPEC-CORE-001::REQ-003
+// @implements SPEC-CORE-001::REQ-007
+async fn ws_handler(
+    ws: WebSocketUpgrade,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| handle_socket(socket, state))
+}
+
+async fn handle_socket(socket: WebSocket, state: AppState) {
+    let (mut sender, mut receiver) = socket.split();
+    let mut rx = state.ws_hub.subscribe();
+
+    let mut send_task = tokio::spawn(async move {
+        while let Ok(msg) = rx.recv().await {
+            let serialized = serde_json::to_string(&msg).unwrap_or_default();
+            if sender.send(Message::Text(serialized)).await.is_err() {
+                break;
+            }
+        }
+    });
+
+    let ws_hub = state.ws_hub.clone();
+    let mut recv_task = tokio::spawn(async move {
+        while let Some(Ok(msg)) = receiver.next().await {
+            match msg {
+                Message::Text(text) => {
+                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&text) {
+                        let topic = val
+                            .get("topic")
+                            .and_then(|t| t.as_str())
+                            .unwrap_or("client_event");
+                        let payload = val
+                            .get("payload")
+                            .map(|p| {
+                                if let Some(s) = p.as_str() {
+                                    s.to_string()
+                                } else {
+                                    p.to_string()
+                                }
+                            })
+                            .unwrap_or_default();
+                        ws_hub.broadcast(topic, &payload);
+                    }
+                }
+                Message::Close(_) => break,
+                _ => {}
+            }
+        }
+    });
+
+    tokio::select! {
+        _ = (&mut send_task) => recv_task.abort(),
+        _ = (&mut recv_task) => send_task.abort(),
+    };
+}
+
