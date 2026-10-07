@@ -12,6 +12,7 @@ import {
   ArrowRight,
   BookOpen,
   Crosshair,
+  FolderGit2,
 } from 'lucide-react';
 import { FileDropZone } from '../../components/common/FileDropZone';
 import { MarkdownView, stripDocumentHeader, extractExecutiveSummary } from '../../components/common/MarkdownView';
@@ -60,6 +61,7 @@ export interface FeatureData {
   deepdiveContent?: string;
   ubiquitous_language?: TermInfo[];
   ubiquitousLanguage?: TermInfo[];
+  repositories?: string[];
 }
 
 export interface FeatureViewerProps {
@@ -280,6 +282,24 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
             >
               {planIdentifier}
             </span>
+            {/* @implements spec-ft-git-dashboard-ui::REQ-004 */}
+            {feature.repositories && feature.repositories.length > 0 && (
+              <div
+                data-testid="feature-repositories-list"
+                className="flex items-center gap-1.5 ml-2"
+              >
+                <FolderGit2 className="w-3.5 h-3.5 text-zinc-400" />
+                {feature.repositories.map((repo) => (
+                  <span
+                    key={repo}
+                    data-testid={`feature-repo-badge-${repo}`}
+                    className="font-mono text-[11px] px-2 py-0.5 rounded bg-zinc-900 border border-zinc-700/80 text-zinc-300 font-medium"
+                  >
+                    {repo}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

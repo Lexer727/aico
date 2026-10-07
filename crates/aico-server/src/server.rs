@@ -306,6 +306,8 @@ pub struct DiscoveredEpic {
     pub adrs: Vec<String>,
     #[serde(default)]
     pub ubiquitous_language: Vec<TermInfo>,
+    #[serde(default)]
+    pub repositories: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -346,6 +348,8 @@ pub struct DiscoveredFeatureInfo {
     pub deepdive_content: Option<String>,
     #[serde(default)]
     pub ubiquitous_language: Vec<TermInfo>,
+    #[serde(default)]
+    pub repositories: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -448,6 +452,37 @@ pub fn parse_frontmatter_full(content: &str) -> (Option<String>, Option<String>,
 pub fn parse_frontmatter(content: &str) -> (Option<String>, Option<String>, Option<String>, Option<u32>) {
     let (id, title, status, order, _) = parse_frontmatter_full(content);
     (id, title, status, order)
+}
+
+pub fn parse_frontmatter_repositories(content: &str) -> Vec<String> {
+    let mut repos = Vec::new();
+    let mut in_frontmatter = false;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed == "---" {
+            if in_frontmatter {
+                break;
+            } else {
+                in_frontmatter = true;
+                continue;
+            }
+        }
+        if in_frontmatter {
+            if let Some(rest) = trimmed.strip_prefix("repositories:") {
+                let val = rest.trim();
+                if val.starts_with('[') && val.ends_with(']') {
+                    let inner = &val[1..val.len() - 1];
+                    for item in inner.split(',') {
+                        let cleaned = item.trim().trim_matches('"').trim_matches('\'').trim();
+                        if !cleaned.is_empty() {
+                            repos.push(cleaned.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    repos
 }
 
 /// Parse specification markdown content into structured fields
@@ -830,6 +865,7 @@ pub fn scan_feature_dir(feat_path: &std::path::Path, epic_id: &str, is_standalon
     let mut test_seams = Vec::new();
     let mut adrs = Vec::new();
     let mut tasks = Vec::new();
+    let mut feat_repositories = Vec::new();
     let mut raw_spec_content = None;
     let mut raw_plan_content = None;
     let mut feat_brainstorm_content = None;
@@ -873,6 +909,7 @@ pub fn scan_feature_dir(feat_path: &std::path::Path, epic_id: &str, is_standalon
                     if let Some(ftitle) = fm_title { p_title = ftitle; }
                     if feat_order.is_none() && fm_order.is_some() { feat_order = fm_order; }
 
+                    feat_repositories = parse_frontmatter_repositories(&pcontent);
                     tasks = parse_plan_tasks(&pcontent);
                     raw_plan_content = Some(pcontent);
                 }
@@ -921,6 +958,7 @@ pub fn scan_feature_dir(feat_path: &std::path::Path, epic_id: &str, is_standalon
         brainstorm_content: feat_brainstorm_content,
         deepdive_content: feat_deepdive_content,
         ubiquitous_language: Vec::new(),
+        repositories: feat_repositories,
     })
 }
 
@@ -1061,6 +1099,15 @@ pub fn scan_epics_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredEpi
                     status
                 };
 
+                let mut epic_repositories = Vec::new();
+                for f in &features {
+                    for r in &f.repositories {
+                        if !epic_repositories.contains(r) {
+                            epic_repositories.push(r.clone());
+                        }
+                    }
+                }
+
                 epics.push(DiscoveredEpic {
                     id: epic_id,
                     title,
@@ -1074,6 +1121,7 @@ pub fn scan_epics_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredEpi
                     deepdive_content,
                     adrs: epic_adrs,
                     ubiquitous_language: ubiquitous_language.clone(),
+                    repositories: epic_repositories,
                 });
             }
         }

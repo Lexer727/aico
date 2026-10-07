@@ -69,6 +69,7 @@ export interface DiscoveredFeature {
   deepdiveContent?: string;
   ubiquitous_language?: TermInfo[];
   ubiquitousLanguage?: TermInfo[];
+  repositories?: string[];
 }
 
 export interface DiscoveredEpic {
@@ -87,6 +88,7 @@ export interface DiscoveredEpic {
   adrs?: string[];
   ubiquitous_language?: TermInfo[];
   ubiquitousLanguage?: TermInfo[];
+  repositories?: string[];
   features?: DiscoveredFeature[];
   specs?: Array<{
     id: string;
@@ -368,4 +370,50 @@ export async function fetchGlossary(): Promise<TermInfo[]> {
 
   return [];
 }
+
+export interface GitCommitInfo {
+  hash: string;
+  message: string;
+  author: string;
+  timestamp: string;
+}
+
+export interface GitRepoStatus {
+  id: string;
+  name: string;
+  path: string;
+  type: string;
+  is_available: boolean;
+  branch: string | null;
+  upstream: string | null;
+  ahead: number;
+  behind: number;
+  staged_count: number;
+  unstaged_count: number;
+  untracked_count: number;
+  is_clean: boolean;
+  latest_commit?: GitCommitInfo | null;
+  error?: string | null;
+}
+
+/**
+ * Fetch Git repository statuses for the active project from Axum backend
+ * @implements spec-ft-git-dashboard-ui::REQ-001
+ * @implements spec-ft-git-dashboard-ui::REQ-005
+ */
+export async function fetchGitStatus(): Promise<GitRepoStatus[]> {
+  try {
+    const res = await fetch(getApiUrl('/api/v1/git/status'));
+    if (res.ok) {
+      const data: GitRepoStatus[] = await res.json();
+      if (Array.isArray(data)) {
+        return data;
+      }
+    }
+  } catch (err) {
+    console.error('Error fetching git status:', err);
+  }
+  return [];
+}
+
 

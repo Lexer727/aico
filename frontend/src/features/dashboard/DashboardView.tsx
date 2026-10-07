@@ -18,11 +18,14 @@ import {
   type DiscoveredEpic,
   type DiscoveredAdr,
   type FeatureTask,
+  type GitRepoStatus,
 } from '../feature-task-data';
+import { GitRepositoriesCard } from './GitRepositoriesCard';
 
 interface DashboardViewProps {
   epics?: DiscoveredEpic[];
   adrs?: DiscoveredAdr[];
+  gitStatuses?: GitRepoStatus[];
   onOpenEpic: (epicId: string) => void;
   onOpenSpec: (specId: string, title: string) => void;
   onOpenGlossary?: () => void;
@@ -96,6 +99,7 @@ const defaultEpics: DiscoveredEpic[] = [
 export const DashboardView: React.FC<DashboardViewProps> = ({
   epics = [],
   adrs: initialAdrs,
+  gitStatuses,
   onOpenEpic,
   onOpenSpec,
   onOpenGlossary,
@@ -259,6 +263,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="text-[11px] text-zinc-500">Automated Contract Tests</div>
         </div>
       </div>
+
+      {/* Codebase Repositories Git Telemetry */}
+      {/* @implements spec-ft-git-dashboard-ui::REQ-001 */}
+      {/* @implements spec-ft-git-dashboard-ui::REQ-002 */}
+      {/* @implements spec-ft-git-dashboard-ui::REQ-005 */}
+      <GitRepositoriesCard statuses={gitStatuses} />
 
       {/* Epics Progress Grid */}
       <div className="space-y-3">

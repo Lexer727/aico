@@ -10,6 +10,7 @@ import {
   FolderArchive,
   Package,
   BookOpen,
+  FolderGit2,
 } from 'lucide-react';
 import { FileDropZone } from '../../components/common/FileDropZone';
 import { MarkdownView, stripDocumentHeader } from '../../components/common/MarkdownView';
@@ -39,6 +40,7 @@ export interface EpicData {
   adrs?: string[];
   ubiquitousLanguage?: TermInfo[];
   ubiquitous_language?: TermInfo[];
+  repositories?: string[];
   features?: DiscoveredFeature[];
   specs?: Array<{
     id: string;
@@ -228,6 +230,22 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
     return map;
   }, [allAdrs]);
 
+  // @implements spec-ft-git-dashboard-ui::REQ-003
+  const relevantRepositories = useMemo(() => {
+    if (epic.repositories && epic.repositories.length > 0) {
+      return epic.repositories;
+    }
+    const reposSet = new Set<string>();
+    for (const feat of currentFeaturesList) {
+      if (feat.repositories) {
+        for (const r of feat.repositories) {
+          reposSet.add(r);
+        }
+      }
+    }
+    return Array.from(reposSet);
+  }, [epic.repositories, currentFeaturesList]);
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6 text-zinc-100">
       {/* Epic Header */}
@@ -241,6 +259,24 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
               <span className="text-xs text-zinc-500 font-mono">
                 Order #{epic.order}
               </span>
+            )}
+            {relevantRepositories.length > 0 && (
+              <div
+                data-testid="epic-repositories-list"
+                className="flex items-center gap-1.5 ml-2"
+              >
+                <FolderGit2 className="w-3.5 h-3.5 text-zinc-400" />
+                <span className="text-xs text-zinc-400 font-mono">Repositories:</span>
+                {relevantRepositories.map((repo) => (
+                  <span
+                    key={repo}
+                    data-testid={`epic-repo-badge-${repo}`}
+                    className="text-[11px] font-mono px-2 py-0.5 rounded bg-zinc-900 border border-zinc-700/80 text-zinc-300 font-medium"
+                  >
+                    {repo}
+                  </span>
+                ))}
+              </div>
             )}
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-white mt-2">{epic.title}</h1>
