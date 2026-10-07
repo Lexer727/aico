@@ -67,15 +67,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             </div>
           </section>
 
-          {/* SDD Blueprints Section */}
+          {/* AICO Skills Section */}
           <section className="space-y-2.5">
             <div className="flex items-center gap-2 font-semibold text-zinc-300">
               <Sliders className="w-3.5 h-3.5 text-emerald-400" />
-              <span>SDD Blueprint Standards</span>
+              <span>AICO Skills</span>
             </div>
             <div className="grid grid-cols-2 gap-3 bg-zinc-950/60 p-3 rounded-lg border border-zinc-800/80">
               <div>
-                <span className="text-zinc-500 block mb-1">Skills Version</span>
+                <span className="text-zinc-500 block mb-1">AICO Skills Version</span>
                 <span className="font-mono text-zinc-200 bg-zinc-900 px-2 py-1 rounded border border-zinc-800 block">
                   0.1.2 (Standardized Frontmatter)
                 </span>

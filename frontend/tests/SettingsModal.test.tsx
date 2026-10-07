@@ -14,6 +14,8 @@ describe('SettingsModal Component', () => {
     expect(screen.getByTestId('settings-modal')).toBeInTheDocument();
     expect(screen.getByText('Workspace & System Settings')).toBeInTheDocument();
     expect(screen.getByText(/4242 \(Axum Embedded\)/i)).toBeInTheDocument();
+    expect(screen.getByText('AICO Skills')).toBeInTheDocument();
+    expect(screen.getByText('AICO Skills Version')).toBeInTheDocument();
 
     const closeBtn = screen.getByTestId('settings-close-btn');
     fireEvent.click(closeBtn);

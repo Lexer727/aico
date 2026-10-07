@@ -66,12 +66,13 @@ const defaultEpics: DiscoveredEpicNav[] = [
   },
   {
     id: 'ec-specs',
-    title: 'AICO SDD Blueprints & Migration',
+    title: 'AICO Artifact Blueprints & Skills',
     status: 'Completed',
     specs: [
-      { id: 'spec-ft-specs-blueprint-standards', title: 'AICO SDD Blueprint Standards v0.1.2' },
+      { id: 'spec-ft-specs-blueprint-standards', title: 'AICO Blueprint Standards' },
       { id: 'spec-ft-specs-skills-evolution', title: 'AICO Skills Evolution & Wave-Internal Tasks' },
-      { id: 'spec-ft-specs-migration-engine', title: 'AICO Spec Migration Engine v0.1.2' },
+      { id: 'spec-ft-specs-migration-engine', title: 'AICO Spec Migration Engine' },
+      { id: 'spec-ft-specs-skills-versioning-and-naming', title: 'Skills Version Decoupling & Naming' },
     ],
   },
 ];
@@ -84,9 +85,10 @@ const defaultFeatures: DiscoveredFeatureNav[] = [
   { id: 'ft-core-mcp-tools', name: 'Deterministic SDD Tools', epicId: 'ec-core' },
   { id: 'ft-core-webui-shell', name: 'WebUI Shell & Dockable Panels', epicId: 'ec-core' },
   { id: 'ft-core-epic-hub', name: 'Single-Page Epic Hub & Graph', epicId: 'ec-core' },
-  { id: 'ft-specs-blueprint-standards', name: 'Blueprint Standards v0.1.2', epicId: 'ec-specs' },
+  { id: 'ft-specs-blueprint-standards', name: 'Blueprint Standards', epicId: 'ec-specs' },
   { id: 'ft-specs-skills-evolution', name: 'Skills Evolution & Wave Tasks', epicId: 'ec-specs' },
-  { id: 'ft-specs-migration-engine', name: 'Migration Engine v0.1.2', epicId: 'ec-specs' },
+  { id: 'ft-specs-migration-engine', name: 'Migration Engine', epicId: 'ec-specs' },
+  { id: 'ft-specs-skills-versioning-and-naming', name: 'Skills Versioning & Naming', epicId: 'ec-specs' },
   { id: 'ft-fast-trace', name: 'Fast-Trace Binary Parser', epicId: '', isStandalone: true },
 ];
 
