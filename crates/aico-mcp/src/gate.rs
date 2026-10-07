@@ -84,6 +84,48 @@ impl ArtifactToolGate {
         Ok(path)
     }
 
+    /// Dynamically resolve aico_skills_version from VERSION file or environment
+    pub fn resolve_skills_version(specs_root: &Path) -> String {
+        if let Ok(v) = std::env::var("AICO_SKILLS_VERSION") {
+            let trimmed = v.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+
+        let candidates = [
+            specs_root.join("../codebase/aico-skills/VERSION"),
+            specs_root.join("../aico-skills/VERSION"),
+            specs_root.join("VERSION"),
+        ];
+
+        for candidate in &candidates {
+            if let Ok(content) = fs::read_to_string(candidate) {
+                let trimmed = content.trim();
+                if !trimmed.is_empty() {
+                    return trimmed.to_string();
+                }
+            }
+        }
+
+        if let Ok(userprofile) = std::env::var("USERPROFILE") {
+            let plugin_version = Path::new(&userprofile)
+                .join(".gemini")
+                .join("config")
+                .join("plugins")
+                .join("aico-skills")
+                .join("VERSION");
+            if let Ok(content) = fs::read_to_string(plugin_version) {
+                let trimmed = content.trim();
+                if !trimmed.is_empty() {
+                    return trimmed.to_string();
+                }
+            }
+        }
+
+        "0.1.2".to_string()
+    }
+
     /// Inject YAML frontmatter and write artifact atomically to disk
     // @implements spec-ft-core-mcp-tools::REQ-003
     // @implements spec-ft-core-mcp-tools::REQ-005
@@ -127,10 +169,11 @@ impl ArtifactToolGate {
         };
 
         let body = params.content.unwrap_or_default();
+        let skills_ver = Self::resolve_skills_version(&params.specs_root);
 
         let full_doc = format!(
-            "---\nid: {}\ntype: {}\naico_skills_version: \"0.1.2\"\nepic: {}\ntitle: {}\nstatus: \"Draft\"\nderives_from: {}\ncreated_at: \"2026-10-05T20:00:00Z\"\n---\n\n{}",
-            doc_id, params.artifact_type, params.epic_slug, params.title, derives_str, body
+            "---\nid: {}\ntype: {}\naico_skills_version: \"{}\"\nepic: {}\ntitle: {}\nstatus: \"Draft\"\nderives_from: {}\ncreated_at: \"2026-10-05T20:00:00Z\"\n---\n\n{}",
+            doc_id, params.artifact_type, skills_ver, params.epic_slug, params.title, derives_str, body
         );
 
         fs::write(&target_path, full_doc)?;
