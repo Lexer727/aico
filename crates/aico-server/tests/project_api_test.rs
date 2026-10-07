@@ -21,6 +21,7 @@ async fn test_project_management_rest_api() {
             version: "0.1.0".to_string(),
             codebase_path: "../codebase/core".to_string(),
             created_at: None,
+            repositories: None,
         },
         status: aico_core::ProjectStatus::Active,
     };

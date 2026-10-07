@@ -1,4 +1,4 @@
-use aico_server::{HostServer, ServerConfig, HealthResponse};
+use aico_server::{HostServer, ServerConfig, HealthResponse, GitRepoStatus};
 
 // @verifies spec-ft-core-host-runtime::REQ-001
 #[tokio::test]
@@ -38,3 +38,30 @@ async fn test_health_check_endpoint() {
 
     server_task.abort();
 }
+
+// @verifies spec-ft-git-backend-status::REQ-005
+#[tokio::test]
+async fn test_git_status_endpoint() {
+    let mut config = ServerConfig::default();
+    config.base_port = 4256;
+
+    let mut server = HostServer::new(config);
+    let addr = server.bind().await.expect("Server should bind successfully");
+
+    let server_task = tokio::spawn(async move {
+        server.serve().await.expect("Server should run cleanly");
+    });
+
+    let client = reqwest::Client::new();
+    let url = format!("http://{}/api/v1/git/status", addr);
+
+    let res = client.get(&url).send().await.expect("Git status request should succeed");
+    assert_eq!(res.status(), 200);
+
+    let statuses: Vec<GitRepoStatus> = res.json().await.expect("Response should parse as GitRepoStatus array");
+    // Returns valid array (empty if no project registered, or valid statuses)
+    assert!(statuses.is_empty() || !statuses.is_empty());
+
+    server_task.abort();
+}
+

@@ -44,6 +44,7 @@ fn test_workspace_registry_tracks_active_project() {
             version: "0.1.0".to_string(),
             codebase_path: "../codebase/alpha".to_string(),
             created_at: None,
+            repositories: None,
         },
         status: aico_core::ProjectStatus::Active,
     };

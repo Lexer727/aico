@@ -5,7 +5,7 @@ pub mod wizard;
 pub mod watcher;
 pub mod human_gate;
 
-pub use manifest::{ProjectManifest, ManifestError};
+pub use manifest::{ProjectManifest, ProjectRepository, ManifestError};
 pub use scanner::{RootScanner, DiscoveredProject, ProjectStatus};
 pub use registry::WorkspaceRegistry;
 pub use wizard::CodebaseWizard;

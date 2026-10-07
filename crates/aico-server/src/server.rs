@@ -19,6 +19,7 @@ use tokio::sync::RwLock;
 
 use aico_core::{DiscoveredProject, WorkspaceRegistry};
 use crate::auth::LanAuthenticator;
+use crate::git::{GitRepoStatus, GitStatusScanner};
 use crate::ws::WebSocketHub;
 
 #[derive(Error, Debug)]
@@ -165,6 +166,7 @@ impl HostServer {
             .route("/api/v1/adrs/:id", get(get_adr_handler))
             .route("/api/v1/glossary", get(get_glossary_handler))
             .route("/api/v1/stats", get(get_stats_handler))
+            .route("/api/v1/git/status", get(get_git_status_handler))
             .route("/api/v1/raw", get(get_raw_file_handler))
             .route("/ws", get(ws_handler))
             .fallback(crate::assets::static_asset_handler)
@@ -1396,6 +1398,33 @@ async fn get_stats_handler(
         uptime_seconds: state.start_time.elapsed().as_secs(),
     })
 }
+
+// @implements spec-ft-git-backend-status::REQ-005
+async fn get_git_status_handler(
+    State(state): State<AppState>,
+) -> Json<Vec<GitRepoStatus>> {
+    let registry = state.registry.read().await;
+    let active_project = registry.get_active().cloned().or_else(|| registry.list_cloned().into_iter().next());
+
+    let repos = if let Some(proj) = active_project {
+        proj.manifest.get_effective_repositories(&proj.specs_path)
+    } else {
+        vec![]
+    };
+
+    drop(registry);
+
+    let mut scan_futures = Vec::new();
+    for repo in repos {
+        scan_futures.push(async move {
+            GitStatusScanner::scan_repo(&repo.id, &repo.name, &repo.path, &repo.repo_type).await
+        });
+    }
+
+    let results = futures_util::future::join_all(scan_futures).await;
+    Json(results)
+}
+
 
 // @implements spec-ft-core-host-runtime::REQ-003
 // @implements spec-ft-core-host-runtime::REQ-007
