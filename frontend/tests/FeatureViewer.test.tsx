@@ -17,7 +17,8 @@ describe('FeatureViewer Component', () => {
     status: 'Completed',
   };
 
-  it('renders feature bundle with linked SPEC and PLAN', () => {
+  // @verifies spec-ft-core-repository-badges-alignment::REQ-001
+  it('omits spec and plan tags under title and provides popout actions for linked SPEC and PLAN', () => {
     const onOpenSpec = vi.fn();
     const onOpenPlan = vi.fn();
 
@@ -31,15 +32,18 @@ describe('FeatureViewer Component', () => {
 
     expect(screen.getByText('FEATURE: 01-host-runtime')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1, name: 'Host Runtime & Local Server' })).toBeInTheDocument();
-    expect(screen.getByText('spec-ft-core-host-runtime')).toBeInTheDocument();
-    expect(screen.getByText('PLAN-CORE-001')).toBeInTheDocument();
 
-    const specTag = screen.getByText('spec-ft-core-host-runtime');
-    fireEvent.click(specTag);
+    // Header spec/plan badges are removed per REQ-001
+    expect(screen.queryByTestId('spec-badge-link')).toBeNull();
+    expect(screen.queryByTestId('plan-badge-link')).toBeNull();
+
+    // Opening spec and plan is supported via accordion popout actions
+    const specPopout = screen.getByTestId('popout-specifications');
+    fireEvent.click(specPopout);
     expect(onOpenSpec).toHaveBeenCalledWith('spec-ft-core-host-runtime', 'Host Runtime & Local HTTP/WebSocket Server');
 
-    const planTag = screen.getByText('PLAN-CORE-001');
-    fireEvent.click(planTag);
+    const planPopout = screen.getByTestId('popout-taskPlan');
+    fireEvent.click(planPopout);
     expect(onOpenPlan).toHaveBeenCalledWith('PLAN-CORE-001', 'Host Runtime & Local Axum Server');
   });
 

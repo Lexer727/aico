@@ -260,26 +260,32 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
                 Order #{epic.order}
               </span>
             )}
-            {relevantRepositories.length > 0 && (
-              <div
-                data-testid="epic-repositories-list"
-                className="flex items-center gap-1.5 ml-2"
-              >
-                <FolderGit2 className="w-3.5 h-3.5 text-zinc-400" />
-                <span className="text-xs text-zinc-400 font-mono">Repositories:</span>
-                {relevantRepositories.map((repo) => (
-                  <span
-                    key={repo}
-                    data-testid={`epic-repo-badge-${repo}`}
-                    className="text-[11px] font-mono px-2 py-0.5 rounded bg-zinc-900 border border-zinc-700/80 text-zinc-300 font-medium"
-                  >
-                    {repo}
-                  </span>
-                ))}
-              </div>
-            )}
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-white mt-2">{epic.title}</h1>
+
+          {/* Repositories beneath title */}
+          {/* @implements spec-ft-git-dashboard-ui::REQ-003 */}
+          {/* @implements spec-ft-core-repository-badges-alignment::REQ-003 */}
+          {/* @implements spec-ft-core-repository-badges-alignment::REQ-004 */}
+          {relevantRepositories.length > 0 && (
+            <div
+              data-testid="epic-repositories-list"
+              className="flex items-center gap-1.5 mt-2"
+            >
+              <span title="Repositories" className="flex items-center text-zinc-400">
+                <FolderGit2 className="w-3.5 h-3.5" />
+              </span>
+              {relevantRepositories.map((repo) => (
+                <span
+                  key={repo}
+                  data-testid={`epic-repo-badge-${repo}`}
+                  className="text-[11px] font-mono px-2 py-0.5 rounded bg-zinc-900 border border-zinc-700/80 text-zinc-300 font-medium"
+                >
+                  {repo}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Status and Verification on the right */}

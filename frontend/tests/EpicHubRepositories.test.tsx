@@ -4,8 +4,10 @@ import React from 'react';
 import { EpicHubView, type EpicData } from '../src/features/epic-hub/EpicHubView';
 
 // @verifies spec-ft-git-dashboard-ui::REQ-003
+// @verifies spec-ft-core-repository-badges-alignment::REQ-003
+// @verifies spec-ft-core-repository-badges-alignment::REQ-004
 describe('EpicHubView Repositories Roll-up', () => {
-  it('dynamically aggregates and displays repositories declared across child feature plans', () => {
+  it('dynamically aggregates and displays repositories declared across child feature plans under title with icon only', () => {
     const mockEpic: EpicData = {
       id: 'ec-git',
       title: 'AICO Multi-Repo Git Integration',
@@ -36,6 +38,12 @@ describe('EpicHubView Repositories Roll-up', () => {
 
     // Verify repositories list container is rendered
     expect(screen.getByTestId('epic-repositories-list')).toBeInTheDocument();
+
+    // Verify icon with title="Repositories"
+    expect(screen.getByTitle('Repositories')).toBeInTheDocument();
+
+    // Verify absence of textual "Repositories:" label
+    expect(screen.queryByText('Repositories:')).toBeNull();
 
     // Verify union of repositories: aico, aico-specs, aico-skills
     expect(screen.getByTestId('epic-repo-badge-aico')).toHaveTextContent('aico');

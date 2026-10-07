@@ -118,3 +118,35 @@ fn test_manifest_multi_repo_parsing() {
     assert_eq!(default_effective[1].repo_type, "specs");
 }
 
+// @verifies spec-ft-git-relative-paths-manifest::REQ-001
+// @verifies spec-ft-git-relative-paths-manifest::REQ-002
+// @verifies spec-ft-git-relative-paths-manifest::REQ-003
+// @verifies spec-ft-git-relative-paths-manifest::REQ-004
+#[test]
+fn test_manifest_relative_repositories_resolution() {
+    let json_content = r#"{
+        "name": "aico",
+        "version": "0.1.1",
+        "codebase_path": "../codebase/aico",
+        "repositories": [
+            { "id": "aico", "name": "AICO Engine & WebUI", "path": "../codebase/aico", "type": "codebase" },
+            { "id": "aico-specs", "name": "AICO Specs", "path": ".", "type": "specs" },
+            { "id": "aico-skills", "name": "AICO Skills Suite", "path": "../codebase/aico-skills", "type": "skills" }
+        ]
+    }"#;
+
+    let manifest = ProjectManifest::from_json_str(json_content)
+        .expect("Manifest with relative repository paths should parse successfully");
+
+    let specs_dir = PathBuf::from("d:/aico/aico-specs");
+    let effective = manifest.get_effective_repositories(&specs_dir);
+
+    assert_eq!(effective.len(), 3);
+    assert_eq!(effective[0].id, "aico");
+    assert_eq!(effective[0].path, "d:/aico/codebase/aico");
+    assert_eq!(effective[1].id, "aico-specs");
+    assert_eq!(effective[1].path, "d:/aico/aico-specs");
+    assert_eq!(effective[2].id, "aico-skills");
+    assert_eq!(effective[2].path, "d:/aico/codebase/aico-skills");
+}
+

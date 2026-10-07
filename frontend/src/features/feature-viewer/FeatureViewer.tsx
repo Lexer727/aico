@@ -264,43 +264,30 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
             {feature.name}
           </h1>
 
-          {/* Quick Jump Spec / Plan Badges (Clickable) */}
-          <div className="flex items-center gap-2 mt-2">
-            <span
-              data-testid="spec-badge-link"
-              onClick={() => onOpenSpec?.(specIdentifier, specDisplayName)}
-              className="font-mono text-[11px] px-2 py-0.5 rounded bg-sky-950/50 border border-sky-800/60 text-sky-400 hover:bg-sky-900/50 hover:border-sky-600 cursor-pointer transition-colors"
-              title="Click to open specification"
+          {/* Target Repositories */}
+          {/* @implements spec-ft-git-dashboard-ui::REQ-004 */}
+          {/* @implements spec-ft-core-repository-badges-alignment::REQ-001 */}
+          {/* @implements spec-ft-core-repository-badges-alignment::REQ-002 */}
+          {/* @implements spec-ft-core-repository-badges-alignment::REQ-004 */}
+          {feature.repositories && feature.repositories.length > 0 && (
+            <div
+              data-testid="feature-repositories-list"
+              className="flex items-center gap-1.5 mt-2"
             >
-              {specIdentifier}
-            </span>
-            <span
-              data-testid="plan-badge-link"
-              onClick={() => onOpenPlan?.(planIdentifier, planDisplayName)}
-              className="font-mono text-[11px] px-2 py-0.5 rounded bg-emerald-950/50 border border-emerald-800/60 text-emerald-400 hover:bg-emerald-900/50 hover:border-emerald-600 cursor-pointer transition-colors"
-              title="Click to open implementation plan"
-            >
-              {planIdentifier}
-            </span>
-            {/* @implements spec-ft-git-dashboard-ui::REQ-004 */}
-            {feature.repositories && feature.repositories.length > 0 && (
-              <div
-                data-testid="feature-repositories-list"
-                className="flex items-center gap-1.5 ml-2"
-              >
-                <FolderGit2 className="w-3.5 h-3.5 text-zinc-400" />
-                {feature.repositories.map((repo) => (
-                  <span
-                    key={repo}
-                    data-testid={`feature-repo-badge-${repo}`}
-                    className="font-mono text-[11px] px-2 py-0.5 rounded bg-zinc-900 border border-zinc-700/80 text-zinc-300 font-medium"
-                  >
-                    {repo}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
+              <span title="Repositories" className="flex items-center text-zinc-400">
+                <FolderGit2 className="w-3.5 h-3.5" />
+              </span>
+              {feature.repositories.map((repo) => (
+                <span
+                  key={repo}
+                  data-testid={`feature-repo-badge-${repo}`}
+                  className="font-mono text-[11px] px-2 py-0.5 rounded bg-zinc-900 border border-zinc-700/80 text-zinc-300 font-medium"
+                >
+                  {repo}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Status and Progress on the right */}

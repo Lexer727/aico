@@ -4,8 +4,11 @@ import React from 'react';
 import { FeatureViewer, type FeatureData } from '../src/features/feature-viewer/FeatureViewer';
 
 // @verifies spec-ft-git-dashboard-ui::REQ-004
+// @verifies spec-ft-core-repository-badges-alignment::REQ-001
+// @verifies spec-ft-core-repository-badges-alignment::REQ-002
+// @verifies spec-ft-core-repository-badges-alignment::REQ-004
 describe('FeatureViewer Target Repositories', () => {
-  it('displays target repository badge pills in the header', () => {
+  it('displays target repository badge pills in the header under title with icon only', () => {
     const mockFeature: FeatureData = {
       id: 'ft-git-backend-status',
       name: 'Git Status Inspection Engine',
@@ -19,7 +22,18 @@ describe('FeatureViewer Target Repositories', () => {
     render(<FeatureViewer feature={mockFeature} />);
 
     // Verify repositories list container is rendered
-    expect(screen.getByTestId('feature-repositories-list')).toBeInTheDocument();
+    const repoList = screen.getByTestId('feature-repositories-list');
+    expect(repoList).toBeInTheDocument();
+
+    // Verify icon with title="Repositories"
+    expect(screen.getByTitle('Repositories')).toBeInTheDocument();
+
+    // Verify absence of textual "Repositories:" label
+    expect(screen.queryByText('Repositories:')).toBeNull();
+
+    // Verify spec and plan jump badges are omitted under title
+    expect(screen.queryByTestId('spec-badge-link')).toBeNull();
+    expect(screen.queryByTestId('plan-badge-link')).toBeNull();
 
     // Verify badges for each declared repository
     expect(screen.getByTestId('feature-repo-badge-aico')).toHaveTextContent('aico');
