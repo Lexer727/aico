@@ -53,4 +53,36 @@ describe('FeatureViewer Target Repositories', () => {
     render(<FeatureViewer feature={mockFeatureNoRepos} />);
     expect(screen.queryByTestId('feature-repositories-list')).toBeNull();
   });
+
+  // @verifies spec-ft-core-repository-badges-alignment::REQ-005
+  it('preserves loaded repository badges across prop updates or re-renders even if subsequent prop payload omits repositories', () => {
+    const initialWithRepos: FeatureData = {
+      id: 'ft-git-backend-status',
+      name: 'Git Status Inspection Engine',
+      status: 'In Progress',
+      repositories: ['aico', 'aico-specs'],
+      tasks: [],
+    };
+
+    const { rerender } = render(<FeatureViewer feature={initialWithRepos} />);
+    expect(screen.getByTestId('feature-repositories-list')).toBeInTheDocument();
+    expect(screen.getByTestId('feature-repo-badge-aico')).toHaveTextContent('aico');
+
+    // Simulate re-render where initialFeature is re-passed without repositories (e.g. from tab switch / window blur)
+    const reRenderedWithoutRepos: FeatureData = {
+      id: 'ft-git-backend-status',
+      name: 'Git Status Inspection Engine',
+      status: 'In Progress',
+      repositories: undefined,
+      tasks: [],
+    };
+
+    rerender(<FeatureViewer feature={reRenderedWithoutRepos} />);
+
+    // Repository badges must still remain mounted without disappearing
+    expect(screen.getByTestId('feature-repositories-list')).toBeInTheDocument();
+    expect(screen.getByTestId('feature-repo-badge-aico')).toHaveTextContent('aico');
+    expect(screen.getByTestId('feature-repo-badge-aico-specs')).toHaveTextContent('aico-specs');
+  });
 });
+

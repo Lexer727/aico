@@ -94,8 +94,16 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
   const [feature, setFeature] = useState<FeatureData>(initialFeature);
 
   // Sync state if initialFeature prop changes
+  // @implements spec-ft-core-repository-badges-alignment::REQ-005
   useEffect(() => {
-    setFeature(initialFeature);
+    setFeature((prev) => ({
+      ...prev,
+      ...initialFeature,
+      repositories:
+        initialFeature.repositories && initialFeature.repositories.length > 0
+          ? initialFeature.repositories
+          : prev.repositories,
+    }));
   }, [initialFeature]);
 
   // Fetch full live artifact data if details are missing
@@ -121,6 +129,10 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
             tasks: live.tasks && live.tasks.length > 0 ? live.tasks : prev.tasks,
             test_seams: live.test_seams && live.test_seams.length > 0 ? live.test_seams : prev.test_seams,
             adrs: live.adrs && live.adrs.length > 0 ? live.adrs : prev.adrs,
+            repositories:
+              live.repositories && live.repositories.length > 0
+                ? live.repositories
+                : prev.repositories,
             brainstorm_content: live.brainstorm_content || prev.brainstorm_content,
             brainstormContent: live.brainstormContent || live.brainstorm_content || prev.brainstormContent,
             deepdive_content: live.deepdive_content || prev.deepdive_content,

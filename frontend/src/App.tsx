@@ -420,6 +420,7 @@ const MainWorkspace: React.FC = () => {
             deepdive_content: foundFeat.deepdive_content || foundFeat.deepdiveContent,
             deepdiveContent: foundFeat.deepdiveContent || foundFeat.deepdive_content,
             ubiquitous_language: foundFeat.ubiquitous_language || foundFeat.ubiquitousLanguage,
+            repositories: foundFeat.repositories,
           }
         : {
             id: activeTab.id,
