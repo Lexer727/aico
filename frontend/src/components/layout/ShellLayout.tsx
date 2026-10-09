@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Menu,
   ChevronDown,
@@ -13,6 +13,12 @@ import {
   Package,
 } from 'lucide-react';
 import { ActivityMonitor } from './ActivityMonitor';
+import type {
+  DiscoveredEpic,
+  DiscoveredFeature,
+  DiscoveredAdr,
+} from '../../features/feature-task-data';
+import { createSearchIndex, searchWorkspace } from '../../utils/searchEngine';
 
 export interface DiscoveredFeatureNav {
   id: string;
@@ -41,12 +47,16 @@ export interface ShellLayoutProps {
   epics?: DiscoveredEpicNav[];
   features?: DiscoveredFeatureNav[];
   adrs?: DiscoveredAdrNav[];
+  fullEpics?: DiscoveredEpic[];
+  fullFeatures?: DiscoveredFeature[];
+  fullAdrs?: DiscoveredAdr[];
   onSelectEpic?: (epicId: string) => void;
   onSelectFeature?: (featureId: string, name: string) => void;
   onSelectSpec?: (specId: string, title: string) => void;
   onSelectCode?: (file: string) => void;
   onSelectAdr?: (adrId: string) => void;
   onOpenSettings?: () => void;
+  onOpenOmniSearch?: () => void;
 }
 
 const defaultEpics: DiscoveredEpicNav[] = [
@@ -126,18 +136,24 @@ const defaultAdrs: DiscoveredAdrNav[] = [
 // @implements spec-ft-core-webui-shell::REQ-012
 // @implements spec-ft-core-webui-shell::REQ-013
 // @implements spec-ft-core-epic-hub::REQ-001
+// @implements spec-ft-core-omni-search-fulltext::REQ-003
+// @implements spec-ft-core-omni-search-fulltext::REQ-004
 export const ShellLayout: React.FC<ShellLayoutProps> = ({
   children,
   isMobile = false,
   epics = defaultEpics,
   features = defaultFeatures,
   adrs = defaultAdrs,
+  fullEpics,
+  fullFeatures,
+  fullAdrs,
   onSelectEpic,
   onSelectFeature,
   onSelectSpec,
   onSelectCode,
   onSelectAdr,
   onOpenSettings,
+  onOpenOmniSearch,
 }) => {
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
@@ -179,42 +195,113 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
     }));
   };
 
-  // Compile all specs across all epics
-  const allSpecs = epics.flatMap((e) =>
-    (e.specs || []).map((s) => ({
-      ...s,
-      epicId: e.id,
-    }))
-  );
+  const effectiveEpics = useMemo(() => {
+    if (epics && epics.length > 0 && epics !== defaultEpics) return epics;
+    if (fullEpics && fullEpics.length > 0) {
+      return fullEpics.map((e) => ({
+        id: e.id,
+        title: e.title,
+        status: e.status,
+        specs: e.specs || [],
+        features: (e.features || []).map((f) => ({ id: f.id, name: f.name })),
+      }));
+    }
+    return epics || defaultEpics;
+  }, [epics, fullEpics]);
 
-  const q = searchQuery.trim().toLowerCase();
+  const effectiveFeatures = useMemo(() => {
+    if (features && features.length > 0 && features !== defaultFeatures) return features;
+    if (fullFeatures && fullFeatures.length > 0) {
+      return fullFeatures.map((f) => ({
+        id: f.id,
+        name: f.name || f.id,
+        epicId: f.epic_id || (f as any).epicId || '',
+        isStandalone: f.is_standalone ?? (f as any).isStandalone ?? false,
+      }));
+    }
+    return features || defaultFeatures;
+  }, [features, fullFeatures]);
+
+  const effectiveAdrs = useMemo(() => {
+    if (adrs && adrs.length > 0 && adrs !== defaultAdrs) return adrs;
+    if (fullAdrs && fullAdrs.length > 0) {
+      return fullAdrs.map((a) => ({
+        id: a.id,
+        title: a.title,
+        status: a.status,
+      }));
+    }
+    return adrs || defaultAdrs;
+  }, [adrs, fullAdrs]);
+
+  // Compile all specs across all epics
+  const allSpecs = useMemo(() => {
+    return effectiveEpics.flatMap((e) =>
+      (e.specs || []).map((s) => ({
+        ...s,
+        epicId: e.id,
+      }))
+    );
+  }, [effectiveEpics]);
+
+  // Build in-memory full-text fuzzy search index
+  const searchIndex = useMemo(() => {
+    return createSearchIndex({
+      epics: fullEpics || (effectiveEpics as any),
+      features: fullFeatures || (effectiveFeatures as any),
+      adrs: fullAdrs || (effectiveAdrs as any),
+      codeFiles: defaultCodeFiles,
+    });
+  }, [fullEpics, effectiveEpics, fullFeatures, effectiveFeatures, fullAdrs, effectiveAdrs]);
+
+  const q = searchQuery.trim();
+
+  const searchMatches = useMemo(() => {
+    if (!q) return null;
+    return searchWorkspace(searchIndex, q, { scopes: scopeFilters });
+  }, [searchIndex, q, scopeFilters]);
 
   // Filter items in each category
-  const filteredEpics = epics.filter(
-    (e) => !q || e.id.toLowerCase().includes(q) || e.title.toLowerCase().includes(q)
-  );
+  const filteredEpics = useMemo(() => {
+    if (!scopeFilters.epics) return [];
+    if (!q) return effectiveEpics;
+    if (!searchMatches) return [];
+    return effectiveEpics.filter((e) => searchMatches.some((m) => m.scope === 'epics' && m.id.toLowerCase() === e.id.toLowerCase()));
+  }, [effectiveEpics, q, searchMatches, scopeFilters.epics]);
 
-  const filteredFeatures = features.filter(
-    (f) =>
-      !q ||
-      f.id.toLowerCase().includes(q) ||
-      f.name.toLowerCase().includes(q) ||
-      f.epicId.toLowerCase().includes(q)
-  );
+  const filteredFeatures = useMemo(() => {
+    if (!scopeFilters.features) return [];
+    if (!q) return effectiveFeatures;
+    if (!searchMatches) return [];
+    return effectiveFeatures.filter((f) => searchMatches.some((m) => m.scope === 'features' && m.id.toLowerCase() === f.id.toLowerCase()));
+  }, [effectiveFeatures, q, searchMatches, scopeFilters.features]);
 
-  const filteredSpecs = allSpecs.filter(
-    (s) =>
-      !q ||
-      s.id.toLowerCase().includes(q) ||
-      s.title.toLowerCase().includes(q) ||
-      s.epicId.toLowerCase().includes(q)
-  );
+  const filteredSpecs = useMemo(() => {
+    if (!scopeFilters.specs) return [];
+    if (!q) return allSpecs;
+    if (!searchMatches) return [];
+    return allSpecs.filter((s) => searchMatches.some((m) => m.scope === 'specs' && m.id.toLowerCase() === s.id.toLowerCase()));
+  }, [allSpecs, q, searchMatches, scopeFilters.specs]);
 
-  const filteredCode = defaultCodeFiles.filter((c) => !q || c.toLowerCase().includes(q));
+  const filteredCode = useMemo(() => {
+    if (!scopeFilters.code) return [];
+    if (!q) return defaultCodeFiles;
+    if (!searchMatches) return [];
+    return defaultCodeFiles.filter((c) => searchMatches.some((m) => m.scope === 'code' && m.id.toLowerCase() === c.toLowerCase()));
+  }, [q, searchMatches, scopeFilters.code]);
 
-  const filteredAdrs = adrs.filter(
-    (a) => !q || a.id.toLowerCase().includes(q) || a.title.toLowerCase().includes(q)
-  );
+  const filteredAdrs = useMemo(() => {
+    if (!scopeFilters.adrs) return [];
+    if (!q) return effectiveAdrs;
+    if (!searchMatches) return [];
+    return effectiveAdrs.filter((a) => searchMatches.some((m) => m.scope === 'adrs' && m.id.toLowerCase() === a.id.toLowerCase()));
+  }, [effectiveAdrs, q, searchMatches, scopeFilters.adrs]);
+
+  const isEpicsOpen = openSections.epics || (!!q && filteredEpics.length > 0);
+  const isFeaturesOpen = openSections.features || (!!q && filteredFeatures.length > 0);
+  const isSpecsOpen = openSections.specifications || (!!q && filteredSpecs.length > 0);
+  const isCodeOpen = openSections.code || (!!q && filteredCode.length > 0);
+  const isAdrsOpen = openSections.adrs || (!!q && filteredAdrs.length > 0);
 
   const renderNavContent = () => (
     <div className="flex flex-col h-full bg-zinc-900 border-r border-zinc-800 text-zinc-300 select-none">
@@ -224,9 +311,23 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
           <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-pulse" />
           <span>AICO WORKSPACE</span>
         </div>
-        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400" title="AICO Platform Version">
-          v0.1.1
-        </span>
+        <div className="flex items-center gap-1.5">
+          {onOpenOmniSearch && (
+            <button
+              type="button"
+              data-testid="sidebar-omnisearch-btn"
+              onClick={onOpenOmniSearch}
+              className="flex items-center gap-1 text-[10px] text-zinc-400 hover:text-zinc-200 bg-zinc-800/80 hover:bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-700/60 transition-colors"
+              title="Global OmniSearch (Ctrl+K)"
+            >
+              <Search className="w-3 h-3 text-indigo-400" />
+              <span className="font-mono text-[9px]">Ctrl+K</span>
+            </button>
+          )}
+          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400" title="AICO Platform Version">
+            v0.1.1
+          </span>
+        </div>
       </div>
 
       {/* Sidebar Integrated Search & 5 Persistent Filter Checkboxes */}
@@ -312,13 +413,13 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
                   </span>
                 )}
               </div>
-              {openSections.epics ? (
+              {isEpicsOpen ? (
                 <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
               ) : (
                 <ChevronRight className="w-3.5 h-3.5 text-zinc-400" />
               )}
             </button>
-            {openSections.epics && (
+            {isEpicsOpen && (
               <div className="pl-6 pr-2 py-1 space-y-1 text-zinc-400">
                 {filteredEpics.length === 0 ? (
                   <div className="text-[11px] text-zinc-500 italic px-2 py-1">No matches</div>
@@ -359,13 +460,13 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
                   </span>
                 )}
               </div>
-              {openSections.features ? (
+              {isFeaturesOpen ? (
                 <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
               ) : (
                 <ChevronRight className="w-3.5 h-3.5 text-zinc-400" />
               )}
             </button>
-            {openSections.features && (
+            {isFeaturesOpen && (
               <div className="pl-6 pr-2 py-1 space-y-1 text-zinc-400">
                 {filteredFeatures.length === 0 ? (
                   <div className="text-[11px] text-zinc-500 italic px-2 py-1">No matches</div>
@@ -412,13 +513,13 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
                   </span>
                 )}
               </div>
-              {openSections.specifications ? (
+              {isSpecsOpen ? (
                 <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
               ) : (
                 <ChevronRight className="w-3.5 h-3.5 text-zinc-400" />
               )}
             </button>
-            {openSections.specifications && (
+            {isSpecsOpen && (
               <div className="pl-6 pr-2 py-1 space-y-1 text-zinc-400">
                 {filteredSpecs.length === 0 ? (
                   <div className="text-[11px] text-zinc-500 italic px-2 py-1">No matches</div>
@@ -457,13 +558,13 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
                   </span>
                 )}
               </div>
-              {openSections.code ? (
+              {isCodeOpen ? (
                 <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
               ) : (
                 <ChevronRight className="w-3.5 h-3.5 text-zinc-400" />
               )}
             </button>
-            {openSections.code && (
+            {isCodeOpen && (
               <div className="pl-6 pr-2 py-1 space-y-1 text-zinc-400">
                 {filteredCode.length === 0 ? (
                   <div className="text-[11px] text-zinc-500 italic px-2 py-1">No matches</div>
@@ -502,13 +603,13 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
                   </span>
                 )}
               </div>
-              {openSections.adrs ? (
+              {isAdrsOpen ? (
                 <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
               ) : (
                 <ChevronRight className="w-3.5 h-3.5 text-zinc-400" />
               )}
             </button>
-            {openSections.adrs && (
+            {isAdrsOpen && (
               <div className="pl-6 pr-2 py-1 space-y-1 text-zinc-400">
                 {filteredAdrs.length === 0 ? (
                   <div className="text-[11px] text-zinc-500 italic px-2 py-1">No matches</div>

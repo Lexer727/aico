@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ShellLayout, type DiscoveredEpicNav, type DiscoveredFeatureNav, type DiscoveredAdrNav } from './components/layout/ShellLayout';
 import { DockablePanel } from './components/layout/DockablePanel';
 import { TabBar } from './components/navigation/TabBar';
@@ -7,6 +7,8 @@ import { HistoryNavButtons } from './components/navigation/HistoryNavButtons';
 import { ConnectionStatusBanner } from './components/navigation/ConnectionStatusBanner';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { TerminalConsole } from './components/terminal/TerminalConsole';
+import { OmniSearchModal, type SearchResultItem } from './components/search/OmniSearchModal';
+import { createSearchIndex } from './utils/searchEngine';
 import { DashboardView } from './features/dashboard/DashboardView';
 import { EpicHubView, type EpicData } from './features/epic-hub/EpicHubView';
 import { FeatureViewer, type FeatureData } from './features/feature-viewer/FeatureViewer';
@@ -21,6 +23,7 @@ import { VisualLineageCanvas, type GraphNode, type GraphEdge } from './features/
 import { WebSocketProvider, useWebSocket } from './context/WebSocketContext';
 import { useTabStore, type TabItem } from './stores/useTabStore';
 import { useDockStore } from './stores/useDockStore';
+import { Search } from 'lucide-react';
 
 if (typeof window !== 'undefined') {
   (window as any).__TAB_STORE__ = useTabStore;
@@ -310,6 +313,78 @@ const MainWorkspace: React.FC = () => {
     });
   };
 
+  const [isOmniSearchOpen, setIsOmniSearchOpen] = useState(false);
+
+  // @implements spec-ft-core-omni-search-fulltext::REQ-005
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setIsOmniSearchOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
+
+  // Build Cross-Project Global Search Index
+  const globalSearchIndex = useMemo(() => {
+    const activeProjectObj = projects.find((p) => p.id === activeProjectId);
+    const projectName = activeProjectObj?.name || activeProjectId;
+
+    const activeIndex = createSearchIndex({
+      epics: fullEpics,
+      features: fullFeatures,
+      adrs: fullAdrs,
+      projectId: activeProjectId,
+      projectName,
+    });
+
+    for (const p of projects) {
+      if (p.id !== activeProjectId) {
+        activeIndex.push({
+          id: p.id,
+          title: p.name || p.id,
+          scope: 'epics',
+          projectId: p.id,
+          projectName: p.name || p.id,
+          searchableText: `${p.id} ${p.name || ''}`,
+          originalItem: p,
+        });
+      }
+    }
+
+    return activeIndex;
+  }, [projects, activeProjectId, fullEpics, fullFeatures, fullAdrs]);
+
+  // @implements spec-ft-core-omni-search-fulltext::REQ-007
+  const handleOmniSelect = useCallback(async (item: SearchResultItem) => {
+    if (item.projectId && item.projectId !== activeProjectId) {
+      setActiveProject(item.projectId);
+      try {
+        await fetch('/api/v1/projects/active', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project_id: item.projectId }),
+        });
+      } catch {
+        // Fallback
+      }
+    }
+
+    if (item.scope === 'epics') {
+      handleOpenEpic(item.id);
+    } else if (item.scope === 'features') {
+      handleOpenFeature(item.id);
+    } else if (item.scope === 'specs') {
+      handleOpenSpec(item.id);
+    } else if (item.scope === 'adrs') {
+      handleOpenAdr(item.id);
+    } else if (item.scope === 'code') {
+      handleOpenCode(item.id);
+    }
+  }, [activeProjectId, setActiveProject, handleOpenEpic, handleOpenFeature, handleOpenSpec, handleOpenAdr, handleOpenCode]);
+
   // Find active tab object
   const projectTabs = getProjectTabs(activeProjectId);
   const activeTab: TabItem | undefined = projectTabs.find((t) => t.id === activeTabId);
@@ -553,18 +628,35 @@ const MainWorkspace: React.FC = () => {
       epics={discoveredEpics.length > 0 ? discoveredEpics : undefined}
       features={discoveredFeatures.length > 0 ? discoveredFeatures : undefined}
       adrs={discoveredAdrs.length > 0 ? discoveredAdrs : undefined}
+      fullEpics={fullEpics}
+      fullFeatures={fullFeatures}
+      fullAdrs={fullAdrs}
       onSelectEpic={handleOpenEpic}
       onSelectFeature={handleOpenFeature}
       onSelectSpec={handleOpenSpec}
       onSelectCode={handleOpenCode}
       onSelectAdr={handleOpenAdr}
       onOpenSettings={() => setIsSettingsOpen(true)}
+      onOpenOmniSearch={() => setIsOmniSearchOpen(true)}
     >
       {/* Top Application Bar */}
       <header className="h-12 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between px-4 gap-4">
         <div className="flex items-center gap-2">
           <HistoryNavButtons />
           <ProjectSwitcher projects={projects} />
+          <button
+            type="button"
+            data-testid="header-omnisearch-btn"
+            onClick={() => setIsOmniSearchOpen(true)}
+            className="flex items-center gap-2 px-2.5 py-1 text-xs text-zinc-400 hover:text-zinc-200 bg-zinc-800/80 hover:bg-zinc-800 rounded border border-zinc-700/60 transition-colors ml-2"
+            title="Global OmniSearch (Ctrl+K)"
+          >
+            <Search className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="hidden sm:inline">Search...</span>
+            <kbd className="text-[10px] font-mono px-1 py-0.2 rounded bg-zinc-900 border border-zinc-700 text-zinc-400">
+              Ctrl+K
+            </kbd>
+          </button>
         </div>
 
         <div className="flex items-center gap-3">
@@ -596,6 +688,14 @@ const MainWorkspace: React.FC = () => {
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
+      />
+
+      {/* OmniSearch Modal */}
+      <OmniSearchModal
+        isOpen={isOmniSearchOpen}
+        onClose={() => setIsOmniSearchOpen(false)}
+        onSelect={handleOmniSelect}
+        searchIndex={globalSearchIndex}
       />
     </ShellLayout>
   );

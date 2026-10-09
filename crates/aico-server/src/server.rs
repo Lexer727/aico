@@ -168,6 +168,7 @@ impl HostServer {
             .route("/api/v1/stats", get(get_stats_handler))
             .route("/api/v1/git/status", get(get_git_status_handler))
             .route("/api/v1/raw", get(get_raw_file_handler))
+            .route("/api/v1/search", get(search_handler))
             .route("/ws", get(ws_handler))
             .fallback(crate::assets::static_asset_handler)
             .with_state(state)
@@ -1530,4 +1531,155 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
         _ = (&mut recv_task) => send_task.abort(),
     };
 }
+
+#[derive(Debug, Deserialize)]
+pub struct SearchQuery {
+    pub q: Option<String>,
+    pub project: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchHit {
+    pub id: String,
+    pub title: String,
+    pub scope: String,
+    pub project_id: String,
+    pub project_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snippet: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+}
+
+// @implements spec-ft-core-omni-search-fulltext::REQ-008
+async fn search_handler(
+    State(state): State<AppState>,
+    Query(params): Query<SearchQuery>,
+) -> Json<Vec<SearchHit>> {
+    let q = params.q.unwrap_or_default().trim().to_lowercase();
+    if q.is_empty() {
+        return Json(Vec::new());
+    }
+
+    let registry = state.registry.read().await;
+    let mut hits = Vec::new();
+
+    let projects_to_search: Vec<_> = if let Some(target_p) = &params.project {
+        registry.list().into_iter().filter(|p| &p.id == target_p).cloned().collect()
+    } else {
+        registry.list().into_iter().cloned().collect()
+    };
+
+    for project in projects_to_search {
+        let epics = scan_epics_for_project(&project.specs_path);
+        for epic in epics {
+            let mut matched = false;
+            let mut snippet = None;
+
+            if epic.id.to_lowercase().contains(&q) || epic.title.to_lowercase().contains(&q) {
+                matched = true;
+            } else if let Some(exec) = &epic.executive_summary {
+                if exec.to_lowercase().contains(&q) {
+                    matched = true;
+                    snippet = Some(exec.clone());
+                }
+            } else if let Some(brain) = &epic.brainstorm_content {
+                if brain.to_lowercase().contains(&q) {
+                    matched = true;
+                    snippet = Some("Matched in brainstorm notes".to_string());
+                }
+            }
+
+            if matched {
+                hits.push(SearchHit {
+                    id: epic.id.clone(),
+                    title: epic.title.clone(),
+                    scope: "epics".to_string(),
+                    project_id: project.id.clone(),
+                    project_name: project.name.clone(),
+                    snippet,
+                    path: None,
+                });
+            }
+
+            // Specs under epic
+            for spec in epic.specs {
+                if spec.id.to_lowercase().contains(&q) || spec.title.to_lowercase().contains(&q) {
+                    hits.push(SearchHit {
+                        id: spec.id.clone(),
+                        title: spec.title.clone(),
+                        scope: "specs".to_string(),
+                        project_id: project.id.clone(),
+                        project_name: project.name.clone(),
+                        snippet: None,
+                        path: Some(spec.path),
+                    });
+                }
+            }
+
+            // Features under epic
+            for feat in epic.features {
+                let mut f_matched = false;
+                let mut f_snippet = None;
+                if feat.id.to_lowercase().contains(&q) || feat.name.to_lowercase().contains(&q) {
+                    f_matched = true;
+                } else if let Some(desc) = &feat.description {
+                    if desc.to_lowercase().contains(&q) {
+                        f_matched = true;
+                        f_snippet = Some(desc.clone());
+                    }
+                }
+                if f_matched {
+                    hits.push(SearchHit {
+                        id: feat.id.clone(),
+                        title: feat.name.clone(),
+                        scope: "features".to_string(),
+                        project_id: project.id.clone(),
+                        project_name: project.name.clone(),
+                        snippet: f_snippet,
+                        path: None,
+                    });
+                }
+            }
+        }
+
+        // Standalone features
+        let feat_dir = project.specs_path.join("features");
+        if feat_dir.is_dir() {
+            if let Ok(entries) = std::fs::read_dir(feat_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_dir() {
+                        if let Some(feat) = scan_feature_dir(&path, "", true) {
+                            let mut f_matched = false;
+                            let mut f_snippet = None;
+                            if feat.id.to_lowercase().contains(&q) || feat.name.to_lowercase().contains(&q) {
+                                f_matched = true;
+                            } else if let Some(desc) = &feat.description {
+                                if desc.to_lowercase().contains(&q) {
+                                    f_matched = true;
+                                    f_snippet = Some(desc.clone());
+                                }
+                            }
+                            if f_matched {
+                                hits.push(SearchHit {
+                                    id: feat.id.clone(),
+                                    title: feat.name.clone(),
+                                    scope: "features".to_string(),
+                                    project_id: project.id.clone(),
+                                    project_name: project.name.clone(),
+                                    snippet: f_snippet,
+                                    path: None,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Json(hits)
+}
+
 
