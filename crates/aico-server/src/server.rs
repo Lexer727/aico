@@ -169,6 +169,8 @@ impl HostServer {
             .route("/api/v1/git/status", get(get_git_status_handler))
             .route("/api/v1/raw", get(get_raw_file_handler))
             .route("/api/v1/search", get(search_handler))
+            // @implements spec-ft-terminal-backend-stream-bridge::REQ-001
+            .route("/api/v1/terminal/ws", get(crate::terminal::terminal_ws_handler))
             .route("/ws", get(ws_handler))
             .fallback(crate::assets::static_asset_handler)
             .with_state(state)
