@@ -20,21 +20,7 @@ pub async fn static_asset_handler(uri: Uri) -> impl IntoResponse {
         raw_path
     };
 
-    // 1. Try to find the exact asset in embedded static files
-    if let Some(content) = FrontendAssets::get(asset_path) {
-        let mime = mime_guess::from_path(asset_path).first_or_octet_stream();
-        return Response::builder()
-            .status(StatusCode::OK)
-            .header(
-                header::CONTENT_TYPE,
-                HeaderValue::from_str(mime.as_ref())
-                    .unwrap_or_else(|_| HeaderValue::from_static("application/octet-stream")),
-            )
-            .body(Body::from(content.data))
-            .unwrap();
-    }
-
-    // 1b. Fallback: try reading exact asset from disk if present
+    // 1. Try reading exact asset from disk if present (allows live updates from frontend builds)
     for base in &["frontend/dist", "../frontend/dist", "../../frontend/dist", "dist"] {
         let disk_path = Path::new(base).join(asset_path);
         if disk_path.is_file() {
@@ -53,7 +39,38 @@ pub async fn static_asset_handler(uri: Uri) -> impl IntoResponse {
         }
     }
 
-    // 2. SPA Wildcard Fallback: for non-API client routes, serve index.html
+    // 2. Fallback: try to find the exact asset in embedded static files
+    if let Some(content) = FrontendAssets::get(asset_path) {
+        let mime = mime_guess::from_path(asset_path).first_or_octet_stream();
+        return Response::builder()
+            .status(StatusCode::OK)
+            .header(
+                header::CONTENT_TYPE,
+                HeaderValue::from_str(mime.as_ref())
+                    .unwrap_or_else(|_| HeaderValue::from_static("application/octet-stream")),
+            )
+            .body(Body::from(content.data))
+            .unwrap();
+    }
+
+    // 3. SPA Wildcard Fallback: for non-API client routes, check disk index.html first
+    for base in &["frontend/dist", "../frontend/dist", "../../frontend/dist", "dist"] {
+        let disk_path = Path::new(base).join("index.html");
+        if disk_path.is_file() {
+            if let Ok(bytes) = std::fs::read(&disk_path) {
+                return Response::builder()
+                    .status(StatusCode::OK)
+                    .header(
+                        header::CONTENT_TYPE,
+                        HeaderValue::from_static("text/html; charset=utf-8"),
+                    )
+                    .body(Body::from(bytes))
+                    .unwrap();
+            }
+        }
+    }
+
+    // 4. Fallback: serve embedded index.html
     if let Some(index) = FrontendAssets::get("index.html") {
         Response::builder()
             .status(StatusCode::OK)
@@ -64,23 +81,6 @@ pub async fn static_asset_handler(uri: Uri) -> impl IntoResponse {
             .body(Body::from(index.data))
             .unwrap()
     } else {
-        // Disk fallback for index.html as well
-        for base in &["frontend/dist", "../frontend/dist", "../../frontend/dist", "dist"] {
-            let disk_path = Path::new(base).join("index.html");
-            if disk_path.is_file() {
-                if let Ok(bytes) = std::fs::read(&disk_path) {
-                    return Response::builder()
-                        .status(StatusCode::OK)
-                        .header(
-                            header::CONTENT_TYPE,
-                            HeaderValue::from_static("text/html; charset=utf-8"),
-                        )
-                        .body(Body::from(bytes))
-                        .unwrap();
-                }
-            }
-        }
-
         Response::builder()
             .status(StatusCode::NOT_FOUND)
             .header(

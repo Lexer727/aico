@@ -163,7 +163,19 @@ const getInitialTabs = (): TerminalTab[] => {
       if (Array.isArray(parsed)) {
         return parsed.map((t) => ({
           ...t,
-          history: Array.isArray(t.history) ? t.history : [],
+          history: Array.isArray(t.history)
+            ? t.history.filter((line: string) => {
+                const tr = line.trim().toLowerCase();
+                return (
+                  tr !== 'clear' &&
+                  tr !== 'cls' &&
+                  tr !== 'clear-host' &&
+                  !tr.endsWith('> clear') &&
+                  !tr.endsWith('> cls') &&
+                  !tr.endsWith('> clear-host')
+                );
+              })
+            : [],
           pendingLine: '',
         }));
       }
@@ -423,7 +435,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
                   if (clearingTabsRef.current[tabId]) {
                     pending = '';
                     history = [];
-                    data = data.replace(/^[\r\n\s]*(?:clear|cls)[\r\n\s]*/gi, '');
+                    data = data.replace(/^[\r\n\s]*(?:clear|cls|clear-host)[\r\n\s]*/gi, '');
                     data = data.replace(/^[\r\n\s]+/g, '');
                     if (data.trim() === '') {
                       data = '';
@@ -459,12 +471,24 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
                   const normalized = combined.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
                   const parts = normalized.split('\n');
                   let newPending = parts.pop() ?? '';
-                  if (newPending.trim().toLowerCase() === 'clear' || newPending.trim().toLowerCase() === 'cls') {
+                  const lowerNewPending = newPending.trim().toLowerCase();
+                  if (
+                    lowerNewPending === 'clear' ||
+                    lowerNewPending === 'cls' ||
+                    lowerNewPending === 'clear-host'
+                  ) {
                     newPending = '';
                   }
                   const newCompleted = [...history, ...parts].filter((line) => {
                     const trimmed = line.trim().toLowerCase();
-                    return trimmed !== 'clear' && trimmed !== 'cls';
+                    return (
+                      trimmed !== 'clear' &&
+                      trimmed !== 'cls' &&
+                      trimmed !== 'clear-host' &&
+                      !trimmed.endsWith('> clear') &&
+                      !trimmed.endsWith('> cls') &&
+                      !trimmed.endsWith('> clear-host')
+                    );
                   });
 
                   return {
@@ -626,6 +650,10 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
         } else if (prompt.includes('$')) {
           prompt = prompt.slice(0, prompt.lastIndexOf('$') + 1) + ' ';
         }
+        prompt = prompt.replace(/\s*(?:clear|cls|clear-host)\s*$/i, '');
+        if (prompt && !prompt.endsWith(' ') && (prompt.endsWith('>') || prompt.endsWith('$'))) {
+          prompt += ' ';
+        }
         return { ...t, history: [], pendingLine: prompt };
       })
     );
@@ -660,7 +688,13 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
     const cmd = inputVal.trim();
     if (!cmd) return;
 
-    if (cmd.toLowerCase() === 'clear' || cmd.toLowerCase() === 'cls') {
+    const lowerCmd = cmd.toLowerCase();
+    if (
+      lowerCmd === 'clear' ||
+      lowerCmd === 'cls' ||
+      lowerCmd === 'clear-host' ||
+      lowerCmd === '/clear'
+    ) {
       setInputVal('');
       setSlashMenuOpen(false);
       handleClearTerminal();
@@ -1030,7 +1064,19 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
             )}
 
             {/* Completed Output Lines */}
-            {activeTab?.history.map((line, idx) => {
+            {activeTab?.history
+              .filter((line) => {
+                const tr = line.trim().toLowerCase();
+                return (
+                  tr !== 'clear' &&
+                  tr !== 'cls' &&
+                  tr !== 'clear-host' &&
+                  !tr.endsWith('> clear') &&
+                  !tr.endsWith('> cls') &&
+                  !tr.endsWith('> clear-host')
+                );
+              })
+              .map((line, idx) => {
               const isCommand = line.startsWith('>') || line.startsWith('$');
               if (isCommand) {
                 return (
