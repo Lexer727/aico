@@ -618,7 +618,16 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
     if (!activeTabId) return;
     clearingTabsRef.current[activeTabId] = true;
     setTabs((prev) =>
-      prev.map((t) => (t.id === activeTabId ? { ...t, history: [], pendingLine: '' } : t))
+      prev.map((t) => {
+        if (t.id !== activeTabId) return t;
+        let prompt = t.pendingLine || '';
+        if (prompt.includes('>')) {
+          prompt = prompt.slice(0, prompt.lastIndexOf('>') + 1) + ' ';
+        } else if (prompt.includes('$')) {
+          prompt = prompt.slice(0, prompt.lastIndexOf('$') + 1) + ' ';
+        }
+        return { ...t, history: [], pendingLine: prompt };
+      })
     );
   };
 
@@ -651,9 +660,11 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
     const cmd = inputVal.trim();
     if (!cmd) return;
 
-    if (cmd === 'clear' || cmd === 'cls') {
-      clearingTabsRef.current[activeTabId] = true;
+    if (cmd.toLowerCase() === 'clear' || cmd.toLowerCase() === 'cls') {
+      setInputVal('');
+      setSlashMenuOpen(false);
       handleClearTerminal();
+      return;
     }
 
     let ws = socketsRef.current[activeTabId];
@@ -664,12 +675,6 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
 
     if (ws && ws.readyState === 1) {
       ws.send(JSON.stringify({ type: 'input', data: `${cmd}\r\n` }));
-    }
-
-    if (cmd === 'clear' || cmd === 'cls') {
-      setInputVal('');
-      setSlashMenuOpen(false);
-      return;
     }
 
     setTabs((prev) =>
