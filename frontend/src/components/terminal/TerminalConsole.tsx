@@ -315,7 +315,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
         t.id === activeTabId
           ? {
               ...t,
-              history: [...t.history, `$ ${cmd}`],
+              history: [...t.history, `> ${cmd}`],
             }
           : t
       )
@@ -519,14 +519,14 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
         </div>
       ) : (
         <div
-          className="flex-1 overflow-y-auto space-y-1 p-3 font-mono text-xs select-text"
+          className="flex-1 overflow-y-auto p-3 font-mono text-xs select-text whitespace-pre-wrap leading-5"
           onClick={() => inputRef.current?.focus()}
         >
           {activeTab?.history.map((line, idx) => {
-            const isCommand = line.startsWith('$');
+            const isCommand = line.startsWith('>') || line.startsWith('$');
             if (isCommand) {
               return (
-                <div key={idx} className="leading-relaxed break-all text-indigo-400 font-bold">
+                <div key={idx} className="font-bold text-indigo-400 whitespace-pre-wrap leading-5">
                   {line}
                 </div>
               );
@@ -534,7 +534,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
 
             const segments = parseAnsi(line);
             return (
-              <div key={idx} className="leading-relaxed break-all text-zinc-300 min-h-[1.2em]">
+              <div key={idx} className="text-zinc-300 min-h-[1.25em] whitespace-pre-wrap leading-5">
                 {segments.length > 0 ? (
                   segments.map((seg, sIdx) => (
                     <span key={sIdx} className={seg.className || undefined}>
@@ -556,16 +556,8 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
         onSubmit={handleCommand}
         className="flex items-center gap-2 px-3 py-2 border-t border-zinc-800/80 bg-zinc-950 shrink-0"
       >
-        <span className="text-emerald-400 font-semibold select-none">
-          {tabs.length === 0
-            ? '---'
-            : activeTab?.shell === 'agy'
-            ? 'agy@local:~$ '
-            : activeTab?.shell === 'bash'
-            ? 'bash@local:~$ '
-            : activeTab?.shell === 'cmd'
-            ? 'cmd@local:~$ '
-            : 'aico@local:~$ '}
+        <span className="text-zinc-500 font-bold select-none pl-1">
+          {tabs.length === 0 ? '---' : activeTab?.shell === 'agy' ? 'agy>' : '>'}
         </span>
         <input
           ref={inputRef}
@@ -576,7 +568,9 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
           placeholder={
             tabs.length === 0
               ? 'Open a terminal tab to enter commands...'
-              : "Type command ('help', 'status', 'test', 'dir')..."
+              : activeTab?.shell === 'agy'
+              ? 'Type prompt or slash command for AI...'
+              : 'Type command...'
           }
           className="flex-1 bg-transparent border-none outline-none text-zinc-100 placeholder-zinc-600 font-mono text-xs disabled:opacity-40"
         />

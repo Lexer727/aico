@@ -96,16 +96,38 @@ pub fn resolve_shell_command(shell: &ShellType) -> Result<(String, Vec<String>),
                 } else {
                     "agy.exe".to_string()
                 };
+                let ps_repl = format!(
+                    "$agy = '{}'\n\
+                     $global:agy_active = $false\n\
+                     Write-Host '===================================================' -ForegroundColor Magenta\n\
+                     Write-Host '  Antigravity AI Assistant (agy) - Live Terminal' -ForegroundColor Cyan\n\
+                     Write-Host \"  Workspace: $(Get-Location)\" -ForegroundColor Gray\n\
+                     Write-Host '  Type any prompt or question to chat with the LLM.' -ForegroundColor Gray\n\
+                     Write-Host '===================================================' -ForegroundColor Magenta\n\
+                     Write-Host ''\n\
+                     while ($true) {{\n\
+                       Write-Host 'agy> ' -NoNewline -ForegroundColor Cyan\n\
+                       $line = [Console]::In.ReadLine()\n\
+                       if ($null -eq $line -or $line -eq 'exit' -or $line -eq 'quit') {{ break }}\n\
+                       if ($line.Trim() -eq '') {{ continue }}\n\
+                       if ($line -eq 'cls' -or $line -eq 'clear') {{ Clear-Host; continue }}\n\
+                       if ($global:agy_active) {{\n\
+                         & $agy -c -p $line\n\
+                       }} else {{\n\
+                         $global:agy_active = $true\n\
+                         & $agy -p $line\n\
+                       }}\n\
+                       Write-Host ''\n\
+                     }}",
+                    agy_bin
+                );
                 Ok((
                     "powershell.exe".to_string(),
                     vec![
                         "-NoLogo".to_string(),
                         "-NoExit".to_string(),
                         "-Command".to_string(),
-                        format!(
-                            "Write-Host '===================================================' -ForegroundColor Magenta; Write-Host '  Antigravity AI CLI (agy) - Interactive Terminal' -ForegroundColor Cyan; Write-Host '  Session initialized with AICO skills & local LLM' -ForegroundColor Gray; Write-Host '===================================================' -ForegroundColor Magenta; & '{}'",
-                            agy_bin
-                        ),
+                        ps_repl,
                     ],
                 ))
             }
