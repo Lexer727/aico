@@ -185,4 +185,105 @@ describe('TerminalConsole Component', () => {
     // Tab responsive abbreviation ps exists
     expect(screen.getByText('ps')).toBeInTheDocument();
   });
+
+  // @verifies spec-ft-terminal-panel-ui::REQ-012
+  it('reassembles streaming chunks continuously without fragmenting partial words', async () => {
+    render(<TerminalConsole />);
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    const currentSocket = mockSockets[0];
+
+    // Simulate chunk 1 with incomplete word "Whe"
+    act(() => {
+      if (currentSocket.onmessage) {
+        currentSocket.onmessage({
+          data: JSON.stringify({
+            type: 'output',
+            data: 'Hello! Whe',
+          }),
+        });
+      }
+    });
+
+    // Simulate chunk 2 with remaining word "ther\r\n"
+    act(() => {
+      if (currentSocket.onmessage) {
+        currentSocket.onmessage({
+          data: JSON.stringify({
+            type: 'output',
+            data: 'ther you are ready\r\n',
+          }),
+        });
+      }
+    });
+
+    expect(screen.getByText(/Hello! Whether you are ready/i)).toBeInTheDocument();
+  });
+
+  // @verifies spec-ft-terminal-panel-ui::REQ-013
+  it('renders prompt and does not inject duplicate > cmd in powershell history', async () => {
+    render(<TerminalConsole />);
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    const currentSocket = mockSockets[0];
+
+    // Simulate prompt emitted without newline
+    act(() => {
+      if (currentSocket.onmessage) {
+        currentSocket.onmessage({
+          data: JSON.stringify({
+            type: 'output',
+            data: 'PS D:\\aico\\aico-specs> ',
+          }),
+        });
+      }
+    });
+
+    expect(screen.getByText(/PS D:\\aico\\aico-specs>/i)).toBeInTheDocument();
+
+    // Type command in input
+    const input = screen.getByPlaceholderText(/type command/i);
+    fireEvent.change(input, { target: { value: 'ls' } });
+    fireEvent.submit(input.closest('form')!);
+
+    // Should NOT have injected a separate "> ls" line in history
+    expect(screen.queryByText('> ls')).not.toBeInTheDocument();
+  });
+
+  // @verifies spec-ft-terminal-panel-ui::REQ-014
+  it('opens slash command autocomplete menu when typing slash in AI tab and selects command', async () => {
+    render(<TerminalConsole />);
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    // Open AI tab
+    const aiBtn = screen.getByTestId('ai-terminal-btn');
+    fireEvent.click(aiBtn);
+
+    // AI input placeholder should prompt for AI commands
+    const aiInput = screen.getByPlaceholderText(/ask ai or type \/ for commands/i);
+    expect(aiInput).toBeInTheDocument();
+
+    // Type "/" to open autocomplete
+    fireEvent.change(aiInput, { target: { value: '/' } });
+
+    expect(screen.getByTestId('slash-command-menu')).toBeInTheDocument();
+    expect(screen.getByTestId('slash-option-skills')).toBeInTheDocument();
+    expect(screen.getByTestId('slash-option-help')).toBeInTheDocument();
+
+    // Click on /skills option
+    fireEvent.click(screen.getByTestId('slash-option-skills'));
+
+    // Input should be populated with "/skills " and menu closed
+    expect(aiInput).toHaveValue('/skills ');
+    expect(screen.queryByTestId('slash-command-menu')).not.toBeInTheDocument();
+  });
 });

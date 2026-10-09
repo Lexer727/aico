@@ -99,25 +99,24 @@ pub fn resolve_shell_command(shell: &ShellType) -> Result<(String, Vec<String>),
                 let ps_repl = format!(
                     "$agy = '{}'\n\
                      $global:agy_active = $false\n\
-                     Write-Host '===================================================' -ForegroundColor Magenta\n\
-                     Write-Host '  Antigravity AI Assistant (agy) - Live Terminal' -ForegroundColor Cyan\n\
-                     Write-Host \"  Workspace: $(Get-Location)\" -ForegroundColor Gray\n\
-                     Write-Host '  Type any prompt or question to chat with the LLM.' -ForegroundColor Gray\n\
-                     Write-Host '===================================================' -ForegroundColor Magenta\n\
-                     Write-Host ''\n\
+                     [Console]::Out.WriteLine(\"`e[35m===================================================`e[0m\")\n\
+                     [Console]::Out.WriteLine(\"`e[36m  Google Antigravity AI Assistant (agy v1.3.2)`e[0m\")\n\
+                     [Console]::Out.WriteLine(\"`e[90m  Workspace: \" + (Get-Location).Path + \"`e[0m\")\n\
+                     [Console]::Out.WriteLine(\"`e[90m  Ready. Type your prompt or slash command.`e[0m\")\n\
+                     [Console]::Out.WriteLine(\"`e[35m===================================================`e[0m\")\n\
+                     [Console]::Out.WriteLine(\"\")\n\
                      while ($true) {{\n\
-                       Write-Host 'agy> ' -NoNewline -ForegroundColor Cyan\n\
                        $line = [Console]::In.ReadLine()\n\
                        if ($null -eq $line -or $line -eq 'exit' -or $line -eq 'quit') {{ break }}\n\
                        if ($line.Trim() -eq '') {{ continue }}\n\
-                       if ($line -eq 'cls' -or $line -eq 'clear') {{ Clear-Host; continue }}\n\
-                       if ($global:agy_active) {{\n\
-                         & $agy -c -p $line\n\
-                       }} else {{\n\
-                         $global:agy_active = $true\n\
-                         & $agy -p $line\n\
+                       if ($line -eq 'cls' -or $line -eq 'clear') {{\n\
+                         [Console]::Out.Write(\"`e[2J`e[H\")\n\
+                         continue\n\
                        }}\n\
-                       Write-Host ''\n\
+                       $cmdArgs = if ($global:agy_active) {{ @('-c', '-p', $line) }} else {{ @('-p', $line) }}\n\
+                       $global:agy_active = $true\n\
+                       & $agy @cmdArgs\n\
+                       [Console]::Out.WriteLine(\"\")\n\
                      }}",
                     agy_bin
                 );
@@ -163,6 +162,7 @@ pub async fn terminal_ws_handler(
 // @implements spec-ft-terminal-backend-stream-bridge::REQ-004
 // @implements spec-ft-terminal-backend-stream-bridge::REQ-005
 // @implements spec-ft-terminal-backend-stream-bridge::REQ-007
+// @implements spec-ft-terminal-backend-stream-bridge::REQ-008
 async fn handle_terminal_socket(socket: WebSocket, state: AppState) {
     let (mut ws_sender, mut ws_receiver) = socket.split();
 
@@ -212,6 +212,12 @@ async fn handle_terminal_socket(socket: WebSocket, state: AppState) {
                                 cmd.stdout(Stdio::piped());
                                 cmd.stderr(Stdio::piped());
                                 cmd.kill_on_drop(true);
+
+                                #[cfg(windows)]
+                                {
+                                    const CREATE_NO_WINDOW: u32 = 0x08000000;
+                                    cmd.creation_flags(CREATE_NO_WINDOW);
+                                }
 
                                 match cmd.spawn() {
                                     Ok(mut child) => {

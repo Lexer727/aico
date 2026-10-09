@@ -140,3 +140,75 @@ async fn test_terminal_websocket_shell_resolution_and_error_handling() {
 
     server_task.abort();
 }
+
+// @verifies spec-ft-terminal-backend-stream-bridge::REQ-008
+#[tokio::test]
+async fn test_terminal_powershell_clear_command_execution() {
+    let config = ServerConfig {
+        base_port: 4970,
+        max_port_attempts: 10,
+        host: "127.0.0.1".to_string(),
+    };
+    let state = AppState::default();
+    let mut server = HostServer::with_state(config, state);
+    let addr = server.bind().await.expect("Failed to bind server");
+
+    let server_task = tokio::spawn(async move {
+        let _ = server.serve().await;
+    });
+
+    let ws_url = format!("ws://{}/api/v1/terminal/ws", addr);
+    let (ws_stream, response) = connect_async(&ws_url)
+        .await
+        .expect("Failed to connect to /api/v1/terminal/ws");
+
+    assert_eq!(response.status(), 101);
+
+    let (mut write, mut read) = ws_stream.split();
+
+    // 1. Send init for cmd
+    let init_msg = serde_json::json!({
+        "type": "init",
+        "shell": "cmd",
+        "cwd": "."
+    });
+    write.send(Message::Text(init_msg.to_string().into())).await.expect("Failed to send init");
+
+    // 2. Send cls command followed by echo to ensure detached execution is clean
+    let input_msg = serde_json::json!({
+        "type": "input",
+        "data": "cls\r\necho ISOLATION_VERIFIED\r\n"
+    });
+    write.send(Message::Text(input_msg.to_string().into())).await.expect("Failed to send input");
+
+    let mut received_output = String::new();
+    let timeout = tokio::time::sleep(tokio::time::Duration::from_secs(5));
+    tokio::pin!(timeout);
+
+    loop {
+        tokio::select! {
+            msg = read.next() => {
+                if let Some(Ok(Message::Text(text))) = msg {
+                    received_output.push_str(&text);
+                    if received_output.contains("ISOLATION_VERIFIED") {
+                        break;
+                    }
+                }
+            }
+            _ = &mut timeout => {
+                break;
+            }
+        }
+    }
+
+    assert!(
+        received_output.contains("ISOLATION_VERIFIED"),
+        "Expected output to contain ISOLATION_VERIFIED, got: {}",
+        received_output
+    );
+
+    let close_msg = serde_json::json!({ "type": "close" });
+    let _ = write.send(Message::Text(close_msg.to_string().into())).await;
+
+    server_task.abort();
+}
