@@ -86,4 +86,31 @@ describe('DashboardView Component', () => {
     fireEvent.click(statCard);
     expect(screen.queryByText('Codebase Root')).toBeNull();
   });
+
+  // @verifies spec-ft-core-ui-visual-consistency::REQ-002
+  it('ensures Open Epic action buttons are non-shrinking and whitespace-nowrap with long titles', () => {
+    const longTitleEpics = [
+      {
+        id: 'ec-core',
+        title: 'AICO Core Architecture & Local-First Platform and Heavyweight Runtime Sprawl Resolver with Extra Words',
+        status: 'Completed',
+        specs_count: 5,
+        features: [],
+      },
+    ];
+
+    render(
+      <DashboardView
+        onOpenEpic={vi.fn()}
+        onOpenSpec={vi.fn()}
+        epics={longTitleEpics}
+      />
+    );
+
+    const openEpicBtn = screen.getByRole('button', { name: /open epic/i });
+    expect(openEpicBtn).toBeInTheDocument();
+    // Must possess classes ensuring button never squishes or breaks into two lines
+    expect(openEpicBtn.className).toContain('shrink-0');
+    expect(openEpicBtn.className).toContain('whitespace-nowrap');
+  });
 });

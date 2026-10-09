@@ -296,8 +296,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   key={epic.id}
                   className="p-5 bg-zinc-900/50 border border-zinc-800 rounded-xl space-y-4 hover:border-zinc-700 transition-colors"
                 >
-                  <div className="flex items-start justify-between">
-                    <div>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-xs px-2 py-0.5 rounded bg-zinc-800 text-indigo-400 font-semibold">
                           {epic.id}
@@ -316,9 +316,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         {epic.title}
                       </h3>
                     </div>
+                    {/* @implements spec-ft-core-ui-visual-consistency::REQ-002 */}
                     <button
                       onClick={() => onOpenEpic(epic.id)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors shrink-0 whitespace-nowrap"
                     >
                       <span>Open Epic</span>
                       <ArrowRight className="w-3.5 h-3.5" />

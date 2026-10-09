@@ -159,4 +159,25 @@ describe('TabBar and ProjectSwitcher', () => {
       'tab-1',
     ]);
   });
+
+  // @verifies spec-ft-core-ui-visual-consistency::REQ-003
+  // @verifies spec-ft-core-ui-visual-consistency::REQ-005
+  it('renders feature tabs with purple Package icon and adr tabs with Scale icon', () => {
+    const store = useTabStore.getState();
+    store.setActiveProject('project-test');
+    store.openTab('project-test', { id: 'ft-core-test', title: 'Feature Test', type: 'feature' });
+    store.openTab('project-test', { id: 'adr-0001', title: 'ADR Test', type: 'adr' });
+
+    render(<TabBar />);
+
+    const featureTab = screen.getByTestId('tab-ft-core-test');
+    const featureSvg = featureTab.querySelector('svg');
+    expect(featureSvg).toHaveClass('lucide-package');
+    expect(featureSvg).toHaveClass('text-purple-400');
+
+    const adrTab = screen.getByTestId('tab-adr-0001');
+    const adrSvg = adrTab.querySelector('svg');
+    expect(adrSvg).toHaveClass('lucide-scale');
+    expect(adrSvg).toHaveClass('text-amber-400');
+  });
 });

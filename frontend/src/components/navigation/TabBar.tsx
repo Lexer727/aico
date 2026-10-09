@@ -2,13 +2,13 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useTabStore, type TabItem } from '../../stores/useTabStore';
 import {
   X,
-  FileText,
   Layers,
   CheckSquare,
   Code2,
   BookOpen,
   Home,
   Package,
+  Scale,
   GitFork,
   Undo2,
   ChevronLeft,
@@ -69,13 +69,15 @@ export const TabBar: React.FC = () => {
     }
   };
 
+  // @implements spec-ft-core-ui-visual-consistency::REQ-003
+  // @implements spec-ft-core-ui-visual-consistency::REQ-005
   const getIcon = (type: string) => {
     const iconClass = 'w-3.5 h-3.5 shrink-0';
     switch (type) {
       case 'epic':
         return <Layers className={clsx(iconClass, 'text-indigo-400')} />;
       case 'feature':
-        return <Package className={clsx(iconClass, 'text-indigo-400')} />;
+        return <Package className={clsx(iconClass, 'text-purple-400')} />;
       case 'spec':
         return <BookOpen className={clsx(iconClass, 'text-sky-400')} />;
       case 'plan':
@@ -87,11 +89,11 @@ export const TabBar: React.FC = () => {
       case 'code':
         return <Code2 className={clsx(iconClass, 'text-amber-400')} />;
       case 'adr':
-        return <FileText className={clsx(iconClass, 'text-amber-400')} />;
+        return <Scale className={clsx(iconClass, 'text-amber-400')} />;
       case 'glossary':
         return <BookOpen className={clsx(iconClass, 'text-amber-400')} />;
       default:
-        return <Package className={clsx(iconClass, 'text-indigo-400')} />;
+        return <Package className={clsx(iconClass, 'text-purple-400')} />;
     }
   };
 

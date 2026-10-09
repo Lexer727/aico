@@ -80,4 +80,44 @@ describe('ShellLayoutSearch: Sidebar Tree Fuzzy Filtering & Section Auto-Expansi
     // Feature should now be hidden because its scope is disabled
     expect(screen.queryByTestId('nav-feature-ft-core-host-runtime')).not.toBeInTheDocument();
   });
+
+  // @verifies spec-ft-core-ui-visual-consistency::REQ-001
+  it('does not render a duplicate omnisearch trigger button in the sidebar header', () => {
+    const handleOpenOmniSearch = vi.fn();
+    render(
+      <ShellLayout
+        fullEpics={mockEpics}
+        fullFeatures={mockFeatures}
+        onOpenOmniSearch={handleOpenOmniSearch}
+      >
+        <div>Content</div>
+      </ShellLayout>
+    );
+
+    // Primary search trigger belongs only in top header (App.tsx), not in sidebar header next to version
+    expect(screen.queryByTestId('sidebar-omnisearch-btn')).not.toBeInTheDocument();
+  });
+
+  // @verifies spec-ft-core-ui-visual-consistency::REQ-003
+  // @verifies spec-ft-core-ui-visual-consistency::REQ-005
+  it('renders features header icon with purple Package and ADRs header icon with amber Scale', () => {
+    render(
+      <ShellLayout
+        fullEpics={mockEpics}
+        fullFeatures={mockFeatures}
+      >
+        <div>Content</div>
+      </ShellLayout>
+    );
+
+    const toggleFeaturesBtn = screen.getByTestId('toggle-features');
+    const featureSvg = toggleFeaturesBtn.querySelector('svg');
+    expect(featureSvg).toHaveClass('lucide-package');
+    expect(featureSvg).toHaveClass('text-purple-400');
+
+    const toggleAdrsBtn = screen.getByTestId('toggle-adrs');
+    const adrSvg = toggleAdrsBtn.querySelector('svg');
+    expect(adrSvg).toHaveClass('lucide-scale');
+    expect(adrSvg).toHaveClass('text-amber-400');
+  });
 });

@@ -9,8 +9,8 @@ import {
   Layers,
   Search,
   Settings,
-  FileText,
   Package,
+  Scale,
 } from 'lucide-react';
 import { ActivityMonitor } from './ActivityMonitor';
 import type {
@@ -153,7 +153,7 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
   onSelectCode,
   onSelectAdr,
   onOpenSettings,
-  onOpenOmniSearch,
+  onOpenOmniSearch: _onOpenOmniSearch,
 }) => {
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
@@ -311,19 +311,8 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
           <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-pulse" />
           <span>AICO WORKSPACE</span>
         </div>
+        {/* @implements spec-ft-core-ui-visual-consistency::REQ-001 */}
         <div className="flex items-center gap-1.5">
-          {onOpenOmniSearch && (
-            <button
-              type="button"
-              data-testid="sidebar-omnisearch-btn"
-              onClick={onOpenOmniSearch}
-              className="flex items-center gap-1 text-[10px] text-zinc-400 hover:text-zinc-200 bg-zinc-800/80 hover:bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-700/60 transition-colors"
-              title="Global OmniSearch (Ctrl+K)"
-            >
-              <Search className="w-3 h-3 text-indigo-400" />
-              <span className="font-mono text-[9px]">Ctrl+K</span>
-            </button>
-          )}
           <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400" title="AICO Platform Version">
             v0.1.1
           </span>
@@ -451,8 +440,9 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
               onClick={() => toggleSection('features')}
               className="w-full flex items-center justify-between p-2 rounded hover:bg-zinc-800/60 font-medium text-zinc-200 transition-colors"
             >
+              {/* @implements spec-ft-core-ui-visual-consistency::REQ-003 */}
               <div className="flex items-center gap-2">
-                <Package className="w-4 h-4 text-indigo-400" />
+                <Package className="w-4 h-4 text-purple-400" />
                 <span>Features</span>
                 {q && (
                   <span className="text-[10px] text-zinc-500 font-mono">
@@ -484,7 +474,7 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
                         <span className="text-zinc-500 text-[10px] truncate">{feat.name}</span>
                       </div>
                       {(feat.isStandalone || feat.epicId === 'standalone') && (
-                        <span className="text-[9px] px-1 py-0.2 rounded bg-indigo-950 text-indigo-400 border border-indigo-800 shrink-0 ml-1">
+                        <span className="text-[9px] px-1 py-0.2 rounded bg-purple-950/70 text-purple-400 border border-purple-800 shrink-0 ml-1">
                           Standalone
                         </span>
                       )}
@@ -594,8 +584,9 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
               onClick={() => toggleSection('adrs')}
               className="w-full flex items-center justify-between p-2 rounded hover:bg-zinc-800/60 font-medium text-zinc-200 transition-colors"
             >
+              {/* @implements spec-ft-core-ui-visual-consistency::REQ-005 */}
               <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-amber-400" />
+                <Scale className="w-4 h-4 text-amber-400" />
                 <span>ADRs</span>
                 {q && (
                   <span className="text-[10px] text-zinc-500 font-mono">

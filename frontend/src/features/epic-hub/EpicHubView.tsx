@@ -334,7 +334,8 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
                 ) : (
                   <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
                 )}
-                <Package className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+                {/* @implements spec-ft-core-ui-visual-consistency::REQ-003 */}
+                <Package className="w-4 h-4 text-purple-400 flex-shrink-0" />
                 <span className="font-semibold text-sm text-zinc-200">
                   Features in this Epic ({currentFeaturesList.length})
                 </span>
@@ -352,10 +353,10 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
                     <div
                       key={feat.id}
                       onClick={() => onOpenFeature?.(feat.id, feat.name)}
-                      className="p-3 bg-zinc-900/80 rounded border border-zinc-800 hover:border-indigo-500/50 cursor-pointer transition-colors space-y-1 group"
+                      className="p-3 bg-zinc-900/80 rounded border border-zinc-800 hover:border-purple-500/50 cursor-pointer transition-colors space-y-1 group"
                     >
                       <div className="flex items-center justify-between">
-                        <span className="font-mono text-xs font-semibold text-indigo-400 group-hover:text-indigo-300">
+                        <span className="font-mono text-xs font-semibold text-purple-400 group-hover:text-purple-300">
                           {feat.id}
                         </span>
                         <span

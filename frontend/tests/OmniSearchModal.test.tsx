@@ -96,4 +96,30 @@ describe('OmniSearchModal Component', () => {
     );
     expect(handleClose).toHaveBeenCalled();
   });
+
+  // @verifies spec-ft-core-ui-visual-consistency::REQ-003
+  // @verifies spec-ft-core-ui-visual-consistency::REQ-005
+  it('renders features with purple Package icon and ADRs with amber Scale icon', () => {
+    render(
+      <OmniSearchModal
+        isOpen={true}
+        onClose={() => {}}
+        onSelect={() => {}}
+        mockResults={[
+          { id: 'ft-1', title: 'Feature One', scope: 'features' },
+          { id: 'adr-1', title: 'ADR One', scope: 'adrs' },
+        ]}
+      />
+    );
+
+    const featResult = screen.getByTestId('search-result-ft-1');
+    const featSvg = featResult.querySelector('svg');
+    expect(featSvg).toHaveClass('lucide-package');
+    expect(featSvg).toHaveClass('text-purple-400');
+
+    const adrResult = screen.getByTestId('search-result-adr-1');
+    const adrSvg = adrResult.querySelector('svg');
+    expect(adrSvg).toHaveClass('lucide-scale');
+    expect(adrSvg).toHaveClass('text-amber-400');
+  });
 });

@@ -101,4 +101,21 @@ describe('DashboardView Git Repositories Status', () => {
     expect(screen.getByTestId('git-unavailable-missing-repo')).toBeInTheDocument();
     expect(screen.getByText('Unavailable')).toBeInTheDocument();
   });
+
+  // @verifies spec-ft-core-ui-visual-consistency::REQ-004
+  it('renders specs repository badge in canonical sky-blue styling matching specifications token', () => {
+    render(
+      <DashboardView
+        onOpenEpic={vi.fn()}
+        onOpenSpec={vi.fn()}
+        gitStatuses={mockGitStatuses}
+      />
+    );
+
+    const specsRepoCard = screen.getByTestId('git-repo-card-aico-specs');
+    const typeBadge = specsRepoCard.querySelector('span.uppercase');
+    expect(typeBadge).toHaveTextContent('specs');
+    expect(typeBadge).toHaveClass('text-sky-400');
+    expect(typeBadge).toHaveClass('bg-sky-950/80');
+  });
 });
