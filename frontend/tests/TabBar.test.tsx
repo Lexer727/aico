@@ -180,4 +180,20 @@ describe('TabBar and ProjectSwitcher', () => {
     expect(adrSvg).toHaveClass('lucide-scale');
     expect(adrSvg).toHaveClass('text-amber-400');
   });
+
+  // @verifies spec-ft-terminal-panel-ui::REQ-021
+  it('prevents default vertical scroll on mouse wheel and scrolls tab container horizontally', () => {
+    const store = useTabStore.getState();
+    store.setActiveProject('project-test');
+    store.openTab('project-test', { id: 'tab-1', title: 'tab-1', type: 'spec' });
+
+    const { container } = render(<TabBar />);
+    const scrollContainer = container.querySelector('.overflow-x-auto');
+    expect(scrollContainer).toBeInTheDocument();
+
+    const wheelEvent = new WheelEvent('wheel', { deltaY: 50, cancelable: true });
+    scrollContainer!.dispatchEvent(wheelEvent);
+
+    expect(wheelEvent.defaultPrevented).toBe(true);
+  });
 });

@@ -126,7 +126,7 @@ describe('TerminalConsole Component', () => {
     expect(screen.getByText(/Microsoft PowerShell/i)).toBeInTheDocument();
 
     // Type input command and submit
-    const input = screen.getByPlaceholderText(/type command/i);
+    const input = screen.getByTestId('terminal-inline-input');
     fireEvent.change(input, { target: { value: 'dir' } });
     fireEvent.submit(input.closest('form')!);
 
@@ -266,7 +266,7 @@ describe('TerminalConsole Component', () => {
     expect(screen.getByText(/PS D:\\aico\\aico-specs>/i)).toBeInTheDocument();
 
     // Type command in input
-    const input = screen.getByPlaceholderText(/type command/i);
+    const input = screen.getByTestId('terminal-inline-input');
     fireEvent.change(input, { target: { value: 'ls' } });
     fireEvent.submit(input.closest('form')!);
 
@@ -362,7 +362,7 @@ describe('TerminalConsole Component', () => {
     expect(screen.getByText(/Previous command output line 1/i)).toBeInTheDocument();
 
     // Type "clear" and submit
-    const input = screen.getByPlaceholderText(/type command/i);
+    const input = screen.getByTestId('terminal-inline-input');
     fireEvent.change(input, { target: { value: 'clear' } });
     fireEvent.submit(input.closest('form')!);
 
@@ -515,5 +515,80 @@ describe('TerminalConsole Component', () => {
     // Check shortcuts footer
     expect(screen.getByText(/\? for shortcuts/i)).toBeInTheDocument();
     expect(screen.getByText(/Gemini 3.8 Flash · high/i)).toBeInTheDocument();
+  });
+
+  // @verifies spec-ft-terminal-panel-ui::REQ-019
+  it('omits placeholder pre-text in powershell terminal session', async () => {
+    render(<TerminalConsole />);
+    openDefaultTerminal();
+
+    const input = screen.getByTestId('terminal-inline-input') as HTMLInputElement;
+    expect(input.placeholder).toBe('');
+  });
+
+  // @verifies spec-ft-terminal-panel-ui::REQ-020
+  it('persists terminal output buffer and restores history on reload', async () => {
+    // Setup pre-existing session tabs with saved history buffer
+    sessionStorage.setItem('aico_terminal_session_initialized', 'true');
+    sessionStorage.setItem(
+      'aico_terminal_session_tabs',
+      JSON.stringify([
+        {
+          id: 'term-restored-1',
+          name: 'PowerShell',
+          shortName: 'ps',
+          shell: 'powershell',
+          history: ['Restored line 1 from previous session', 'Restored line 2 from previous session'],
+          pendingLine: 'PS D:\\aico> ',
+        },
+      ])
+    );
+    sessionStorage.setItem('aico_terminal_session_active', 'term-restored-1');
+
+    render(<TerminalConsole />);
+
+    // Output buffer should be rendered immediately without being cleared
+    expect(screen.getByText(/Restored line 1 from previous session/i)).toBeInTheDocument();
+    expect(screen.getByText(/Restored line 2 from previous session/i)).toBeInTheDocument();
+  });
+
+  // @verifies spec-ft-terminal-panel-ui::REQ-021
+  it('translates mouse wheel events horizontally and prevents vertical scroll', async () => {
+    const { container } = render(<TerminalConsole />);
+    openDefaultTerminal();
+
+    const scrollContainer = container.querySelector('.overflow-x-auto');
+    expect(scrollContainer).toBeInTheDocument();
+
+    const wheelEvent = new WheelEvent('wheel', { deltaY: 60, cancelable: true });
+    scrollContainer!.dispatchEvent(wheelEvent);
+
+    expect(wheelEvent.defaultPrevented).toBe(true);
+  });
+
+  // @verifies spec-ft-terminal-panel-ui::REQ-022
+  it('provides a Kill Terminal button that sends kill message and forcefully closes tab', async () => {
+    render(<TerminalConsole />);
+    openDefaultTerminal();
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    const currentSocket = mockSockets[0];
+    expect(currentSocket).toBeDefined();
+
+    const killBtn = screen.getByTestId('kill-terminal-btn');
+    expect(killBtn).toBeInTheDocument();
+
+    // Click Kill Terminal button
+    fireEvent.click(killBtn);
+
+    // Verify kill message sent over WebSocket
+    const killMsg = currentSocket.sentMessages.find((m: string) => m.includes('"type":"kill"'));
+    expect(killMsg).toBeDefined();
+
+    // Tab should be closed and empty state reached immediately
+    expect(screen.getByText(/No Active Terminals/i)).toBeInTheDocument();
   });
 });

@@ -5,7 +5,7 @@ import {
   X,
   Sparkles,
   ChevronDown,
-  Trash2,
+  Square,
   PanelRight,
   PanelBottom,
   Minimize2,
@@ -161,7 +161,11 @@ const getInitialTabs = (): TerminalTab[] => {
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed)) {
-        return parsed.map((t) => ({ ...t, history: [], pendingLine: '' }));
+        return parsed.map((t) => ({
+          ...t,
+          history: Array.isArray(t.history) ? t.history : [],
+          pendingLine: typeof t.pendingLine === 'string' ? t.pendingLine : '',
+        }));
       }
     }
   } catch {
@@ -202,6 +206,10 @@ const getInitialActiveTab = (initTabs: TerminalTab[]): string => {
 // @implements spec-ft-terminal-panel-ui::REQ-016
 // @implements spec-ft-terminal-panel-ui::REQ-017
 // @implements spec-ft-terminal-panel-ui::REQ-018
+// @implements spec-ft-terminal-panel-ui::REQ-019
+// @implements spec-ft-terminal-panel-ui::REQ-020
+// @implements spec-ft-terminal-panel-ui::REQ-021
+// @implements spec-ft-terminal-panel-ui::REQ-022
 export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
   const { position, toggleDock } = useDockStore();
   const isBottom = position === 'bottom';
@@ -251,7 +259,14 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
         sessionStorage.setItem(
           SESSION_TABS_KEY,
           JSON.stringify(
-            tabs.map((t) => ({ id: t.id, name: t.name, shortName: t.shortName, shell: t.shell }))
+            tabs.map((t) => ({
+              id: t.id,
+              name: t.name,
+              shortName: t.shortName,
+              shell: t.shell,
+              history: t.history.slice(-500),
+              pendingLine: t.pendingLine || '',
+            }))
           )
         );
         sessionStorage.setItem(SESSION_ACTIVE_KEY, activeTabId);
@@ -273,9 +288,20 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
     const el = scrollContainerRef.current;
     if (!el) return;
     checkScroll();
+
+    const handleNativeWheel = (e: WheelEvent) => {
+      if (e.deltaY !== 0 || e.deltaX !== 0) {
+        e.preventDefault();
+        const delta = e.deltaY !== 0 ? e.deltaY : e.deltaX;
+        el.scrollLeft += delta;
+      }
+    };
+
+    el.addEventListener('wheel', handleNativeWheel, { passive: false });
     el.addEventListener('scroll', checkScroll, { passive: true });
     window.addEventListener('resize', checkScroll);
     return () => {
+      el.removeEventListener('wheel', handleNativeWheel);
       el.removeEventListener('scroll', checkScroll);
       window.removeEventListener('resize', checkScroll);
     };
@@ -570,6 +596,29 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
     );
   };
 
+  const handleKillTerminal = () => {
+    if (!activeTabId) return;
+    const targetId = activeTabId;
+    const ws = socketsRef.current[targetId];
+    if (ws) {
+      try {
+        if (ws.readyState === 1) {
+          ws.send(JSON.stringify({ type: 'kill' }));
+        }
+        ws.close();
+      } catch {
+        // ignore
+      }
+      delete socketsRef.current[targetId];
+    }
+
+    const remaining = tabs.filter((t) => t.id !== targetId);
+    setTabs(remaining);
+    if (activeTabId === targetId) {
+      setActiveTabId(remaining.length > 0 ? remaining[0].id : '');
+    }
+  };
+
   const handleCommand = (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeTabId || !activeTab) return;
@@ -763,14 +812,15 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
               </div>
             )}
 
-            {/* Clear Output Button */}
+            {/* Kill Terminal Button */}
             <button
-              onClick={handleClearTerminal}
+              onClick={handleKillTerminal}
               disabled={tabs.length === 0}
-              className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors rounded hover:bg-zinc-800/60 disabled:opacity-30 disabled:pointer-events-none shrink-0 ml-0.5 cursor-pointer"
-              title="Clear Terminal Output"
+              data-testid="kill-terminal-btn"
+              className="p-1 text-zinc-500 hover:text-rose-400 hover:bg-rose-950/40 transition-colors rounded disabled:opacity-30 disabled:pointer-events-none shrink-0 ml-0.5 cursor-pointer"
+              title="Kill Terminal (Force Terminate & Close Tab)"
             >
-              <Trash2 className="w-3.5 h-3.5" />
+              <Square className="w-3.5 h-3.5 fill-current" />
             </button>
           </div>
         </div>
@@ -814,7 +864,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
           onWheel={handleWheel}
           onDragOver={handleContainerDragOver}
           onDrop={handleDrop}
-          className="flex items-center h-full flex-1 overflow-x-auto no-scrollbar scroll-smooth"
+          className="flex items-center h-full flex-1 overflow-x-auto no-scrollbar"
         >
           {tabs.length === 0 ? (
             <div className="px-3 text-xs text-zinc-500 italic">No open terminals</div>
@@ -1029,11 +1079,12 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
                 <form onSubmit={handleCommand} className="inline-flex items-center flex-1 min-w-[120px]">
                   <input
                     ref={inputRef}
+                    data-testid="terminal-inline-input"
                     type="text"
                     value={inputVal}
                     onChange={handleInputChange}
                     onKeyDown={handleKeyDown}
-                    placeholder={isAgy ? 'Ask AI or type / for commands...' : 'Type command...'}
+                    placeholder={isAgy ? 'Ask AI or type / for commands...' : ''}
                     className="bg-transparent border-none outline-none text-zinc-100 placeholder-zinc-700 font-mono text-xs flex-1 min-w-[80px]"
                   />
                 </form>

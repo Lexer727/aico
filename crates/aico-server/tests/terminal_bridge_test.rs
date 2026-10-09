@@ -212,3 +212,68 @@ async fn test_terminal_powershell_clear_command_execution() {
 
     server_task.abort();
 }
+
+// @verifies spec-ft-terminal-panel-ui::REQ-022
+#[tokio::test]
+async fn test_terminal_kill_message_terminates_session() {
+    let config = ServerConfig {
+        base_port: 4980,
+        max_port_attempts: 10,
+        host: "127.0.0.1".to_string(),
+    };
+    let state = AppState::default();
+    let mut server = HostServer::with_state(config, state);
+    let addr = server.bind().await.expect("Failed to bind server");
+
+    let server_task = tokio::spawn(async move {
+        let _ = server.serve().await;
+    });
+
+    let ws_url = format!("ws://{}/api/v1/terminal/ws", addr);
+    let (ws_stream, _) = connect_async(&ws_url)
+        .await
+        .expect("Failed to connect to /api/v1/terminal/ws");
+
+    let (mut write, mut read) = ws_stream.split();
+
+    // Init PowerShell
+    let init_msg = serde_json::json!({
+        "type": "init",
+        "shell": "powershell",
+        "cwd": "."
+    });
+    write.send(Message::Text(init_msg.to_string().into())).await.expect("Failed to send init");
+
+    // Wait briefly for process to start
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+    // Send forceful kill message
+    let kill_msg = serde_json::json!({ "type": "kill" });
+    write.send(Message::Text(kill_msg.to_string().into())).await.expect("Failed to send kill");
+
+    // WebSocket stream should terminate/close
+    let timeout = tokio::time::sleep(tokio::time::Duration::from_secs(3));
+    tokio::pin!(timeout);
+
+    let mut stream_closed = false;
+    loop {
+        tokio::select! {
+            msg = read.next() => {
+                match msg {
+                    None | Some(Ok(Message::Close(_))) | Some(Err(_)) => {
+                        stream_closed = true;
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+            _ = &mut timeout => {
+                break;
+            }
+        }
+    }
+
+    assert!(stream_closed, "WebSocket connection should close upon Kill message");
+    server_task.abort();
+}
+

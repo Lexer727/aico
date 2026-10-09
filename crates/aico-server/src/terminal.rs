@@ -26,6 +26,8 @@ pub enum ClientTerminalMessage {
     },
     #[serde(rename = "close")]
     Close,
+    #[serde(rename = "kill")]
+    Kill,
 }
 
 #[derive(Debug, Serialize)]
@@ -277,6 +279,18 @@ async fn handle_terminal_socket(socket: WebSocket, state: AppState) {
                     Ok(ClientTerminalMessage::Close) => {
                         break;
                     }
+                    Ok(ClientTerminalMessage::Kill) => {
+                        if let Some(mut child) = active_child.take() {
+                            #[cfg(windows)]
+                            if let Some(pid) = child.id() {
+                                let _ = std::process::Command::new("taskkill")
+                                    .args(&["/F", "/T", "/PID", &pid.to_string()])
+                                    .output();
+                            }
+                            let _ = child.kill().await;
+                        }
+                        break;
+                    }
                     Err(e) => {
                         warn!("Unrecognized terminal message: {}", e);
                     }
@@ -291,6 +305,12 @@ async fn handle_terminal_socket(socket: WebSocket, state: AppState) {
 
     // Clean up child process
     if let Some(mut child) = active_child {
+        #[cfg(windows)]
+        if let Some(pid) = child.id() {
+            let _ = std::process::Command::new("taskkill")
+                .args(&["/F", "/T", "/PID", &pid.to_string()])
+                .output();
+        }
         let _ = child.kill().await;
     }
 

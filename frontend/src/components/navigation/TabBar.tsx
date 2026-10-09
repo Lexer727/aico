@@ -51,13 +51,25 @@ export const TabBar: React.FC = () => {
     setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 2);
   }, []);
 
+  // @implements spec-ft-terminal-panel-ui::REQ-021
   useEffect(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
     checkScroll();
+
+    const handleNativeWheel = (e: WheelEvent) => {
+      if (e.deltaY !== 0 || e.deltaX !== 0) {
+        e.preventDefault();
+        const delta = e.deltaY !== 0 ? e.deltaY : e.deltaX;
+        el.scrollLeft += delta;
+      }
+    };
+
+    el.addEventListener('wheel', handleNativeWheel, { passive: false });
     el.addEventListener('scroll', checkScroll, { passive: true });
     window.addEventListener('resize', checkScroll);
     return () => {
+      el.removeEventListener('wheel', handleNativeWheel);
       el.removeEventListener('scroll', checkScroll);
       window.removeEventListener('resize', checkScroll);
     };
@@ -196,7 +208,7 @@ export const TabBar: React.FC = () => {
         onWheel={handleWheel}
         onDragOver={handleContainerDragOver}
         onDrop={handleDrop}
-        className="flex items-center h-full flex-1 overflow-x-auto no-scrollbar scroll-smooth"
+        className="flex items-center h-full flex-1 overflow-x-auto no-scrollbar"
       >
         {/* Permanent Home / Dashboard Tab (Cannot be closed via middle-click or X) */}
         <div
