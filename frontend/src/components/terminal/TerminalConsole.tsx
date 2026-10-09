@@ -1,11 +1,25 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Terminal, Plus, X, CornerDownLeft, Sparkles, ChevronDown, Trash2 } from 'lucide-react';
+import {
+  Terminal,
+  Plus,
+  X,
+  CornerDownLeft,
+  Sparkles,
+  ChevronDown,
+  Trash2,
+  PanelRight,
+  PanelBottom,
+  Minimize2,
+} from 'lucide-react';
+import { useDockStore } from '../../stores/useDockStore';
+import clsx from 'clsx';
 
 export type ShellType = 'powershell' | 'bash' | 'cmd' | 'agy';
 
 export interface TerminalTab {
   id: string;
   name: string;
+  shortName: string;
   shell: ShellType;
   history: string[];
 }
@@ -97,8 +111,11 @@ export function parseAnsi(input: string): AnsiSegment[] {
 // @implements spec-ft-terminal-panel-ui::REQ-006
 // @implements spec-ft-terminal-panel-ui::REQ-007
 export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
+  const { position, toggleDock } = useDockStore();
+  const isBottom = position === 'bottom';
+
   const [tabs, setTabs] = useState<TerminalTab[]>([
-    { id: 'term-1', name: 'PowerShell', shell: 'powershell', history: [] },
+    { id: 'term-1', name: 'PowerShell', shortName: 'ps', shell: 'powershell', history: [] },
   ]);
   const [activeTabId, setActiveTabId] = useState('term-1');
   const [inputVal, setInputVal] = useState('');
@@ -234,14 +251,16 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
     }
   }, [activeTab?.history]);
 
-  const handleAddTab = (shell: ShellType, baseName: string) => {
+  const handleAddTab = (shell: ShellType, baseName: string, baseShortName: string) => {
     const existingSameShell = tabs.filter((t) => t.shell === shell);
     const count = existingSameShell.length + 1;
     const name = count === 1 ? baseName : `${baseName} ${count}`;
+    const shortName = count === 1 ? baseShortName : `${baseShortName} ${count}`;
     const newId = `term-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const newTab: TerminalTab = {
       id: newId,
       name,
+      shortName,
       shell,
       history: [],
     };
@@ -252,7 +271,6 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
 
   const handleCloseTab = (tabId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (tabs.length <= 1) return;
 
     const ws = socketsRef.current[tabId];
     if (ws) {
@@ -270,11 +288,12 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
     const remaining = tabs.filter((t) => t.id !== tabId);
     setTabs(remaining);
     if (activeTabId === tabId) {
-      setActiveTabId(remaining[0].id);
+      setActiveTabId(remaining.length > 0 ? remaining[0].id : '');
     }
   };
 
   const handleClearTerminal = () => {
+    if (!activeTabId) return;
     setTabs((prev) =>
       prev.map((t) => (t.id === activeTabId ? { ...t, history: [] } : t))
     );
@@ -282,6 +301,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
 
   const handleCommand = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!activeTabId) return;
     const cmd = inputVal.trim();
     if (!cmd) return;
 
@@ -304,173 +324,242 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
   };
 
   return (
-    <div className="flex flex-col h-full font-mono text-xs text-zinc-300">
-      {/* Terminal Tabs Strip */}
-      <div className="flex items-center gap-1 border-b border-zinc-800 pb-2 mb-2 select-none overflow-x-auto no-scrollbar relative">
-        {tabs.map((tab) => {
-          const isActive = tab.id === activeTabId;
-          const isAgy = tab.shell === 'agy';
-
-          return (
-            <div
-              key={tab.id}
-              onClick={() => setActiveTabId(tab.id)}
-              className={`flex items-center gap-2 px-2.5 py-1 rounded cursor-pointer transition-colors text-xs shrink-0 ${
-                isActive
-                  ? isAgy
-                    ? 'bg-purple-950/60 text-purple-200 font-semibold border border-purple-700/60 shadow-sm'
-                    : 'bg-zinc-800 text-zinc-100 font-semibold border border-zinc-700 shadow-sm'
-                  : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900'
-              }`}
-            >
-              {isAgy ? (
-                <Sparkles className="w-3 h-3 text-purple-400" />
-              ) : (
-                <Terminal className="w-3 h-3 text-indigo-400" />
-              )}
-              <span>{tab.name}</span>
-              {tabs.length > 1 && (
-                <button
-                  onClick={(e) => handleCloseTab(tab.id, e)}
-                  className="hover:text-red-400 p-0.5 rounded transition-colors ml-1"
-                  title="Close tab"
-                >
-                  <X className="w-2.5 h-2.5" />
-                </button>
-              )}
-            </div>
-          );
-        })}
-
-        {/* Actions Group */}
-        <div className="flex items-center gap-1 ml-1 relative shrink-0" ref={dropdownRef}>
-          {/* Dedicated AI Button */}
-          <button
-            onClick={() => handleAddTab('agy', 'AI (agy)')}
-            data-testid="ai-terminal-btn"
-            className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded transition-colors bg-purple-900/30 text-purple-300 border border-purple-700/50 hover:bg-purple-800/40 hover:text-purple-100"
-            title="Launch Antigravity AI Terminal (agy)"
-          >
-            <Sparkles className="w-3 h-3 text-purple-400" />
-            <span>AI</span>
-          </button>
-
-          {/* Plus (PowerShell) + Dropdown Selector */}
-          <div className="flex items-center rounded bg-zinc-800/80 border border-zinc-700/60 hover:border-zinc-600 transition-colors">
-            <button
-              onClick={() => handleAddTab('powershell', 'PowerShell')}
-              data-testid="add-default-terminal"
-              className="flex items-center gap-1 px-2 py-1 text-zinc-300 hover:text-zinc-100 text-xs transition-colors"
-              title="New Terminal (PowerShell)"
-            >
-              <Plus className="w-3 h-3" />
-              <span className="hidden sm:inline">PowerShell</span>
-            </button>
-
-            <button
-              onClick={() => setDropdownOpen((prev) => !prev)}
-              data-testid="shell-dropdown-btn"
-              className="px-1.5 py-1 text-zinc-400 hover:text-zinc-200 border-l border-zinc-700/60 transition-colors"
-              title="Select Shell Type"
-            >
-              <ChevronDown className="w-3 h-3" />
-            </button>
+    <div className="flex flex-col h-full font-mono text-xs text-zinc-300 bg-zinc-950">
+      {/* 1. Header Row (Same row as TERMINALS) */}
+      <header className="flex items-center justify-between px-3 py-1.5 border-b border-zinc-800/80 bg-zinc-900/50 select-none shrink-0">
+        {/* Left: Terminal icon + TERMINALS title + action buttons */}
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-1.5 shrink-0 text-zinc-300">
+            <Terminal className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="text-xs font-semibold uppercase tracking-wider hidden sm:inline">
+              TERMINALS
+            </span>
           </div>
 
-          {/* Shell Dropdown Menu */}
-          {dropdownOpen && (
-            <div
-              className="absolute top-full left-14 mt-1 w-44 bg-zinc-900 border border-zinc-700 rounded-md shadow-xl py-1 z-50 text-xs"
-              role="menu"
+          <div className="h-3.5 w-px bg-zinc-800 mx-0.5 shrink-0" />
+
+          {/* Action buttons group */}
+          <div className="flex items-center gap-1 relative shrink-0" ref={dropdownRef}>
+            {/* Dedicated AI Button */}
+            <button
+              onClick={() => handleAddTab('agy', 'AI (agy)', 'agy')}
+              data-testid="ai-terminal-btn"
+              className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded transition-colors bg-purple-900/40 text-purple-300 border border-purple-700/50 hover:bg-purple-800/50 hover:text-purple-100 shrink-0"
+              title="Launch Antigravity AI Assistant (agy)"
             >
+              <Sparkles className="w-3 h-3 text-purple-400 shrink-0" />
+              <span>AI</span>
+            </button>
+
+            {/* Split Button: Plus (PowerShell) + Dropdown trigger */}
+            <div className="flex items-center rounded bg-zinc-800/80 border border-zinc-700/60 hover:border-zinc-600 transition-colors shrink-0">
               <button
-                onClick={() => {
-                  handleAddTab('powershell', 'PowerShell');
-                  setDropdownOpen(false);
-                }}
-                data-testid="shell-option-powershell"
-                className="w-full text-left px-3 py-1.5 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800 flex items-center gap-2 transition-colors"
+                onClick={() => handleAddTab('powershell', 'PowerShell', 'ps')}
+                data-testid="add-default-terminal"
+                className="p-1 text-zinc-300 hover:text-zinc-100 transition-colors"
+                title="New Terminal (PowerShell)"
               >
-                <Terminal className="w-3.5 h-3.5 text-sky-400" />
-                <span>PowerShell</span>
+                <Plus className="w-3.5 h-3.5" />
               </button>
 
               <button
-                onClick={() => {
-                  handleAddTab('bash', 'Git Bash');
-                  setDropdownOpen(false);
-                }}
-                data-testid="shell-option-bash"
-                className="w-full text-left px-3 py-1.5 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800 flex items-center gap-2 transition-colors"
+                onClick={() => setDropdownOpen((prev) => !prev)}
+                data-testid="shell-dropdown-btn"
+                className="p-1 text-zinc-400 hover:text-zinc-200 border-l border-zinc-700/60 transition-colors"
+                title="Select Shell Type"
               >
-                <Terminal className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Git Bash</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  handleAddTab('cmd', 'Command Prompt');
-                  setDropdownOpen(false);
-                }}
-                data-testid="shell-option-cmd"
-                className="w-full text-left px-3 py-1.5 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800 flex items-center gap-2 transition-colors"
-              >
-                <Terminal className="w-3.5 h-3.5 text-amber-400" />
-                <span>Command Prompt</span>
+                <ChevronDown className="w-3 h-3" />
               </button>
             </div>
-          )}
+
+            {/* Shell Dropdown Menu */}
+            {dropdownOpen && (
+              <div
+                className="absolute top-full left-10 mt-1 w-44 bg-zinc-900 border border-zinc-700 rounded-md shadow-xl py-1 z-50 text-xs"
+                role="menu"
+              >
+                <button
+                  onClick={() => {
+                    handleAddTab('powershell', 'PowerShell', 'ps');
+                    setDropdownOpen(false);
+                  }}
+                  data-testid="shell-option-powershell"
+                  className="w-full text-left px-3 py-1.5 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800 flex items-center gap-2 transition-colors"
+                >
+                  <Terminal className="w-3.5 h-3.5 text-sky-400" />
+                  <span>PowerShell</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    handleAddTab('bash', 'Git Bash', 'bash');
+                    setDropdownOpen(false);
+                  }}
+                  data-testid="shell-option-bash"
+                  className="w-full text-left px-3 py-1.5 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800 flex items-center gap-2 transition-colors"
+                >
+                  <Terminal className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Git Bash</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    handleAddTab('cmd', 'Command Prompt', 'cmd');
+                    setDropdownOpen(false);
+                  }}
+                  data-testid="shell-option-cmd"
+                  className="w-full text-left px-3 py-1.5 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800 flex items-center gap-2 transition-colors"
+                >
+                  <Terminal className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Command Prompt</span>
+                </button>
+              </div>
+            )}
+
+            {/* Clear Output Button */}
+            <button
+              onClick={handleClearTerminal}
+              disabled={tabs.length === 0}
+              className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors rounded hover:bg-zinc-800/60 disabled:opacity-30 disabled:pointer-events-none shrink-0 ml-0.5"
+              title="Clear Terminal Output"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
 
-        {/* Clear Button on far right */}
-        <div className="ml-auto flex items-center gap-1">
+        {/* Right: Dock position toggle + Minimize */}
+        <div className="flex items-center gap-1 shrink-0">
           <button
-            onClick={handleClearTerminal}
-            className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors rounded hover:bg-zinc-800/60"
-            title="Clear Terminal Output"
+            data-testid="dock-toggle-button"
+            onClick={toggleDock}
+            title={isBottom ? 'Dock to right' : 'Dock to bottom'}
+            className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
           >
-            <Trash2 className="w-3.5 h-3.5" />
+            {isBottom ? <PanelRight className="w-3.5 h-3.5" /> : <PanelBottom className="w-3.5 h-3.5" />}
+          </button>
+          <button
+            title="Minimize"
+            className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+          >
+            <Minimize2 className="w-3 h-3" />
           </button>
         </div>
-      </div>
+      </header>
 
-      {/* Terminal Output Log */}
-      <div
-        className="flex-1 overflow-y-auto space-y-1 pr-1 font-mono text-xs select-text"
-        onClick={() => inputRef.current?.focus()}
-      >
-        {activeTab?.history.map((line, idx) => {
-          const isCommand = line.startsWith('$');
-          if (isCommand) {
+      {/* 2. Dedicated Tab Bar Row (Styled like TabBar.tsx) */}
+      <div className="flex items-center h-8 bg-zinc-900/40 border-b border-zinc-800 px-1 select-none overflow-x-auto no-scrollbar shrink-0">
+        {tabs.length === 0 ? (
+          <div className="px-3 text-xs text-zinc-500 italic">No open terminals</div>
+        ) : (
+          tabs.map((tab) => {
+            const isActive = tab.id === activeTabId;
+            const isAgy = tab.shell === 'agy';
+
             return (
-              <div key={idx} className="leading-relaxed break-all text-indigo-400 font-bold">
-                {line}
+              <div
+                key={tab.id}
+                onClick={() => setActiveTabId(tab.id)}
+                title={`${tab.name} (${tab.shortName})`}
+                className={clsx(
+                  'group flex items-center gap-2 px-3 h-full min-h-[32px] border-r border-zinc-800 text-xs font-medium cursor-pointer transition-colors max-w-[200px] shrink-0 whitespace-nowrap',
+                  isActive
+                    ? isAgy
+                      ? 'bg-zinc-950 text-purple-300 border-b-2 border-b-purple-500 font-semibold'
+                      : 'bg-zinc-950 text-zinc-100 border-b-2 border-b-indigo-500 font-semibold'
+                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40'
+                )}
+              >
+                {isAgy ? (
+                  <Sparkles className="w-3 h-3 text-purple-400 shrink-0" />
+                ) : (
+                  <Terminal className="w-3 h-3 text-indigo-400 shrink-0" />
+                )}
+                <span className="hidden sm:inline">{tab.name}</span>
+                <span className="sm:hidden">{tab.shortName}</span>
+                <button
+                  onClick={(e) => handleCloseTab(tab.id, e)}
+                  className="p-0.5 rounded hover:text-red-400 hover:bg-zinc-800 transition-colors ml-1"
+                  title="Close terminal"
+                >
+                  <X className="w-3 h-3" />
+                </button>
               </div>
             );
-          }
-
-          const segments = parseAnsi(line);
-          return (
-            <div key={idx} className="leading-relaxed break-all text-zinc-300 min-h-[1.2em]">
-              {segments.length > 0 ? (
-                segments.map((seg, sIdx) => (
-                  <span key={sIdx} className={seg.className || undefined}>
-                    {seg.text}
-                  </span>
-                ))
-              ) : (
-                <span>&nbsp;</span>
-              )}
-            </div>
-          );
-        })}
-        <div ref={bottomRef} />
+          })
+        )}
       </div>
 
-      {/* Terminal Input Bar */}
-      <form onSubmit={handleCommand} className="flex items-center gap-2 pt-2 border-t border-zinc-800/80">
+      {/* 3. Terminal Body: Output Log or Empty State */}
+      {tabs.length === 0 ? (
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center select-none">
+          <div className="w-12 h-12 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-3">
+            <Terminal className="w-6 h-6 text-zinc-500" />
+          </div>
+          <h3 className="text-sm font-semibold text-zinc-300 mb-1">No Active Terminals</h3>
+          <p className="text-xs text-zinc-500 max-w-xs mb-4">
+            Open a new terminal shell or launch the Antigravity AI Assistant to run commands.
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleAddTab('powershell', 'PowerShell', 'ps')}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs rounded font-medium border border-zinc-700 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>New Terminal</span>
+            </button>
+            <button
+              onClick={() => handleAddTab('agy', 'AI (agy)', 'agy')}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-900/40 hover:bg-purple-800/50 text-purple-300 text-xs rounded font-medium border border-purple-700/50 transition-colors"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+              <span>Launch AI (agy)</span>
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div
+          className="flex-1 overflow-y-auto space-y-1 p-3 font-mono text-xs select-text"
+          onClick={() => inputRef.current?.focus()}
+        >
+          {activeTab?.history.map((line, idx) => {
+            const isCommand = line.startsWith('$');
+            if (isCommand) {
+              return (
+                <div key={idx} className="leading-relaxed break-all text-indigo-400 font-bold">
+                  {line}
+                </div>
+              );
+            }
+
+            const segments = parseAnsi(line);
+            return (
+              <div key={idx} className="leading-relaxed break-all text-zinc-300 min-h-[1.2em]">
+                {segments.length > 0 ? (
+                  segments.map((seg, sIdx) => (
+                    <span key={sIdx} className={seg.className || undefined}>
+                      {seg.text}
+                    </span>
+                  ))
+                ) : (
+                  <span>&nbsp;</span>
+                )}
+              </div>
+            );
+          })}
+          <div ref={bottomRef} />
+        </div>
+      )}
+
+      {/* 4. Terminal Input Bar */}
+      <form
+        onSubmit={handleCommand}
+        className="flex items-center gap-2 px-3 py-2 border-t border-zinc-800/80 bg-zinc-950 shrink-0"
+      >
         <span className="text-emerald-400 font-semibold select-none">
-          {activeTab?.shell === 'agy'
+          {tabs.length === 0
+            ? '---'
+            : activeTab?.shell === 'agy'
             ? 'agy@local:~$ '
             : activeTab?.shell === 'bash'
             ? 'bash@local:~$ '
@@ -481,14 +570,20 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
         <input
           ref={inputRef}
           type="text"
+          disabled={tabs.length === 0}
           value={inputVal}
           onChange={(e) => setInputVal(e.target.value)}
-          placeholder="Type command ('help', 'status', 'test', 'dir')..."
-          className="flex-1 bg-transparent border-none outline-none text-zinc-100 placeholder-zinc-600 font-mono text-xs"
+          placeholder={
+            tabs.length === 0
+              ? 'Open a terminal tab to enter commands...'
+              : "Type command ('help', 'status', 'test', 'dir')..."
+          }
+          className="flex-1 bg-transparent border-none outline-none text-zinc-100 placeholder-zinc-600 font-mono text-xs disabled:opacity-40"
         />
         <button
           type="submit"
-          className="p-1 rounded text-zinc-500 hover:text-zinc-200 transition-colors"
+          disabled={tabs.length === 0}
+          className="p-1 rounded text-zinc-500 hover:text-zinc-200 transition-colors disabled:opacity-40"
           title="Run"
         >
           <CornerDownLeft className="w-3.5 h-3.5" />

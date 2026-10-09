@@ -86,14 +86,28 @@ pub fn resolve_shell_command(shell: &ShellType) -> Result<(String, Vec<String>),
                 }
             }
             ShellType::Agy => {
-                // Check user appdata bin first, then fallback to PATH
-                if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
-                    let agy_path = PathBuf::from(local_app_data).join(r"agy\bin\agy.exe");
-                    if agy_path.exists() {
-                        return Ok((agy_path.to_string_lossy().to_string(), vec![]));
+                let agy_bin = if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+                    let p = PathBuf::from(local_app_data).join(r"agy\bin\agy.exe");
+                    if p.exists() {
+                        p.to_string_lossy().to_string()
+                    } else {
+                        "agy.exe".to_string()
                     }
-                }
-                Ok(("agy.exe".to_string(), vec![]))
+                } else {
+                    "agy.exe".to_string()
+                };
+                Ok((
+                    "powershell.exe".to_string(),
+                    vec![
+                        "-NoLogo".to_string(),
+                        "-NoExit".to_string(),
+                        "-Command".to_string(),
+                        format!(
+                            "Write-Host '===================================================' -ForegroundColor Magenta; Write-Host '  Antigravity AI CLI (agy) - Interactive Terminal' -ForegroundColor Cyan; Write-Host '  Session initialized with AICO skills & local LLM' -ForegroundColor Gray; Write-Host '===================================================' -ForegroundColor Magenta; & '{}'",
+                            agy_bin
+                        ),
+                    ],
+                ))
             }
             ShellType::Unknown(u) => Err(format!("Unknown shell type requested: {}", u)),
         }
@@ -101,7 +115,13 @@ pub fn resolve_shell_command(shell: &ShellType) -> Result<(String, Vec<String>),
         match shell {
             ShellType::PowerShell => Ok(("pwsh".to_string(), vec![])),
             ShellType::Cmd | ShellType::Bash => Ok(("bash".to_string(), vec!["-i".to_string()])),
-            ShellType::Agy => Ok(("agy".to_string(), vec![])),
+            ShellType::Agy => Ok((
+                "bash".to_string(),
+                vec![
+                    "-c".to_string(),
+                    "echo '=== Antigravity AI CLI (agy) ==='; exec agy".to_string(),
+                ],
+            )),
             ShellType::Unknown(u) => Err(format!("Unknown shell type requested: {}", u)),
         }
     }
@@ -121,7 +141,7 @@ pub async fn terminal_ws_handler(
 // @implements spec-ft-terminal-backend-stream-bridge::REQ-004
 // @implements spec-ft-terminal-backend-stream-bridge::REQ-005
 // @implements spec-ft-terminal-backend-stream-bridge::REQ-007
-async fn handle_terminal_socket(socket: WebSocket, _state: AppState) {
+async fn handle_terminal_socket(socket: WebSocket, state: AppState) {
     let (mut ws_sender, mut ws_receiver) = socket.split();
 
     // Channel for forwarding messages from process stdout/stderr/exit to the WebSocket client
@@ -153,11 +173,18 @@ async fn handle_terminal_socket(socket: WebSocket, _state: AppState) {
                                 let mut cmd = Command::new(&prog);
                                 cmd.args(&args);
 
-                                if let Some(dir) = cwd {
-                                    if !dir.is_empty() {
-                                        cmd.current_dir(dir);
+                                let working_dir = match cwd {
+                                    Some(ref dir) if !dir.trim().is_empty() => PathBuf::from(dir),
+                                    _ => {
+                                        let reg = state.registry.read().await;
+                                        if let Some(active) = reg.get_active() {
+                                            active.specs_path.clone()
+                                        } else {
+                                            PathBuf::from("d:/aico/aico-specs")
+                                        }
                                     }
-                                }
+                                };
+                                cmd.current_dir(&working_dir);
 
                                 cmd.stdin(Stdio::piped());
                                 cmd.stdout(Stdio::piped());

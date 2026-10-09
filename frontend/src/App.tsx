@@ -77,6 +77,8 @@ const MainWorkspace: React.FC = () => {
   } = useTabStore();
   const { position } = useDockStore();
 
+  const currentProject = projects.find((p) => p.id === activeProjectId);
+
   // Dynamic Epic discovery from Axum Server REST API
   const fetchEpics = useCallback(async () => {
     try {
@@ -147,9 +149,10 @@ const MainWorkspace: React.FC = () => {
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
-          const mapped = data.map((p: { id: string; name?: string }) => ({
+          const mapped = data.map((p: { id: string; name?: string; specs_path?: string }) => ({
             id: p.id,
             name: p.name || p.id,
+            specs_path: p.specs_path,
           }));
           setProjects(mapped);
           if (activeProjectId === 'default' || !mapped.some((p: { id: string }) => p.id === activeProjectId)) {
@@ -679,8 +682,8 @@ const MainWorkspace: React.FC = () => {
         </div>
 
         {/* Dockable Auxiliary Panel - Terminals */}
-        <DockablePanel title="Terminals">
-          <TerminalConsole />
+        <DockablePanel hideHeader>
+          <TerminalConsole cwd={(currentProject as any)?.specs_path} />
         </DockablePanel>
       </div>
 

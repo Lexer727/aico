@@ -7,6 +7,7 @@ interface DockablePanelProps {
   title?: string;
   children: React.ReactNode;
   className?: string;
+  hideHeader?: boolean;
 }
 
 // @implements spec-ft-core-webui-shell::REQ-010
@@ -15,6 +16,7 @@ export const DockablePanel: React.FC<DockablePanelProps> = ({
   title = 'Docked Panel',
   children,
   className,
+  hideHeader = false,
 }) => {
   const { position, toggleDock } = useDockStore();
 
@@ -33,36 +35,43 @@ export const DockablePanel: React.FC<DockablePanelProps> = ({
       )}
     >
       {/* Panel Header */}
-      <header className="flex items-center justify-between px-3 py-2 border-b border-zinc-800/80 bg-zinc-900/50">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">
-            {title}
-          </span>
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            data-testid="dock-toggle-button"
-            onClick={toggleDock}
-            title={isBottom ? 'Dock to right' : 'Dock to bottom'}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
-          >
-            {isBottom ? (
-              <PanelRight className="w-4 h-4" />
-            ) : (
-              <PanelBottom className="w-4 h-4" />
-            )}
-          </button>
-          <button
-            title="Minimize"
-            className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
-          >
-            <Minimize2 className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </header>
+      {!hideHeader && (
+        <header className="flex items-center justify-between px-3 py-2 border-b border-zinc-800/80 bg-zinc-900/50">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">
+              {title}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              data-testid="dock-toggle-button"
+              onClick={toggleDock}
+              title={isBottom ? 'Dock to right' : 'Dock to bottom'}
+              className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+            >
+              {isBottom ? (
+                <PanelRight className="w-4 h-4" />
+              ) : (
+                <PanelBottom className="w-4 h-4" />
+              )}
+            </button>
+            <button
+              title="Minimize"
+              className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+            >
+              <Minimize2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </header>
+      )}
 
       {/* Panel Content */}
-      <div className="flex-1 overflow-auto p-3 text-zinc-200">
+      <div
+        className={clsx(
+          'flex-1 text-zinc-200',
+          hideHeader ? 'overflow-hidden flex flex-col p-0' : 'overflow-auto p-3'
+        )}
+      >
         {children}
       </div>
     </aside>

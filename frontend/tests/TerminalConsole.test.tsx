@@ -151,4 +151,38 @@ describe('TerminalConsole Component', () => {
     expect(redSpan).toBeInTheDocument();
     expect(redSpan.className).toContain('text-rose-400');
   });
+
+  // @verifies spec-ft-terminal-panel-ui::REQ-006
+  // @verifies spec-ft-terminal-panel-ui::REQ-008
+  it('allows closing tab even when only one terminal is open, transitioning to empty state', async () => {
+    render(<TerminalConsole />);
+
+    expect(screen.getAllByText(/PowerShell/i).length).toBeGreaterThan(0);
+
+    // Find close button on the tab and click it
+    const closeBtn = screen.getByTitle(/close terminal/i);
+    expect(closeBtn).toBeInTheDocument();
+
+    fireEvent.click(closeBtn);
+
+    // Now all tabs closed, should show empty state
+    expect(screen.getByText(/No Active Terminals/i)).toBeInTheDocument();
+    expect(screen.getByText(/No open terminals/i)).toBeInTheDocument();
+  });
+
+  // @verifies spec-ft-terminal-panel-ui::REQ-009
+  // @verifies spec-ft-terminal-panel-ui::REQ-010
+  it('renders TERMINALS in header row, plus button has no text, and tab has responsive shortName ps', async () => {
+    render(<TerminalConsole />);
+
+    // Header title TERMINALS
+    expect(screen.getByText(/TERMINALS/i)).toBeInTheDocument();
+
+    // Plus button must NOT have "PowerShell" text inside it (icon only)
+    const plusBtn = screen.getByTestId('add-default-terminal');
+    expect(plusBtn).toHaveTextContent('');
+
+    // Tab responsive abbreviation ps exists
+    expect(screen.getByText('ps')).toBeInTheDocument();
+  });
 });
