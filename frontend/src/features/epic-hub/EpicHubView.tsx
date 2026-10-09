@@ -162,10 +162,15 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
   // Dynamic epic status calculation: if all features and tasks are finished, status rolls up to Completed
   const isAllFeaturesDone =
     currentFeaturesList.length > 0 &&
-    currentFeaturesList.every((f) => f.status === 'Completed' || f.status === 'Done');
+    currentFeaturesList.every((f) => {
+      const featDone = f.status === 'Completed' || f.status === 'Done';
+      const tasks = f.tasks || [];
+      const tasksDone = tasks.length > 0 && tasks.every((t) => t.status === 'Done' || t.status === 'Completed');
+      return featDone || tasksDone;
+    });
   const isAllTasksDone = allTasks.length > 0 && doneTasks === allTasks.length;
   const computedEpicStatus =
-    (isAllFeaturesDone && (allTasks.length === 0 || isAllTasksDone))
+    (isAllFeaturesDone && (allTasks.length === 0 || isAllTasksDone)) || isAllTasksDone
       ? 'Completed'
       : epic.status;
 

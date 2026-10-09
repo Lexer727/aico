@@ -285,9 +285,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
               const isAllFeaturesDone =
                 epicFeatures.length > 0 &&
-                epicFeatures.every((f) => f.status === 'Completed' || f.status === 'Done');
+                epicFeatures.every((f) => {
+                  const featDone = f.status === 'Completed' || f.status === 'Done';
+                  const tasks = f.tasks || [];
+                  const tasksDone = tasks.length > 0 && tasks.every((t) => t.status === 'Done' || t.status === 'Completed');
+                  return featDone || tasksDone;
+                });
+              const allEpicTasks = epicFeatures.flatMap((f) => f.tasks || []);
+              const isAllTasksDone = allEpicTasks.length > 0 && allEpicTasks.every((t) => t.status === 'Done' || t.status === 'Completed');
               const effectiveEpicStatus =
-                (epic.status === 'Completed' || epic.status === 'Done' || isAllFeaturesDone)
+                (epic.status === 'Completed' || epic.status === 'Done' || isAllFeaturesDone || isAllTasksDone)
                   ? 'Completed'
                   : epic.status;
 

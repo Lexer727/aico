@@ -938,6 +938,18 @@ pub fn scan_feature_dir(feat_path: &std::path::Path, epic_id: &str, is_standalon
 
     let feat_display_name = feat_spec_title.clone().unwrap_or_else(|| feat_id.clone());
 
+    // Dynamic feature status resolution based on task execution DAG
+    if !tasks.is_empty() {
+        let all_tasks_done = tasks.iter().all(|t| {
+            t.status == "Done" || t.status == "Completed" || t.status == "Skipped/Canceled" || t.status == "Rewritten"
+        });
+        if all_tasks_done {
+            feat_status = "Completed".to_string();
+        } else if tasks.iter().any(|t| t.status == "In Progress") {
+            feat_status = "In Progress".to_string();
+        }
+    }
+
     Some(DiscoveredFeatureInfo {
         id: feat_id,
         name: feat_display_name,
@@ -1075,16 +1087,27 @@ pub fn scan_epics_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredEpi
                 // Dynamic epic status evaluation:
                 // Roll up status from child features and task DAG execution
                 let dynamic_status = if !features.is_empty() {
-                    let all_features_completed = features.iter().all(|f| f.status == "Completed" || f.status == "Done");
+                    let all_features_completed = features.iter().all(|f| {
+                        f.status == "Completed"
+                            || f.status == "Done"
+                            || (!f.tasks.is_empty()
+                                && f.tasks.iter().all(|t| {
+                                    t.status == "Done"
+                                        || t.status == "Completed"
+                                        || t.status == "Skipped/Canceled"
+                                        || t.status == "Rewritten"
+                                }))
+                    });
                     let all_tasks_done = features.iter().all(|f| {
                         f.tasks.is_empty() || f.tasks.iter().all(|t| {
                             t.status == "Done" || t.status == "Completed" || t.status == "Skipped/Canceled" || t.status == "Rewritten"
                         })
                     });
+                    let has_tasks = features.iter().any(|f| !f.tasks.is_empty());
                     let any_in_progress = features.iter().any(|f| f.status == "In Progress")
                         || features.iter().any(|f| f.tasks.iter().any(|t| t.status == "In Progress"));
 
-                    if all_features_completed && all_tasks_done {
+                    if (all_features_completed && all_tasks_done) || (has_tasks && all_tasks_done) {
                         "Completed".to_string()
                     } else if any_in_progress {
                         "In Progress".to_string()
