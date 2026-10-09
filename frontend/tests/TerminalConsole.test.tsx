@@ -286,4 +286,85 @@ describe('TerminalConsole Component', () => {
     expect(aiInput).toHaveValue('/skills ');
     expect(screen.queryByTestId('slash-command-menu')).not.toBeInTheDocument();
   });
+
+  // @verifies spec-ft-terminal-panel-ui::REQ-014
+  it('fills in slash command on Enter key without immediately submitting form', async () => {
+    render(<TerminalConsole />);
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    const aiBtn = screen.getByTestId('ai-terminal-btn');
+    fireEvent.click(aiBtn);
+
+    const aiInput = screen.getByPlaceholderText(/ask ai or type \/ for commands/i);
+    fireEvent.change(aiInput, { target: { value: '/' } });
+
+    expect(screen.getByTestId('slash-command-menu')).toBeInTheDocument();
+
+    const currentSocket = mockSockets[mockSockets.length - 1];
+    const initialSentCount = currentSocket.sentMessages.length;
+
+    // Press Enter while menu is open
+    fireEvent.keyDown(aiInput, { key: 'Enter' });
+
+    // Menu should close and input should be filled with first option "/help "
+    expect(screen.queryByTestId('slash-command-menu')).not.toBeInTheDocument();
+    expect(aiInput).toHaveValue('/help ');
+
+    // Form should NOT have submitted message to AI
+    const newInputs = currentSocket.sentMessages.slice(initialSentCount).filter((m: string) => m.includes('"type":"input"'));
+    expect(newInputs.length).toBe(0);
+  });
+
+  // @verifies spec-ft-terminal-panel-ui::REQ-013
+  it('clears all previous lines and strips echoed clear in powershell, leaving only prompt', async () => {
+    render(<TerminalConsole />);
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    const currentSocket = mockSockets[0];
+
+    // Seed output history with previous command and prompt
+    act(() => {
+      if (currentSocket.onmessage) {
+        currentSocket.onmessage({
+          data: JSON.stringify({
+            type: 'output',
+            data: 'Previous command output line 1\r\nPrevious command output line 2\r\nPS D:\\aico\\aico-specs> ',
+          }),
+        });
+      }
+    });
+
+    expect(screen.getByText(/Previous command output line 1/i)).toBeInTheDocument();
+
+    // Type "clear" and submit
+    const input = screen.getByPlaceholderText(/type command/i);
+    fireEvent.change(input, { target: { value: 'clear' } });
+    fireEvent.submit(input.closest('form')!);
+
+    // Old output should be cleared immediately
+    expect(screen.queryByText(/Previous command output line 1/i)).not.toBeInTheDocument();
+
+    // PowerShell echoes "clear\r\n\r\nPS D:\aico\aico-specs> "
+    act(() => {
+      if (currentSocket.onmessage) {
+        currentSocket.onmessage({
+          data: JSON.stringify({
+            type: 'output',
+            data: 'clear\r\n\r\nPS D:\\aico\\aico-specs> ',
+          }),
+        });
+      }
+    });
+
+    // The echoed word "clear" should be stripped and not appear in history
+    expect(screen.queryByText('clear')).not.toBeInTheDocument();
+    // Only the prompt should remain
+    expect(screen.getByText(/PS D:\\aico\\aico-specs>/i)).toBeInTheDocument();
+  });
 });

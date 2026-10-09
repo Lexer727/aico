@@ -148,11 +148,17 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashIndex, setSlashIndex] = useState(0);
 
+  const cwdRef = useRef(cwd);
+  useEffect(() => {
+    cwdRef.current = cwd;
+  }, [cwd]);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const socketsRef = useRef<Record<string, WebSocket>>({});
   const dropdownRef = useRef<HTMLDivElement>(null);
   const slashMenuRef = useRef<HTMLDivElement>(null);
+  const clearingTabsRef = useRef<Record<string, boolean>>({});
 
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
   const isAgy = activeTab?.shell === 'agy';
@@ -163,7 +169,8 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
 
   const connectSocket = useCallback(
     (tabId: string, shell: ShellType) => {
-      if (socketsRef.current[tabId]) return;
+      const existing = socketsRef.current[tabId];
+      if (existing && existing.readyState <= 1) return;
 
       const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const host = typeof window !== 'undefined' && window.location.host ? window.location.host : '127.0.0.1:4242';
@@ -178,7 +185,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
             JSON.stringify({
               type: 'init',
               shell,
-              cwd: cwd || undefined,
+              cwd: cwdRef.current || undefined,
             })
           );
         };
@@ -194,6 +201,14 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
                   let data = msg.data;
                   let history = [...t.history];
                   let pending = t.pendingLine || '';
+
+                  // If this tab was recently cleared, strip the echoed clear/cls command
+                  if (clearingTabsRef.current[tabId]) {
+                    data = data.replace(/^\s*(clear|cls)\s*(\r?\n)+/i, '');
+                    if (data.trim() !== '') {
+                      clearingTabsRef.current[tabId] = false;
+                    }
+                  }
 
                   // Handle ANSI clear screen sequence (\x1b[2J)
                   if (data.includes('\u001b[2J')) {
@@ -249,13 +264,19 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
         };
 
         ws.onclose = () => {
-          delete socketsRef.current[tabId];
+          if (socketsRef.current[tabId] === ws) {
+            delete socketsRef.current[tabId];
+          }
+        };
+
+        ws.onerror = (err) => {
+          console.error(`WebSocket error on tab ${tabId}`, err);
         };
       } catch (err) {
         console.error('Failed to create WebSocket for terminal tab', err);
       }
     },
-    [cwd]
+    []
   );
 
   // Initialize first socket connection on mount and cleanup on unmount
@@ -276,6 +297,13 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
       socketsRef.current = {};
     };
   }, [connectSocket]);
+
+  // Ensure active tab socket is alive when tab changes
+  useEffect(() => {
+    if (activeTabId && activeTab) {
+      connectSocket(activeTabId, activeTab.shell);
+    }
+  }, [activeTabId, activeTab, connectSocket]);
 
   // Close dropdown or slash menu on outside click
   useEffect(() => {
@@ -344,6 +372,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
 
   const handleClearTerminal = () => {
     if (!activeTabId) return;
+    clearingTabsRef.current[activeTabId] = true;
     setTabs((prev) =>
       prev.map((t) => (t.id === activeTabId ? { ...t, history: [], pendingLine: '' } : t))
     );
@@ -355,13 +384,22 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
     const cmd = inputVal.trim();
     if (!cmd) return;
 
-    const ws = socketsRef.current[activeTabId];
+    if (cmd === 'clear' || cmd === 'cls') {
+      clearingTabsRef.current[activeTabId] = true;
+      handleClearTerminal();
+    }
+
+    let ws = socketsRef.current[activeTabId];
+    if (!ws || ws.readyState !== 1) {
+      connectSocket(activeTabId, activeTab.shell);
+      ws = socketsRef.current[activeTabId];
+    }
+
     if (ws && ws.readyState === 1) {
       ws.send(JSON.stringify({ type: 'input', data: `${cmd}\r\n` }));
     }
 
     if (cmd === 'clear' || cmd === 'cls') {
-      handleClearTerminal();
       setInputVal('');
       setSlashMenuOpen(false);
       return;
@@ -415,7 +453,8 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
         setSlashIndex((prev) => (prev - 1 + filteredCommands.length) % filteredCommands.length);
         return;
       }
-      if (e.key === 'Tab') {
+      // Enter or Tab in slash menu fills in the command without immediately submitting the form
+      if (e.key === 'Tab' || e.key === 'Enter') {
         e.preventDefault();
         handleSelectSlashCommand(filteredCommands[slashIndex].name);
         return;
