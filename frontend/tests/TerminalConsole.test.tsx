@@ -550,6 +550,23 @@ describe('TerminalConsole Component', () => {
     // Output buffer should be rendered immediately without being cleared
     expect(screen.getByText(/Restored line 1 from previous session/i)).toBeInTheDocument();
     expect(screen.getByText(/Restored line 2 from previous session/i)).toBeInTheDocument();
+
+    // When the spawned shell outputs its initial startup prompt
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 10));
+    });
+    const currentSocket = mockSockets[0];
+    act(() => {
+      if (currentSocket?.onmessage) {
+        currentSocket.onmessage({
+          data: JSON.stringify({ type: 'output', data: 'PS D:\\aico> ' }),
+        });
+      }
+    });
+
+    // Exactly one prompt should be present; no doubled prompt
+    expect(screen.queryByText(/PS D:\\aico> PS D:\\aico>/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/PS D:\\aico>/i)).toBeInTheDocument();
   });
 
   // @verifies spec-ft-terminal-panel-ui::REQ-021

@@ -164,7 +164,7 @@ const getInitialTabs = (): TerminalTab[] => {
         return parsed.map((t) => ({
           ...t,
           history: Array.isArray(t.history) ? t.history : [],
-          pendingLine: typeof t.pendingLine === 'string' ? t.pendingLine : '',
+          pendingLine: '',
         }));
       }
     }
@@ -433,6 +433,21 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
                     data = clearParts[clearParts.length - 1];
                     history = [];
                     pending = '';
+                  }
+
+                  // Prevent duplicate prompt strings when reconnecting or re-emitting prompt (e.g. "PS D:\...> PS D:\...>")
+                  if (pending && data) {
+                    const trimmedPending = pending.trim();
+                    const trimmedData = data.trim();
+                    if (
+                      (trimmedPending.startsWith('PS ') && trimmedPending.endsWith('>')) ||
+                      trimmedPending.endsWith('$') ||
+                      trimmedPending.endsWith('>')
+                    ) {
+                      if (trimmedData.startsWith(trimmedPending) || trimmedPending === trimmedData) {
+                        pending = '';
+                      }
+                    }
                   }
 
                   const combined = pending + data;
