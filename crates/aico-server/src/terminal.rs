@@ -99,18 +99,12 @@ pub fn resolve_shell_command(shell: &ShellType) -> Result<(String, Vec<String>),
                 let ps_repl = format!(
                     "$agy = '{}'\n\
                      $global:agy_active = $false\n\
-                     [Console]::Out.WriteLine(\"`e[35m===================================================`e[0m\")\n\
-                     [Console]::Out.WriteLine(\"`e[36m  Google Antigravity AI Assistant (agy v1.3.2)`e[0m\")\n\
-                     [Console]::Out.WriteLine(\"`e[90m  Workspace: \" + (Get-Location).Path + \"`e[0m\")\n\
-                     [Console]::Out.WriteLine(\"`e[90m  Ready. Type your prompt or slash command.`e[0m\")\n\
-                     [Console]::Out.WriteLine(\"`e[35m===================================================`e[0m\")\n\
-                     [Console]::Out.WriteLine(\"\")\n\
                      while ($true) {{\n\
                        $line = [Console]::In.ReadLine()\n\
                        if ($null -eq $line -or $line -eq 'exit' -or $line -eq 'quit') {{ break }}\n\
                        if ($line.Trim() -eq '') {{ continue }}\n\
                        if ($line -eq 'cls' -or $line -eq 'clear') {{\n\
-                         [Console]::Out.Write(\"`e[2J`e[H\")\n\
+                         [Console]::Out.Write(\"$([char]27)[2J$([char]27)[H\")\n\
                          continue\n\
                        }}\n\
                        $cmdArgs = if ($global:agy_active) {{ @('-c', '-p', $line) }} else {{ @('-p', $line) }}\n\

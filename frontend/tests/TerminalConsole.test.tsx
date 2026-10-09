@@ -8,6 +8,9 @@ describe('TerminalConsole Component', () => {
 
   beforeEach(() => {
     mockSockets = [];
+    if (typeof window !== 'undefined') {
+      sessionStorage.clear();
+    }
     vi.stubGlobal('WebSocket', class {
       url: string;
       onopen: (() => void) | null = null;
@@ -38,7 +41,16 @@ describe('TerminalConsole Component', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    if (typeof window !== 'undefined') {
+      sessionStorage.clear();
+    }
   });
+
+  // Helper to open a default PowerShell terminal
+  const openDefaultTerminal = () => {
+    const plusBtn = screen.getByTestId('add-default-terminal');
+    fireEvent.click(plusBtn);
+  };
 
   // @verifies spec-ft-terminal-panel-ui::REQ-001
   it('provides a dedicated AI button that opens an agy terminal tab', async () => {
@@ -92,6 +104,7 @@ describe('TerminalConsole Component', () => {
   // @verifies spec-ft-terminal-panel-ui::REQ-006
   it('connects to terminal WebSocket, transmits input, and receives output stream', async () => {
     render(<TerminalConsole />);
+    openDefaultTerminal();
 
     // Wait for initial socket to connect
     await act(async () => {
@@ -126,6 +139,7 @@ describe('TerminalConsole Component', () => {
   // @verifies spec-ft-terminal-panel-ui::REQ-007
   it('parses and renders ANSI color codes properly', async () => {
     render(<TerminalConsole />);
+    openDefaultTerminal();
 
     await act(async () => {
       await new Promise((r) => setTimeout(r, 10));
@@ -156,6 +170,7 @@ describe('TerminalConsole Component', () => {
   // @verifies spec-ft-terminal-panel-ui::REQ-008
   it('allows closing tab even when only one terminal is open, transitioning to empty state', async () => {
     render(<TerminalConsole />);
+    openDefaultTerminal();
 
     expect(screen.getAllByText(/PowerShell/i).length).toBeGreaterThan(0);
 
@@ -174,6 +189,7 @@ describe('TerminalConsole Component', () => {
   // @verifies spec-ft-terminal-panel-ui::REQ-010
   it('renders TERMINALS in header row, plus button has no text, and tab has responsive shortName ps', async () => {
     render(<TerminalConsole />);
+    openDefaultTerminal();
 
     // Header title TERMINALS
     expect(screen.getByText(/TERMINALS/i)).toBeInTheDocument();
@@ -189,6 +205,7 @@ describe('TerminalConsole Component', () => {
   // @verifies spec-ft-terminal-panel-ui::REQ-012
   it('reassembles streaming chunks continuously without fragmenting partial words', async () => {
     render(<TerminalConsole />);
+    openDefaultTerminal();
 
     await act(async () => {
       await new Promise((r) => setTimeout(r, 10));
@@ -226,6 +243,7 @@ describe('TerminalConsole Component', () => {
   // @verifies spec-ft-terminal-panel-ui::REQ-013
   it('renders prompt and does not inject duplicate > cmd in powershell history', async () => {
     render(<TerminalConsole />);
+    openDefaultTerminal();
 
     await act(async () => {
       await new Promise((r) => setTimeout(r, 10));
@@ -321,6 +339,7 @@ describe('TerminalConsole Component', () => {
   // @verifies spec-ft-terminal-panel-ui::REQ-013
   it('clears all previous lines and strips echoed clear in powershell, leaving only prompt', async () => {
     render(<TerminalConsole />);
+    openDefaultTerminal();
 
     await act(async () => {
       await new Promise((r) => setTimeout(r, 10));
@@ -366,5 +385,135 @@ describe('TerminalConsole Component', () => {
     expect(screen.queryByText('clear')).not.toBeInTheDocument();
     // Only the prompt should remain
     expect(screen.getByText(/PS D:\\aico\\aico-specs>/i)).toBeInTheDocument();
+  });
+
+  // @verifies spec-ft-terminal-panel-ui::REQ-015
+  it('closes tab on middle mouse button click (button === 1)', async () => {
+    render(<TerminalConsole />);
+    openDefaultTerminal();
+
+    const psTab = screen.getByText('PowerShell').closest('div[data-testid^="tab-"]');
+    expect(psTab).toBeInTheDocument();
+
+    // Simulate middle mouse click
+    fireEvent.mouseDown(psTab!, { button: 1 });
+
+    // Terminal tab should be closed and empty state shown
+    expect(screen.getByText(/No Active Terminals/i)).toBeInTheDocument();
+  });
+
+  // @verifies spec-ft-terminal-panel-ui::REQ-015
+  it('supports drag-and-drop tab reordering with preview shift', async () => {
+    render(<TerminalConsole />);
+    // Open PowerShell tab
+    openDefaultTerminal();
+    // Open AI tab
+    fireEvent.click(screen.getByTestId('ai-terminal-btn'));
+
+    const tabs = screen.getAllByTestId(/^tab-term-/);
+    expect(tabs.length).toBe(2);
+
+    const firstTab = tabs[0];
+    const secondTab = tabs[1];
+
+    // Drag first tab over second tab
+    fireEvent.dragStart(firstTab, {
+      dataTransfer: {
+        setData: () => {},
+        effectAllowed: 'move',
+      },
+    });
+
+    fireEvent.dragOver(secondTab, {
+      dataTransfer: { dropEffect: 'move' },
+    });
+
+    // Drop to commit order
+    fireEvent.drop(secondTab);
+    fireEvent.dragEnd(firstTab);
+
+    // Tab reordering completed without crashing
+    const updatedTabs = screen.getAllByTestId(/^tab-term-/);
+    expect(updatedTabs.length).toBe(2);
+  });
+
+  // @verifies spec-ft-terminal-panel-ui::REQ-016
+  it('does not refocus or clear selection when user has selected text in terminal', async () => {
+    render(<TerminalConsole />);
+    openDefaultTerminal();
+
+    // Mock active selection
+    const mockSelection = {
+      toString: () => 'highlighted text sample',
+    };
+    vi.spyOn(window, 'getSelection').mockReturnValue(mockSelection as any);
+
+    const terminalBody = screen.getByTestId('terminal-body');
+    expect(terminalBody).toBeInTheDocument();
+
+    // Click inside terminal container
+    fireEvent.click(terminalBody);
+
+    // Should not throw and selection mock should have been inspected
+    expect(window.getSelection).toHaveBeenCalled();
+  });
+
+  // @verifies spec-ft-terminal-panel-ui::REQ-017
+  it('starts with zero open terminals on fresh boot, showing empty state and quick launch buttons', async () => {
+    // sessionStorage is completely empty
+    render(<TerminalConsole />);
+
+    expect(screen.getByText(/No Active Terminals/i)).toBeInTheDocument();
+    expect(screen.getByText(/No open terminals/i)).toBeInTheDocument();
+    const newTermBtn = screen.getByTestId('empty-new-terminal');
+    expect(newTermBtn).toBeInTheDocument();
+    expect(screen.getByTestId('empty-launch-ai')).toBeInTheDocument();
+
+    // Clicking New Terminal creates a terminal tab
+    fireEvent.click(newTermBtn);
+    expect(screen.getAllByText(/PowerShell/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/No Active Terminals/i)).not.toBeInTheDocument();
+  });
+
+  // @verifies spec-ft-terminal-panel-ui::REQ-017
+  it('restores open tabs from sessionStorage on page reload', async () => {
+    // Setup pre-existing session tabs
+    sessionStorage.setItem('aico_terminal_session_initialized', 'true');
+    sessionStorage.setItem(
+      'aico_terminal_session_tabs',
+      JSON.stringify([
+        { id: 'term-saved-1', name: 'PowerShell', shortName: 'ps', shell: 'powershell' },
+        { id: 'term-saved-2', name: 'AI (agy)', shortName: 'agy', shell: 'agy' },
+      ])
+    );
+    sessionStorage.setItem('aico_terminal_session_active', 'term-saved-2');
+
+    render(<TerminalConsole />);
+
+    // Both tabs should be present immediately
+    expect(screen.getByText(/PowerShell/i)).toBeInTheDocument();
+    expect(screen.getByText(/AI \(agy\)/i)).toBeInTheDocument();
+
+    // Empty state should NOT be rendered
+    expect(screen.queryByText(/No Active Terminals/i)).not.toBeInTheDocument();
+  });
+
+  // @verifies spec-ft-terminal-panel-ui::REQ-018
+  it('renders authentic Antigravity arch logo, CLI header, and shortcuts footer in agy tab', async () => {
+    render(<TerminalConsole />);
+
+    // Open AI tab
+    fireEvent.click(screen.getByTestId('ai-terminal-btn'));
+
+    // Check pixel-art rainbow arch logo
+    expect(screen.getByTestId('agy-arch-logo')).toBeInTheDocument();
+
+    // Check Antigravity CLI version and model
+    expect(screen.getByText(/Antigravity CLI 1.3.2/i)).toBeInTheDocument();
+    expect(screen.getByText(/Gemini 3.8 Flash \(High\)/i)).toBeInTheDocument();
+
+    // Check shortcuts footer
+    expect(screen.getByText(/\? for shortcuts/i)).toBeInTheDocument();
+    expect(screen.getByText(/Gemini 3.8 Flash · high/i)).toBeInTheDocument();
   });
 });

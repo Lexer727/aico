@@ -3,13 +3,14 @@ import {
   Terminal,
   Plus,
   X,
-  CornerDownLeft,
   Sparkles,
   ChevronDown,
   Trash2,
   PanelRight,
   PanelBottom,
   Minimize2,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { useDockStore } from '../../stores/useDockStore';
 import clsx from 'clsx';
@@ -118,6 +119,68 @@ export function parseAnsi(input: string): AnsiSegment[] {
   return segments;
 }
 
+// Authentic Google Antigravity Rainbow Arch Pixel Art Icon
+export const AntigravityArchLogo: React.FC<{ className?: string }> = ({ className = 'w-10 h-10' }) => (
+  <svg viewBox="0 0 36 36" fill="none" className={className} data-testid="agy-arch-logo">
+    {/* Orange / Amber top curve */}
+    <rect x="14" y="2" width="8" height="4" rx="0.5" fill="#F97316" />
+    <rect x="12" y="6" width="12" height="4" rx="0.5" fill="#F59E0B" />
+    {/* Yellow left, Magenta right */}
+    <rect x="9" y="10" width="6" height="4" rx="0.5" fill="#EAB308" />
+    <rect x="21" y="10" width="6" height="4" rx="0.5" fill="#EC4899" />
+    {/* Lime left, Purple right */}
+    <rect x="7" y="14" width="5" height="5" rx="0.5" fill="#84CC16" />
+    <rect x="24" y="14" width="5" height="5" rx="0.5" fill="#A855F7" />
+    {/* Emerald left, Violet right */}
+    <rect x="5" y="19" width="5" height="5" rx="0.5" fill="#10B981" />
+    <rect x="26" y="19" width="5" height="5" rx="0.5" fill="#8B5CF6" />
+    {/* Cyan left, Indigo right */}
+    <rect x="3" y="24" width="5" height="5" rx="0.5" fill="#06B6D4" />
+    <rect x="28" y="24" width="5" height="5" rx="0.5" fill="#6366F1" />
+    {/* Sky feet */}
+    <rect x="1" y="29" width="6" height="4" rx="0.5" fill="#38BDF8" />
+    <rect x="29" y="29" width="6" height="4" rx="0.5" fill="#3B82F6" />
+  </svg>
+);
+
+const SESSION_INITIALIZED_KEY = 'aico_terminal_session_initialized';
+const SESSION_TABS_KEY = 'aico_terminal_session_tabs';
+const SESSION_ACTIVE_KEY = 'aico_terminal_session_active';
+
+const getInitialTabs = (): TerminalTab[] => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const isInit = sessionStorage.getItem(SESSION_INITIALIZED_KEY);
+    if (!isInit) {
+      sessionStorage.setItem(SESSION_INITIALIZED_KEY, 'true');
+      sessionStorage.removeItem(SESSION_TABS_KEY);
+      sessionStorage.removeItem(SESSION_ACTIVE_KEY);
+      return [];
+    }
+    const saved = sessionStorage.getItem(SESSION_TABS_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) {
+        return parsed.map((t) => ({ ...t, history: [], pendingLine: '' }));
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return [];
+};
+
+const getInitialActiveTab = (initTabs: TerminalTab[]): string => {
+  if (typeof window === 'undefined') return '';
+  try {
+    const saved = sessionStorage.getItem(SESSION_ACTIVE_KEY);
+    if (saved && initTabs.some((t) => t.id === saved)) return saved;
+  } catch {
+    // ignore
+  }
+  return initTabs.length > 0 ? initTabs[0].id : '';
+};
+
 // @implements spec-ft-core-webui-shell::REQ-009
 // @implements spec-ft-core-webui-shell::REQ-010
 // @implements spec-ft-core-webui-shell::REQ-011
@@ -135,18 +198,32 @@ export function parseAnsi(input: string): AnsiSegment[] {
 // @implements spec-ft-terminal-panel-ui::REQ-012
 // @implements spec-ft-terminal-panel-ui::REQ-013
 // @implements spec-ft-terminal-panel-ui::REQ-014
+// @implements spec-ft-terminal-panel-ui::REQ-015
+// @implements spec-ft-terminal-panel-ui::REQ-016
+// @implements spec-ft-terminal-panel-ui::REQ-017
+// @implements spec-ft-terminal-panel-ui::REQ-018
 export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
   const { position, toggleDock } = useDockStore();
   const isBottom = position === 'bottom';
 
-  const [tabs, setTabs] = useState<TerminalTab[]>([
-    { id: 'term-1', name: 'PowerShell', shortName: 'ps', shell: 'powershell', history: [], pendingLine: '' },
-  ]);
-  const [activeTabId, setActiveTabId] = useState('term-1');
+  const [tabs, setTabs] = useState<TerminalTab[]>(getInitialTabs);
+  const [activeTabId, setActiveTabId] = useState<string>(() => getInitialActiveTab(tabs));
   const [inputVal, setInputVal] = useState('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashIndex, setSlashIndex] = useState(0);
+
+  // Tab Strip Scroll & Overflow states
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  // Tab Drag and Drop states
+  const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
+  const draggedTabIdRef = useRef<string | null>(null);
+  const [previewTabs, setPreviewTabs] = useState<TerminalTab[] | null>(null);
+
+  const renderedTabs = previewTabs || tabs;
 
   const cwdRef = useRef(cwd);
   useEffect(() => {
@@ -160,12 +237,126 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
   const slashMenuRef = useRef<HTMLDivElement>(null);
   const clearingTabsRef = useRef<Record<string, boolean>>({});
 
-  const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
+  const activeTab = tabs.find((t) => t.id === activeTabId) || (tabs.length > 0 ? tabs[0] : null);
   const isAgy = activeTab?.shell === 'agy';
 
   const filteredCommands = SLASH_COMMANDS.filter((cmd) =>
     cmd.name.toLowerCase().startsWith(inputVal.toLowerCase())
   );
+
+  // Save session tabs to sessionStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem(
+          SESSION_TABS_KEY,
+          JSON.stringify(
+            tabs.map((t) => ({ id: t.id, name: t.name, shortName: t.shortName, shell: t.shell }))
+          )
+        );
+        sessionStorage.setItem(SESSION_ACTIVE_KEY, activeTabId);
+      } catch {
+        // ignore
+      }
+    }
+  }, [tabs, activeTabId]);
+
+  // Tab strip overflow check
+  const checkScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 2);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 2);
+  }, []);
+
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    checkScroll();
+    el.addEventListener('scroll', checkScroll, { passive: true });
+    window.addEventListener('resize', checkScroll);
+    return () => {
+      el.removeEventListener('scroll', checkScroll);
+      window.removeEventListener('resize', checkScroll);
+    };
+  }, [checkScroll, renderedTabs]);
+
+  const scrollByAmount = (amount: number) => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollBy({ left: amount, behavior: 'smooth' });
+    }
+  };
+
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (e.deltaY !== 0) {
+      e.currentTarget.scrollLeft += e.deltaY;
+    }
+  };
+
+  // Drag and Drop handlers matching TabBar.tsx
+  const handleDragStart = (e: React.DragEvent, tab: TerminalTab) => {
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', tab.id);
+    }
+    draggedTabIdRef.current = tab.id;
+    setDraggedTabId(tab.id);
+    setPreviewTabs([...tabs]);
+  };
+
+  const handleDragOverTab = (e: React.DragEvent, targetTabId: string) => {
+    e.preventDefault();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'move';
+    }
+
+    const activeDraggedId = draggedTabIdRef.current || draggedTabId;
+    if (!activeDraggedId || targetTabId === activeDraggedId) return;
+
+    setPreviewTabs((current) => {
+      const activeList = current ? [...current] : [...tabs];
+      const fromIndex = activeList.findIndex((t) => t.id === activeDraggedId);
+      const toIndex = activeList.findIndex((t) => t.id === targetTabId);
+      if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return current;
+
+      const [moved] = activeList.splice(fromIndex, 1);
+      activeList.splice(toIndex, 0, moved);
+      return activeList;
+    });
+  };
+
+  const handleContainerDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'move';
+    }
+
+    if (scrollContainerRef.current) {
+      const rect = scrollContainerRef.current.getBoundingClientRect();
+      const edgeThreshold = 60;
+      if (e.clientX - rect.left < edgeThreshold) {
+        scrollContainerRef.current.scrollLeft -= 10;
+      } else if (rect.right - e.clientX < edgeThreshold) {
+        scrollContainerRef.current.scrollLeft += 10;
+      }
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (previewTabs && previewTabs.length > 0) {
+      setTabs(previewTabs);
+    }
+    draggedTabIdRef.current = null;
+    setDraggedTabId(null);
+    setPreviewTabs(null);
+  };
+
+  const handleDragEnd = () => {
+    draggedTabIdRef.current = null;
+    setDraggedTabId(null);
+    setPreviewTabs(null);
+  };
 
   const connectSocket = useCallback(
     (tabId: string, shell: ShellType) => {
@@ -279,10 +470,15 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
     []
   );
 
-  // Initialize first socket connection on mount and cleanup on unmount
+  // Connect active tab socket when switching or after reload
   useEffect(() => {
-    connectSocket('term-1', 'powershell');
+    if (activeTabId && activeTab) {
+      connectSocket(activeTabId, activeTab.shell);
+    }
+  }, [activeTabId, activeTab, connectSocket]);
 
+  // Cleanup all sockets on unmount
+  useEffect(() => {
     return () => {
       Object.values(socketsRef.current).forEach((ws) => {
         try {
@@ -296,14 +492,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
       });
       socketsRef.current = {};
     };
-  }, [connectSocket]);
-
-  // Ensure active tab socket is alive when tab changes
-  useEffect(() => {
-    if (activeTabId && activeTab) {
-      connectSocket(activeTabId, activeTab.shell);
-    }
-  }, [activeTabId, activeTab, connectSocket]);
+  }, []);
 
   // Close dropdown or slash menu on outside click
   useEffect(() => {
@@ -345,10 +534,13 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
     setTabs((prev) => [...prev, newTab]);
     setActiveTabId(newId);
     connectSocket(newId, shell);
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 50);
   };
 
-  const handleCloseTab = (tabId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleCloseTab = (tabId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
 
     const ws = socketsRef.current[tabId];
     if (ws) {
@@ -380,7 +572,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
 
   const handleCommand = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeTabId) return;
+    if (!activeTabId || !activeTab) return;
     const cmd = inputVal.trim();
     if (!cmd) return;
 
@@ -409,9 +601,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
       prev.map((t) => {
         if (t.id !== activeTabId) return t;
 
-        // In agy AI mode, powershell ReadLine does not echo stdin over stdout,
-        // so we display the user prompt directly as a conversation turn (> cmd)
-        // without any agy> prefix.
+        // In agy AI mode, display user turn in history
         if (t.shell === 'agy') {
           return {
             ...t,
@@ -419,9 +609,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
           };
         }
 
-        // In standard shells (PowerShell, Bash, CMD), the shell itself echoes the command
-        // on stdout into pendingLine directly behind its prompt, so we do NOT inject
-        // a duplicate line into history.
+        // Standard shells (PowerShell, Bash, CMD) echo command on stdout into pendingLine
         return t;
       })
     );
@@ -473,10 +661,19 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
     inputRef.current?.focus();
   };
 
+  // Preserve text selection on mouseup so copying is effortless
+  const handleTerminalClick = () => {
+    const selection = window.getSelection();
+    if (selection && selection.toString().trim().length > 0) {
+      return;
+    }
+    inputRef.current?.focus();
+  };
+
   return (
-    <div className="flex flex-col h-full font-mono text-xs text-zinc-300 bg-zinc-950">
+    <div className="flex flex-col h-full font-mono text-xs text-zinc-300 bg-zinc-950 overflow-hidden select-none">
       {/* 1. Header Row (Same row as TERMINALS) */}
-      <header className="flex items-center justify-between px-3 py-1.5 border-b border-zinc-800/80 bg-zinc-900/50 select-none shrink-0">
+      <header className="flex items-center justify-between px-3 py-1.5 border-b border-zinc-800/80 bg-zinc-900/50 shrink-0">
         {/* Left: Terminal icon + TERMINALS title + action buttons */}
         <div className="flex items-center gap-2 min-w-0">
           <div className="flex items-center gap-1.5 shrink-0 text-zinc-300">
@@ -494,7 +691,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
             <button
               onClick={() => handleAddTab('agy', 'AI (agy)', 'agy')}
               data-testid="ai-terminal-btn"
-              className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded transition-colors bg-purple-900/40 text-purple-300 border border-purple-700/50 hover:bg-purple-800/50 hover:text-purple-100 shrink-0"
+              className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded transition-colors bg-purple-900/40 text-purple-300 border border-purple-700/50 hover:bg-purple-800/50 hover:text-purple-100 shrink-0 cursor-pointer"
               title="Launch Antigravity AI Assistant (agy)"
             >
               <Sparkles className="w-3 h-3 text-purple-400 shrink-0" />
@@ -506,7 +703,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
               <button
                 onClick={() => handleAddTab('powershell', 'PowerShell', 'ps')}
                 data-testid="add-default-terminal"
-                className="p-1 text-zinc-300 hover:text-zinc-100 transition-colors"
+                className="p-1 text-zinc-300 hover:text-zinc-100 transition-colors cursor-pointer"
                 title="New Terminal (PowerShell)"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -515,7 +712,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
               <button
                 onClick={() => setDropdownOpen((prev) => !prev)}
                 data-testid="shell-dropdown-btn"
-                className="p-1 text-zinc-400 hover:text-zinc-200 border-l border-zinc-700/60 transition-colors"
+                className="p-1 text-zinc-400 hover:text-zinc-200 border-l border-zinc-700/60 transition-colors cursor-pointer"
                 title="Select Shell Type"
               >
                 <ChevronDown className="w-3 h-3" />
@@ -534,7 +731,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
                     setDropdownOpen(false);
                   }}
                   data-testid="shell-option-powershell"
-                  className="w-full text-left px-3 py-1.5 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800 flex items-center gap-2 transition-colors"
+                  className="w-full text-left px-3 py-1.5 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800 flex items-center gap-2 transition-colors cursor-pointer"
                 >
                   <Terminal className="w-3.5 h-3.5 text-sky-400" />
                   <span>PowerShell</span>
@@ -546,7 +743,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
                     setDropdownOpen(false);
                   }}
                   data-testid="shell-option-bash"
-                  className="w-full text-left px-3 py-1.5 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800 flex items-center gap-2 transition-colors"
+                  className="w-full text-left px-3 py-1.5 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800 flex items-center gap-2 transition-colors cursor-pointer"
                 >
                   <Terminal className="w-3.5 h-3.5 text-emerald-400" />
                   <span>Git Bash</span>
@@ -558,7 +755,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
                     setDropdownOpen(false);
                   }}
                   data-testid="shell-option-cmd"
-                  className="w-full text-left px-3 py-1.5 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800 flex items-center gap-2 transition-colors"
+                  className="w-full text-left px-3 py-1.5 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800 flex items-center gap-2 transition-colors cursor-pointer"
                 >
                   <Terminal className="w-3.5 h-3.5 text-amber-400" />
                   <span>Command Prompt</span>
@@ -570,7 +767,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
             <button
               onClick={handleClearTerminal}
               disabled={tabs.length === 0}
-              className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors rounded hover:bg-zinc-800/60 disabled:opacity-30 disabled:pointer-events-none shrink-0 ml-0.5"
+              className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors rounded hover:bg-zinc-800/60 disabled:opacity-30 disabled:pointer-events-none shrink-0 ml-0.5 cursor-pointer"
               title="Clear Terminal Output"
             >
               <Trash2 className="w-3.5 h-3.5" />
@@ -584,59 +781,110 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
             data-testid="dock-toggle-button"
             onClick={toggleDock}
             title={isBottom ? 'Dock to right' : 'Dock to bottom'}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+            className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors cursor-pointer"
           >
             {isBottom ? <PanelRight className="w-3.5 h-3.5" /> : <PanelBottom className="w-3.5 h-3.5" />}
           </button>
           <button
             title="Minimize"
-            className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+            className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors cursor-pointer"
           >
             <Minimize2 className="w-3 h-3" />
           </button>
         </div>
       </header>
 
-      {/* 2. Dedicated Tab Bar Row (Styled like TabBar.tsx) */}
-      <div className="flex items-center h-8 bg-zinc-900/40 border-b border-zinc-800 px-1 select-none overflow-x-auto no-scrollbar shrink-0">
-        {tabs.length === 0 ? (
-          <div className="px-3 text-xs text-zinc-500 italic">No open terminals</div>
-        ) : (
-          tabs.map((tab) => {
-            const isActive = tab.id === activeTabId;
-            const tabIsAgy = tab.shell === 'agy';
+      {/* 2. Dedicated Tab Bar Row (Matching TabBar.tsx with Drag-and-Drop & Overflow Navigation) */}
+      <div className="flex items-center h-8 bg-zinc-900/60 border-b border-zinc-800 overflow-hidden shrink-0">
+        {/* Scroll Left Button if overflow */}
+        {canScrollLeft && (
+          <button
+            type="button"
+            onClick={() => scrollByAmount(-180)}
+            className="flex items-center justify-center px-1 h-full text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors shrink-0 border-r border-zinc-800 cursor-pointer z-10"
+            title="Scroll tabs left"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+          </button>
+        )}
 
-            return (
-              <div
-                key={tab.id}
-                onClick={() => setActiveTabId(tab.id)}
-                title={`${tab.name} (${tab.shortName})`}
-                className={clsx(
-                  'group flex items-center gap-2 px-3 h-full min-h-[32px] border-r border-zinc-800 text-xs font-medium cursor-pointer transition-colors max-w-[200px] shrink-0 whitespace-nowrap',
-                  isActive
-                    ? tabIsAgy
-                      ? 'bg-zinc-950 text-purple-300 border-b-2 border-b-purple-500 font-semibold'
-                      : 'bg-zinc-950 text-zinc-100 border-b-2 border-b-indigo-500 font-semibold'
-                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40'
-                )}
-              >
-                {tabIsAgy ? (
-                  <Sparkles className="w-3 h-3 text-purple-400 shrink-0" />
-                ) : (
-                  <Terminal className="w-3 h-3 text-indigo-400 shrink-0" />
-                )}
-                <span className="hidden sm:inline">{tab.name}</span>
-                <span className="sm:hidden">{tab.shortName}</span>
-                <button
-                  onClick={(e) => handleCloseTab(tab.id, e)}
-                  className="p-0.5 rounded hover:text-red-400 hover:bg-zinc-800 transition-colors ml-1"
-                  title="Close terminal"
+        {/* Scrollable Tab Strip with Mouse Wheel & Drag Reorder */}
+        <div
+          ref={scrollContainerRef}
+          onWheel={handleWheel}
+          onDragOver={handleContainerDragOver}
+          onDrop={handleDrop}
+          className="flex items-center h-full flex-1 overflow-x-auto no-scrollbar scroll-smooth"
+        >
+          {tabs.length === 0 ? (
+            <div className="px-3 text-xs text-zinc-500 italic">No open terminals</div>
+          ) : (
+            renderedTabs.map((tab) => {
+              const isActive = tab.id === activeTabId;
+              const tabIsAgy = tab.shell === 'agy';
+              const isBeingDragged = tab.id === draggedTabId;
+
+              return (
+                <div
+                  key={tab.id}
+                  data-testid={`tab-${tab.id}`}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, tab)}
+                  onDragOver={(e) => handleDragOverTab(e, tab.id)}
+                  onDrop={handleDrop}
+                  onDragEnd={handleDragEnd}
+                  onClick={() => {
+                    if (!draggedTabId) setActiveTabId(tab.id);
+                  }}
+                  onMouseDown={(e) => {
+                    // Middle mouse click closes tab
+                    if (e.button === 1) {
+                      e.preventDefault();
+                      handleCloseTab(tab.id, e);
+                    }
+                  }}
+                  title={`${tab.name} (${tab.shortName}) - Drag to reorder, Middle-click to close`}
+                  className={clsx(
+                    'group flex items-center gap-2 px-3 h-full min-h-[32px] border-r border-zinc-800 text-xs font-medium cursor-pointer transition-all duration-150 ease-out max-w-[200px] shrink-0 whitespace-nowrap',
+                    isActive && !isBeingDragged
+                      ? tabIsAgy
+                        ? 'bg-zinc-950 text-purple-300 border-b-2 border-b-purple-500 font-semibold'
+                        : 'bg-zinc-950 text-zinc-100 border-b-2 border-b-indigo-500 font-semibold'
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40',
+                    isBeingDragged &&
+                      'opacity-60 bg-indigo-950/40 border-2 border-dashed border-indigo-400 text-indigo-300 ring-2 ring-indigo-500/20 scale-[0.98]'
+                  )}
                 >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            );
-          })
+                  {tabIsAgy ? (
+                    <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                  ) : (
+                    <Terminal className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                  )}
+                  <span className="hidden sm:inline truncate">{tab.name}</span>
+                  <span className="sm:hidden">{tab.shortName}</span>
+                  <button
+                    onClick={(e) => handleCloseTab(tab.id, e)}
+                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:text-red-400 hover:bg-zinc-800 transition-opacity ml-1 cursor-pointer shrink-0"
+                    title="Close terminal"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Scroll Right Button if overflow */}
+        {canScrollRight && (
+          <button
+            type="button"
+            onClick={() => scrollByAmount(180)}
+            className="flex items-center justify-center px-1 h-full text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors shrink-0 border-l border-zinc-800 cursor-pointer z-10"
+            title="Scroll tabs right"
+          >
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
         )}
       </div>
 
@@ -653,14 +901,16 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
           <div className="flex items-center gap-2">
             <button
               onClick={() => handleAddTab('powershell', 'PowerShell', 'ps')}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs rounded font-medium border border-zinc-700 transition-colors"
+              data-testid="empty-new-terminal"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs rounded font-medium border border-zinc-700 transition-colors cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>New Terminal</span>
             </button>
             <button
               onClick={() => handleAddTab('agy', 'AI (agy)', 'agy')}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-900/40 hover:bg-purple-800/50 text-purple-300 text-xs rounded font-medium border border-purple-700/50 transition-colors"
+              data-testid="empty-launch-ai"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-900/40 hover:bg-purple-800/50 text-purple-300 text-xs rounded font-medium border border-purple-700/50 transition-colors cursor-pointer"
             >
               <Sparkles className="w-3.5 h-3.5 text-purple-400" />
               <span>Launch AI (agy)</span>
@@ -669,131 +919,140 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
         </div>
       ) : (
         <div
-          className="flex-1 overflow-y-auto p-3 font-mono text-xs select-text whitespace-pre-wrap leading-5"
-          onClick={() => inputRef.current?.focus()}
+          data-testid="terminal-body"
+          className="flex-1 overflow-y-auto overflow-x-hidden p-3 font-mono text-xs select-text whitespace-pre-wrap break-words leading-5 flex flex-col justify-between"
+          onClick={handleTerminalClick}
         >
-          {activeTab?.history.map((line, idx) => {
-            const isCommand = line.startsWith('>') || line.startsWith('$');
-            if (isCommand) {
+          <div>
+            {/* Authentic Antigravity CLI Banner Header when in agy tab */}
+            {isAgy && (
+              <div className="mb-3 select-none">
+                <div className="flex items-center gap-4 py-1">
+                  <AntigravityArchLogo className="w-10 h-10 shrink-0" />
+                  <div className="flex flex-col justify-center">
+                    <div className="font-semibold text-sky-400 text-xs tracking-wide">
+                      Antigravity CLI 1.3.2
+                    </div>
+                    <div className="text-zinc-400 text-[11px]">
+                      a.staub1307@gmail.com (Google AI Pro)
+                    </div>
+                    <div className="text-zinc-400 text-[11px]">
+                      Gemini 3.8 Flash (High)
+                    </div>
+                    <div className="text-zinc-500 text-[11px] font-mono">
+                      {cwd || '~'}
+                    </div>
+                  </div>
+                </div>
+                <div className="border-b border-zinc-800/80 my-2 w-full" />
+              </div>
+            )}
+
+            {/* Completed Output Lines */}
+            {activeTab?.history.map((line, idx) => {
+              const isCommand = line.startsWith('>') || line.startsWith('$');
+              if (isCommand) {
+                return (
+                  <div key={idx} className="font-semibold text-sky-400 whitespace-pre-wrap break-words leading-5 my-0.5">
+                    {line}
+                  </div>
+                );
+              }
+
+              const segments = parseAnsi(line);
               return (
-                <div key={idx} className="font-bold text-indigo-400 whitespace-pre-wrap leading-5">
-                  {line}
+                <div key={idx} className="text-zinc-300 min-h-[1.25em] whitespace-pre-wrap break-words leading-5">
+                  {segments.length > 0 ? (
+                    segments.map((seg, sIdx) => (
+                      <span key={sIdx} className={seg.className || undefined}>
+                        {seg.text}
+                      </span>
+                    ))
+                  ) : (
+                    <span>&nbsp;</span>
+                  )}
                 </div>
               );
-            }
+            })}
 
-            const segments = parseAnsi(line);
-            return (
-              <div key={idx} className="text-zinc-300 min-h-[1.25em] whitespace-pre-wrap leading-5">
-                {segments.length > 0 ? (
-                  segments.map((seg, sIdx) => (
+            {/* Active Inline Prompt Line + Typing directly at Prompt */}
+            {activeTab && (
+              <div className="text-zinc-300 min-h-[1.25em] whitespace-pre-wrap break-words leading-5 flex items-baseline flex-wrap gap-x-1 relative my-0.5">
+                {activeTab.pendingLine ? (
+                  parseAnsi(activeTab.pendingLine).map((seg, sIdx) => (
                     <span key={sIdx} className={seg.className || undefined}>
                       {seg.text}
                     </span>
                   ))
-                ) : (
-                  <span>&nbsp;</span>
-                )}
-              </div>
-            );
-          })}
+                ) : isAgy ? (
+                  <span className="text-sky-400 font-bold select-none">&gt;&nbsp;</span>
+                ) : null}
 
-          {/* Active pending line (e.g. prompt) + live typing preview behind prompt + cursor */}
-          {activeTab && (
-            <div className="text-zinc-300 min-h-[1.25em] whitespace-pre-wrap leading-5 flex items-baseline flex-wrap">
-              {activeTab.pendingLine ? (
-                parseAnsi(activeTab.pendingLine).map((seg, sIdx) => (
-                  <span key={sIdx} className={seg.className || undefined}>
-                    {seg.text}
-                  </span>
-                ))
-              ) : null}
-              {activeTab.shell !== 'agy' && inputVal ? (
-                <span className="text-zinc-100 font-semibold">{inputVal}</span>
-              ) : null}
-              <span className="inline-block w-1.5 h-3.5 bg-zinc-400 animate-pulse ml-0.5 align-middle self-center" />
+                {/* Slash autocomplete menu floating directly above active input */}
+                {slashMenuOpen && isAgy && filteredCommands.length > 0 && (
+                  <div
+                    ref={slashMenuRef}
+                    data-testid="slash-command-menu"
+                    className="absolute bottom-full left-0 mb-1 w-96 max-h-60 overflow-y-auto bg-zinc-900 border border-purple-500/40 rounded-lg shadow-2xl p-1 z-50 text-xs font-sans"
+                  >
+                    <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-purple-400 flex items-center gap-1 border-b border-zinc-800">
+                      <Sparkles className="w-3 h-3 text-purple-400" />
+                      <span>Available Slash Commands</span>
+                    </div>
+                    <div className="py-1">
+                      {filteredCommands.map((cmd, idx) => {
+                        const isSelected = idx === slashIndex;
+                        return (
+                          <button
+                            key={cmd.name}
+                            type="button"
+                            data-testid={`slash-option-${cmd.name.slice(1)}`}
+                            onClick={() => handleSelectSlashCommand(cmd.name)}
+                            onMouseEnter={() => setSlashIndex(idx)}
+                            className={clsx(
+                              'w-full text-left px-2.5 py-1.5 rounded flex items-center justify-between gap-2 transition-colors cursor-pointer',
+                              isSelected
+                                ? 'bg-purple-950/70 text-purple-100 border border-purple-700/50'
+                                : 'text-zinc-300 hover:bg-zinc-800/60'
+                            )}
+                          >
+                            <span className="font-mono font-bold text-purple-300">{cmd.name}</span>
+                            <span className="text-[11px] text-zinc-400 truncate">{cmd.description}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Inline form directly inside terminal prompt */}
+                <form onSubmit={handleCommand} className="inline-flex items-center flex-1 min-w-[120px]">
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={inputVal}
+                    onChange={handleInputChange}
+                    onKeyDown={handleKeyDown}
+                    placeholder={isAgy ? 'Ask AI or type / for commands...' : 'Type command...'}
+                    className="bg-transparent border-none outline-none text-zinc-100 placeholder-zinc-700 font-mono text-xs flex-1 min-w-[80px]"
+                  />
+                </form>
+                <span className="inline-block w-1.5 h-3.5 bg-zinc-400 animate-pulse ml-0.5 align-middle self-center select-none" />
+              </div>
+            )}
+
+            <div ref={bottomRef} />
+          </div>
+
+          {/* Authentic Antigravity Status Footer in AGY Tab */}
+          {isAgy && (
+            <div className="flex items-center justify-between pt-2 mt-4 border-t border-zinc-800/60 text-[11px] text-zinc-500 select-none font-sans shrink-0">
+              <span className="text-zinc-400">? for shortcuts</span>
+              <span className="text-zinc-400">Gemini 3.8 Flash · high</span>
             </div>
           )}
-
-          <div ref={bottomRef} />
         </div>
       )}
-
-      {/* 4. Terminal Input Bar */}
-      <div className="relative shrink-0" ref={slashMenuRef}>
-        {/* Slash Command Autocomplete Popover */}
-        {slashMenuOpen && isAgy && filteredCommands.length > 0 && (
-          <div
-            data-testid="slash-command-menu"
-            className="absolute bottom-full left-3 mb-1 w-96 max-h-60 overflow-y-auto bg-zinc-900 border border-purple-500/40 rounded-lg shadow-2xl p-1 z-50 text-xs font-sans"
-          >
-            <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-purple-400 flex items-center gap-1 border-b border-zinc-800">
-              <Sparkles className="w-3 h-3 text-purple-400" />
-              <span>Available Slash Commands</span>
-            </div>
-            <div className="py-1">
-              {filteredCommands.map((cmd, idx) => {
-                const isSelected = idx === slashIndex;
-                return (
-                  <button
-                    key={cmd.name}
-                    type="button"
-                    data-testid={`slash-option-${cmd.name.slice(1)}`}
-                    onClick={() => handleSelectSlashCommand(cmd.name)}
-                    onMouseEnter={() => setSlashIndex(idx)}
-                    className={clsx(
-                      'w-full text-left px-2.5 py-1.5 rounded flex items-center justify-between gap-2 transition-colors cursor-pointer',
-                      isSelected
-                        ? 'bg-purple-950/70 text-purple-100 border border-purple-700/50'
-                        : 'text-zinc-300 hover:bg-zinc-800/60'
-                    )}
-                  >
-                    <span className="font-mono font-bold text-purple-300">{cmd.name}</span>
-                    <span className="text-[11px] text-zinc-400 truncate">{cmd.description}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        <form
-          onSubmit={handleCommand}
-          className="flex items-center gap-2 px-3 py-2 border-t border-zinc-800/80 bg-zinc-950 shrink-0"
-        >
-          {isAgy ? (
-            <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0 ml-1" />
-          ) : (
-            <span className="text-zinc-500 font-bold select-none pl-1">
-              {tabs.length === 0 ? '---' : '>'}
-            </span>
-          )}
-          <input
-            ref={inputRef}
-            type="text"
-            disabled={tabs.length === 0}
-            value={inputVal}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            placeholder={
-              tabs.length === 0
-                ? 'Open a terminal tab to enter commands...'
-                : isAgy
-                ? 'Ask AI or type / for commands...'
-                : 'Type command...'
-            }
-            className="flex-1 bg-transparent border-none outline-none text-zinc-100 placeholder-zinc-600 font-mono text-xs disabled:opacity-40"
-          />
-          <button
-            type="submit"
-            disabled={tabs.length === 0}
-            className="p-1 rounded text-zinc-500 hover:text-zinc-200 transition-colors disabled:opacity-40"
-            title="Run"
-          >
-            <CornerDownLeft className="w-3.5 h-3.5" />
-          </button>
-        </form>
-      </div>
     </div>
   );
 };
