@@ -387,6 +387,61 @@ describe('TerminalConsole Component', () => {
     expect(screen.getByText(/PS D:\\aico\\aico-specs>/i)).toBeInTheDocument();
   });
 
+  // @verifies spec-ft-terminal-panel-ui::REQ-013
+  it('strips echoed clear even when fragmented across multiple socket chunks, leaving only prompt', async () => {
+    render(<TerminalConsole />);
+    openDefaultTerminal();
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    const currentSocket = mockSockets[0];
+
+    // Seed output history
+    act(() => {
+      if (currentSocket.onmessage) {
+        currentSocket.onmessage({
+          data: JSON.stringify({
+            type: 'output',
+            data: 'Old line 1\r\nPS D:\\aico\\aico-specs> ',
+          }),
+        });
+      }
+    });
+
+    const input = screen.getByTestId('terminal-inline-input');
+    fireEvent.change(input, { target: { value: 'clear' } });
+    fireEvent.submit(input.closest('form')!);
+
+    // Chunk 1: just "clear" without newline
+    act(() => {
+      if (currentSocket.onmessage) {
+        currentSocket.onmessage({
+          data: JSON.stringify({
+            type: 'output',
+            data: 'clear',
+          }),
+        });
+      }
+    });
+
+    // Chunk 2: "\r\nPS D:\aico\aico-specs> "
+    act(() => {
+      if (currentSocket.onmessage) {
+        currentSocket.onmessage({
+          data: JSON.stringify({
+            type: 'output',
+            data: '\r\nPS D:\\aico\\aico-specs> ',
+          }),
+        });
+      }
+    });
+
+    expect(screen.queryByText('clear')).not.toBeInTheDocument();
+    expect(screen.getByText(/PS D:\\aico\\aico-specs>/i)).toBeInTheDocument();
+  });
+
   // @verifies spec-ft-terminal-panel-ui::REQ-015
   it('closes tab on middle mouse button click (button === 1)', async () => {
     render(<TerminalConsole />);

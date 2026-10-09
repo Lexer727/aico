@@ -421,8 +421,13 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
 
                   // If this tab was recently cleared, strip the echoed clear/cls command
                   if (clearingTabsRef.current[tabId]) {
-                    data = data.replace(/^\s*(clear|cls)\s*(\r?\n)+/i, '');
-                    if (data.trim() !== '') {
+                    pending = '';
+                    history = [];
+                    data = data.replace(/^[\r\n\s]*(?:clear|cls)[\r\n\s]*/gi, '');
+                    data = data.replace(/^[\r\n\s]+/g, '');
+                    if (data.trim() === '') {
+                      data = '';
+                    } else {
                       clearingTabsRef.current[tabId] = false;
                     }
                   }
@@ -453,8 +458,14 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
                   const combined = pending + data;
                   const normalized = combined.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
                   const parts = normalized.split('\n');
-                  const newPending = parts.pop() ?? '';
-                  const newCompleted = [...history, ...parts];
+                  let newPending = parts.pop() ?? '';
+                  if (newPending.trim().toLowerCase() === 'clear' || newPending.trim().toLowerCase() === 'cls') {
+                    newPending = '';
+                  }
+                  const newCompleted = [...history, ...parts].filter((line) => {
+                    const trimmed = line.trim().toLowerCase();
+                    return trimmed !== 'clear' && trimmed !== 'cls';
+                  });
 
                   return {
                     ...t,
