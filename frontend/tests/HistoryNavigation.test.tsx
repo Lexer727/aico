@@ -170,7 +170,7 @@ describe('History Navigation & NavButtons', () => {
     expect(useTabStore.getState().getProjectTabs('default').map((t) => t.id)).toContain('tab3');
   });
 
-  it('persists open tabs, active tab, and history to localStorage across reloads', () => {
+  it('persists open tabs, active tab, and history to sessionStorage across reloads (REQ-017)', () => {
     const store = useTabStore.getState();
     act(() => {
       store.setActiveProject('default');
@@ -181,8 +181,8 @@ describe('History Navigation & NavButtons', () => {
     expect(useTabStore.getState().activeTabId).toBe('ft-fast-trace');
     expect(useTabStore.getState().getProjectTabs('default')).toHaveLength(2);
 
-    // Verify localStorage has persisted data
-    const raw = localStorage.getItem('aico_tab_store_v1');
+    // Verify sessionStorage has persisted data
+    const raw = sessionStorage.getItem('aico_tab_store_session_v1');
     expect(raw).toBeTruthy();
     const parsed = JSON.parse(raw!);
     expect(parsed.activeTabId).toBe('ft-fast-trace');

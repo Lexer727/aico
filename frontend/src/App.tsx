@@ -19,11 +19,15 @@ import { DocumentViewer } from './features/document-viewer/DocumentViewer';
 import { CodeViewer } from './features/code-viewer/CodeViewer';
 import { AdrViewer } from './features/adr-viewer/AdrViewer';
 import { GlossaryViewer } from './features/glossary-viewer/GlossaryViewer';
+import { AssetViewer } from './features/assets/AssetViewer';
+import type { DiscoveredAssetInfo } from './features/assets/AssetPanel';
 import { VisualLineageCanvas, type GraphNode, type GraphEdge } from './features/epic-hub/VisualLineageCanvas';
 import { WebSocketProvider, useWebSocket } from './context/WebSocketContext';
-import { useTabStore, type TabItem } from './stores/useTabStore';
+import { useTabStore, getWindowId, type TabItem } from './stores/useTabStore';
 import { useDockStore } from './stores/useDockStore';
-import { Search } from 'lucide-react';
+import { MobilePairingModal } from './components/navigation/MobilePairingModal';
+import { DesktopWindowSwitcher } from './components/navigation/DesktopWindowSwitcher';
+import { Search, QrCode } from 'lucide-react';
 
 if (typeof window !== 'undefined') {
   (window as any).__TAB_STORE__ = useTabStore;
@@ -54,8 +58,44 @@ const mockEdges: GraphEdge[] = [
   { id: 'e6', source: 'spec-6', target: 'code-1' },
 ];
 
-const MainWorkspace: React.FC = () => {
-  const { status, reconnect, lastMessage } = useWebSocket();
+export const MainWorkspace: React.FC = () => {
+  const { status, reconnect, sendMessage, lastMessage } = useWebSocket();
+  const [windowId] = useState<string>(() => getWindowId());
+  const [isPairingOpen, setIsPairingOpen] = useState(false);
+  const [targetWindowId, setTargetWindowId] = useState<string>(() => {
+    if (typeof window === 'undefined') return '';
+    const params = new URLSearchParams(window.location.search);
+    return params.get('win') || '';
+  });
+  const initialWinRef = React.useRef<string>(
+    typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('win') || '' : ''
+  );
+  const pairedNotifiedRef = React.useRef<boolean>(false);
+  const isRemoteSyncRef = React.useRef<boolean>(false);
+  const hasReceivedInitialSyncRef = React.useRef<boolean>(false);
+  const [activeMobileView, setActiveMobileView] = useState<'tree' | 'main' | 'terminal'>('main');
+  const [isMobileMode, setIsMobileMode] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('companion') === 'true' || params.has('win') || params.has('token')) {
+      return true;
+    }
+    if (window.innerWidth < 768) return true;
+    if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+      return true;
+    }
+    return false;
+  });
+
+  const [desktopWindows, setDesktopWindows] = useState<Record<string, {
+    windowId: string;
+    title?: string;
+    activeTabId?: string | null;
+    tabs?: TabItem[];
+    activeProject?: string;
+    lastSeen: number;
+  }>>({});
+
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [projects, setProjects] = useState(mockProjects);
   const [discoveredEpics, setDiscoveredEpics] = useState<DiscoveredEpicNav[]>([]);
@@ -65,19 +105,22 @@ const MainWorkspace: React.FC = () => {
   const [discoveredAdrs, setDiscoveredAdrs] = useState<DiscoveredAdrNav[]>([]);
   const [fullAdrs, setFullAdrs] = useState<DiscoveredAdr[]>([]);
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
+  const [workspaceRefreshKey, setWorkspaceRefreshKey] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const {
     openTab,
+    closeTab,
     activeProjectId,
     setActiveProject,
     activeTabId,
+    tabsByProject,
     getProjectTabs,
     goBack,
     goForward,
     reopenLastClosedTab,
   } = useTabStore();
   const { position } = useDockStore();
-
-  const currentProject = projects.find((p) => p.id === activeProjectId);
+  const effectivePosition = isMobileMode ? 'bottom' : position;
 
   // Dynamic Epic discovery from Axum Server REST API
   const fetchEpics = useCallback(async () => {
@@ -113,6 +156,7 @@ const MainWorkspace: React.FC = () => {
             id: f.id,
             name: f.name || f.id,
             epicId: f.epic_id || f.epicId || '',
+            status: f.status,
             isStandalone: f.is_standalone ?? f.isStandalone ?? false,
           }));
           setDiscoveredFeatures(mapped);
@@ -165,6 +209,17 @@ const MainWorkspace: React.FC = () => {
     }
   }, [activeProjectId, setActiveProject]);
 
+  // @implements spec-ft-core-webui-shell::REQ-016
+  const handleRefreshWorkspace = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await Promise.all([fetchProjects(), fetchEpics(), fetchFeatures(), fetchAdrs()]);
+      setWorkspaceRefreshKey((prev) => prev + 1);
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 300);
+    }
+  }, [fetchProjects, fetchEpics, fetchFeatures, fetchAdrs]);
+
   useEffect(() => {
     fetchProjects();
     fetchEpics();
@@ -188,6 +243,161 @@ const MainWorkspace: React.FC = () => {
       }
     }
   }, [lastMessage, setActiveProject, fetchProjects, fetchEpics, fetchFeatures, fetchAdrs]);
+
+  // Dynamic mobile mode detection on viewport resize or URL query
+  useEffect(() => {
+    const checkMobile = () => {
+      const params = new URLSearchParams(window.location.search);
+      const isExplicitCompanion = params.get('companion') === 'true' || params.has('win') || params.has('token');
+      const isNarrow = window.innerWidth < 768;
+      const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      setIsMobileMode(isExplicitCompanion || isNarrow || isMobileUA);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // @implements spec-ft-core-webui-shell::REQ-018
+  // Desktop: Broadcast window presence and state periodically and on tab changes
+  useEffect(() => {
+    if (isMobileMode) return;
+    const broadcastWindowState = () => {
+      const state = useTabStore.getState();
+      const currentTabs = state.getProjectTabs(state.activeProjectId);
+      const curActiveTab = currentTabs.find((t) => t.id === state.activeTabId);
+      const title = curActiveTab ? curActiveTab.title : 'Workspace';
+      sendMessage('desktop_window_state', {
+        windowId,
+        title,
+        activeTabId: state.activeTabId,
+        tabs: currentTabs,
+        activeProject: state.activeProjectId,
+      });
+    };
+    broadcastWindowState();
+    const interval = setInterval(broadcastWindowState, 3000);
+    return () => clearInterval(interval);
+  }, [isMobileMode, windowId, sendMessage, activeTabId, activeProjectId, tabsByProject]);
+
+  // @implements spec-ft-core-webui-shell::REQ-018
+  // @implements spec-ft-core-webui-shell::REQ-019
+  // Desktop: Respond to companion requests, pairing notifications, and remote tab modifications
+  useEffect(() => {
+    if (isMobileMode || !lastMessage || typeof lastMessage !== 'object') return;
+    const msg = lastMessage as { topic?: string; payload?: unknown };
+    if (msg.topic === 'companion_paired') {
+      try {
+        const payload = typeof msg.payload === 'string' ? JSON.parse(msg.payload) : msg.payload;
+        if (!payload?.windowId || payload.windowId === windowId) {
+          setIsPairingOpen(false);
+        }
+      } catch {
+        // ignore
+      }
+    } else if (msg.topic === 'request_desktop_windows') {
+      const state = useTabStore.getState();
+      const currentTabs = state.getProjectTabs(state.activeProjectId);
+      const curActiveTab = currentTabs.find((t) => t.id === state.activeTabId);
+      const title = curActiveTab ? curActiveTab.title : 'Workspace';
+      sendMessage('desktop_window_state', {
+        windowId,
+        title,
+        activeTabId: state.activeTabId,
+        tabs: currentTabs,
+        activeProject: state.activeProjectId,
+      });
+    } else if (msg.topic === 'companion_tabs_update') {
+      try {
+        const payload = typeof msg.payload === 'string' ? JSON.parse(msg.payload) : msg.payload;
+        if (payload?.targetWindowId === windowId) {
+          const activeProj = payload.activeProject || activeProjectId;
+          const curTabsByProject = useTabStore.getState().tabsByProject;
+          useTabStore.getState().replaceState({
+            activeProjectId: activeProj,
+            tabsByProject: {
+              ...curTabsByProject,
+              [activeProj]: payload.tabs || [],
+            },
+            activeTabId: payload.activeTabId ?? null,
+          });
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }, [isMobileMode, lastMessage, windowId, activeProjectId, sendMessage]);
+
+  // @implements spec-ft-core-webui-shell::REQ-019
+  // Mobile Companion: Notify desktop upon WebSocket connection that pairing is complete
+  useEffect(() => {
+    if (isMobileMode && status === 'connected' && initialWinRef.current && !pairedNotifiedRef.current) {
+      pairedNotifiedRef.current = true;
+      sendMessage('companion_paired', { windowId: initialWinRef.current });
+    }
+  }, [isMobileMode, status, sendMessage]);
+
+  // @implements spec-ft-core-webui-shell::REQ-020
+  // Mobile Companion: Request active desktop windows on mount
+  useEffect(() => {
+    if (!isMobileMode) return;
+    sendMessage('request_desktop_windows', { from: 'companion' });
+  }, [isMobileMode, sendMessage]);
+
+  // @implements spec-ft-core-webui-shell::REQ-020
+  // Mobile Companion: Discover desktop windows and mirror target window tabs
+  useEffect(() => {
+    if (!isMobileMode || !lastMessage || typeof lastMessage !== 'object') return;
+    const msg = lastMessage as { topic?: string; payload?: unknown };
+    if (msg.topic === 'desktop_window_state') {
+      try {
+        const data = typeof msg.payload === 'string' ? JSON.parse(msg.payload) : msg.payload;
+        if (data && data.windowId) {
+          setDesktopWindows((prev) => ({
+            ...prev,
+            [data.windowId]: { ...data, lastSeen: Date.now() },
+          }));
+          const effectiveTarget = targetWindowId || data.windowId;
+          if (!targetWindowId) {
+            setTargetWindowId(data.windowId);
+          }
+          if (data.windowId === effectiveTarget && Array.isArray(data.tabs)) {
+            hasReceivedInitialSyncRef.current = true;
+            isRemoteSyncRef.current = true;
+            const activeProj = data.activeProject || 'default';
+            const curTabsByProject = useTabStore.getState().tabsByProject;
+            useTabStore.getState().replaceState({
+              activeProjectId: activeProj,
+              tabsByProject: {
+                ...curTabsByProject,
+                [activeProj]: data.tabs,
+              },
+              activeTabId: data.activeTabId ?? null,
+            });
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }, [isMobileMode, lastMessage, targetWindowId]);
+
+  // @implements spec-ft-core-webui-shell::REQ-020
+  // Mobile Companion: Dispatch local tab modifications back to target desktop window
+  useEffect(() => {
+    if (!isMobileMode || !targetWindowId || !hasReceivedInitialSyncRef.current) return;
+    if (isRemoteSyncRef.current) {
+      isRemoteSyncRef.current = false;
+      return;
+    }
+    const currentTabs = tabsByProject[activeProjectId] || [];
+    sendMessage('companion_tabs_update', {
+      targetWindowId,
+      tabs: currentTabs,
+      activeTabId,
+      activeProject: activeProjectId,
+    });
+  }, [isMobileMode, targetWindowId, tabsByProject, activeTabId, activeProjectId, sendMessage]);
 
   // Mouse Back / Forward button navigation (Mouse button 3 = Back, 4 = Forward)
   const lastNavTime = React.useRef(0);
@@ -316,6 +526,16 @@ const MainWorkspace: React.FC = () => {
     });
   };
 
+  // @implements spec-ft-core-assets-manager::REQ-007
+  const handleOpenAsset = (asset: DiscoveredAssetInfo) => {
+    openTab(activeProjectId, {
+      id: asset.path,
+      title: asset.filename,
+      type: 'asset',
+      path: asset.path,
+    });
+  };
+
   const [isOmniSearchOpen, setIsOmniSearchOpen] = useState(false);
 
   // @implements spec-ft-core-omni-search-fulltext::REQ-005
@@ -434,6 +654,7 @@ const MainWorkspace: React.FC = () => {
         <div className="space-y-8">
           {/* Spatial 2-Column Epic Hub */}
           <EpicHubView
+            key={currentEpicData.id}
             epic={currentEpicData}
             allFeatures={fullFeatures}
             allAdrs={fullAdrs}
@@ -457,6 +678,7 @@ const MainWorkspace: React.FC = () => {
             }}
             onOpenSpec={handleOpenSpec}
             onOpenFeature={handleOpenFeature}
+            onOpenAsset={handleOpenAsset}
             uploadedFiles={uploadedFiles}
             onFileUpload={(f) => setUploadedFiles((prev) => [...prev, f.name])}
           />
@@ -512,6 +734,7 @@ const MainWorkspace: React.FC = () => {
 
       return (
         <FeatureViewer
+          key={featData.id}
           feature={featData}
           allFeatures={fullFeatures}
           allAdrs={fullAdrs}
@@ -519,6 +742,7 @@ const MainWorkspace: React.FC = () => {
           onOpenSpec={handleOpenSpec}
           onOpenPlan={handleOpenPlan}
           onOpenAdr={handleOpenAdr}
+          onOpenAsset={handleOpenAsset}
           onPopOut={(featId, section) => {
             if (section === 'terminology') {
               handleOpenGlossary();
@@ -545,6 +769,7 @@ const MainWorkspace: React.FC = () => {
     if (activeTab.type === 'plan') {
       return (
         <PlanViewer
+          key={`${activeTab.id}-${workspaceRefreshKey}`}
           planId={activeTab.id}
           title={activeTab.title}
           allFeatures={fullFeatures}
@@ -559,6 +784,7 @@ const MainWorkspace: React.FC = () => {
     if (activeTab.type === 'brainstorm' || activeTab.type === 'deep_dive') {
       return (
         <DocumentViewer
+          key={`${activeTab.id}-${workspaceRefreshKey}`}
           docId={activeTab.id}
           docType={activeTab.type}
           title={activeTab.title}
@@ -582,6 +808,7 @@ const MainWorkspace: React.FC = () => {
     if (activeTab.type === 'spec') {
       return (
         <SpecViewer
+          key={`${activeTab.id}-${workspaceRefreshKey}`}
           specId={activeTab.id}
           title={activeTab.title}
           onOpenEpic={handleOpenEpic}
@@ -599,9 +826,26 @@ const MainWorkspace: React.FC = () => {
     if (activeTab.type === 'adr') {
       return (
         <AdrViewer
+          key={`${activeTab.id}-${workspaceRefreshKey}`}
           adrId={activeTab.id}
           onOpenEpic={handleOpenEpic}
           onOpenFeature={handleOpenFeature}
+        />
+      );
+    }
+
+    // @implements spec-ft-core-assets-manager::REQ-007
+    // @implements spec-ft-core-assets-manager::REQ-008
+    // @implements spec-ft-core-assets-manager::REQ-009
+    if (activeTab.type === 'asset') {
+      return (
+        <AssetViewer
+          assetId={activeTab.id}
+          title={activeTab.title}
+          path={activeTab.path}
+          onDelete={() => {
+            closeTab(activeProjectId, activeTab.id);
+          }}
         />
       );
     }
@@ -626,8 +870,32 @@ const MainWorkspace: React.FC = () => {
     }
   }, [activeTabId]);
 
+  const handleSelectDesktopWindow = useCallback((newWinId: string) => {
+    setTargetWindowId(newWinId);
+    const win = desktopWindows[newWinId];
+    if (win && win.tabs) {
+      isRemoteSyncRef.current = true;
+      hasReceivedInitialSyncRef.current = true;
+      const activeProj = win.activeProject || 'default';
+      const curTabsByProject = useTabStore.getState().tabsByProject;
+      useTabStore.getState().replaceState({
+        activeProjectId: activeProj,
+        tabsByProject: {
+          ...curTabsByProject,
+          [activeProj]: win.tabs,
+        },
+        activeTabId: win.activeTabId ?? null,
+      });
+    } else {
+      hasReceivedInitialSyncRef.current = false;
+    }
+  }, [desktopWindows]);
+
   return (
     <ShellLayout
+      isMobile={isMobileMode}
+      activeMobileView={activeMobileView}
+      onMobileViewChange={setActiveMobileView}
       epics={discoveredEpics.length > 0 ? discoveredEpics : undefined}
       features={discoveredFeatures.length > 0 ? discoveredFeatures : undefined}
       adrs={discoveredAdrs.length > 0 ? discoveredAdrs : undefined}
@@ -641,50 +909,134 @@ const MainWorkspace: React.FC = () => {
       onSelectAdr={handleOpenAdr}
       onOpenSettings={() => setIsSettingsOpen(true)}
       onOpenOmniSearch={() => setIsOmniSearchOpen(true)}
+      onRefreshWorkspace={handleRefreshWorkspace}
+      isRefreshing={isRefreshing}
     >
       {/* Top Application Bar */}
-      <header className="h-12 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between px-4 gap-4">
-        <div className="flex items-center gap-2">
-          <HistoryNavButtons />
-          <ProjectSwitcher projects={projects} />
-          <button
-            type="button"
-            data-testid="header-omnisearch-btn"
-            onClick={() => setIsOmniSearchOpen(true)}
-            className="flex items-center gap-2 px-2.5 py-1 text-xs text-zinc-400 hover:text-zinc-200 bg-zinc-800/80 hover:bg-zinc-800 rounded border border-zinc-700/60 transition-colors ml-2"
-            title="Global OmniSearch (Ctrl+K)"
-          >
-            <Search className="w-3.5 h-3.5 text-indigo-400" />
-            <span className="hidden sm:inline">Search...</span>
-            <kbd className="text-[10px] font-mono px-1 py-0.2 rounded bg-zinc-900 border border-zinc-700 text-zinc-400">
-              Ctrl+K
-            </kbd>
-          </button>
-        </div>
+      {/* @implements spec-ft-core-webui-shell::REQ-020 */}
+      {/* @implements spec-ft-core-webui-shell::REQ-022 */}
+      <header
+        className={`bg-zinc-900 border-b border-zinc-800 px-3 ${
+          isMobileMode
+            ? 'min-h-12 py-2 flex flex-col gap-2'
+            : 'h-12 px-4 flex items-center justify-between gap-4'
+        }`}
+      >
+        {isMobileMode ? (
+          <>
+            {/* Mobile Line 1: History, Project Switcher on Left; Connection Icon on Far Right */}
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-2">
+                <HistoryNavButtons />
+                <ProjectSwitcher projects={projects} />
+              </div>
+              <ConnectionStatusBanner status={status} onReconnect={reconnect} iconOnly={true} />
+            </div>
 
-        <div className="flex items-center gap-3">
-          <ConnectionStatusBanner status={status} onReconnect={reconnect} />
-        </div>
+            {/* Mobile Line 2: Desktop Window Switcher on Left; OmniSearch on Right */}
+            <div className="flex items-center justify-between w-full pt-1.5 border-t border-zinc-800/60">
+              <DesktopWindowSwitcher
+                windows={desktopWindows}
+                targetWindowId={targetWindowId}
+                onSelectWindow={handleSelectDesktopWindow}
+              />
+              <button
+                type="button"
+                data-testid="header-omnisearch-btn"
+                onClick={() => setIsOmniSearchOpen(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1 text-xs text-zinc-400 hover:text-zinc-200 bg-zinc-800/80 hover:bg-zinc-800 rounded border border-zinc-700/60 transition-colors cursor-pointer"
+                title="Global OmniSearch (Ctrl+K)"
+              >
+                <Search className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Search</span>
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center gap-2 shrink-0 relative z-20">
+              <HistoryNavButtons />
+              <ProjectSwitcher projects={projects} />
+            </div>
+
+            {/* Desktop Global Viewport Centered OmniSearch Bar (50vw) */}
+            {/* @implements spec-ft-core-webui-shell::REQ-023 */}
+            <div className="hidden md:flex fixed top-0 inset-x-0 h-12 items-center justify-center pointer-events-none z-20 px-4">
+              <button
+                type="button"
+                data-testid="header-omnisearch-btn"
+                onClick={() => setIsOmniSearchOpen(true)}
+                className="pointer-events-auto w-full max-w-sm lg:max-w-md flex items-center justify-between px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 bg-zinc-950/70 hover:bg-zinc-950 border border-zinc-800 hover:border-zinc-700 rounded-md transition-colors cursor-pointer shadow-xs group"
+                title="Global OmniSearch (Ctrl+K)"
+              >
+                <div className="flex items-center gap-2 truncate">
+                  <Search className="w-3.5 h-3.5 text-zinc-400 group-hover:text-indigo-400 transition-colors shrink-0" />
+                  <span className="truncate text-zinc-400 group-hover:text-zinc-300">Search workspace, epics, specs...</span>
+                </div>
+                <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-700/80 text-zinc-400 shrink-0 ml-2">
+                  Ctrl+K
+                </kbd>
+              </button>
+            </div>
+
+            <div className="flex-1" />
+
+            <div className="flex items-center gap-2 shrink-0 relative z-20">
+              {/* Desktop QR Pairing Button */}
+              {/* @implements spec-ft-core-webui-shell::REQ-019 */}
+              <button
+                type="button"
+                data-testid="qr-pairing-btn"
+                onClick={() => setIsPairingOpen(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1 text-xs text-indigo-300 hover:text-indigo-100 bg-indigo-950/60 hover:bg-indigo-900/80 rounded border border-indigo-700/60 transition-colors cursor-pointer"
+                title="Pair Mobile Companion (QR Code)"
+              >
+                <QrCode className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Pair Mobile</span>
+              </button>
+
+              <ConnectionStatusBanner status={status} onReconnect={reconnect} />
+            </div>
+          </>
+        )}
       </header>
 
       {/* Project Tab Bar */}
-      <TabBar />
+      {(!isMobileMode || activeMobileView === 'main') && <TabBar />}
 
       {/* Main Canvas Area */}
       <div
         className={`flex-1 flex overflow-hidden min-h-0 ${
-          position === 'bottom' ? 'flex-col' : 'flex-row'
+          effectivePosition === 'bottom' ? 'flex-col' : 'flex-row'
         }`}
       >
         {/* Central Content Area */}
-        <div ref={contentAreaRef} className="flex-1 overflow-y-auto p-6 space-y-6 min-w-0 min-h-0">
-          {renderActiveContent()}
-        </div>
+        {(!isMobileMode || activeMobileView === 'main') && (
+          <div ref={contentAreaRef} className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 min-w-0 min-h-0">
+            {renderActiveContent()}
+          </div>
+        )}
 
         {/* Dockable Auxiliary Panel - Terminals */}
-        <DockablePanel hideHeader>
-          <TerminalConsole cwd={(currentProject as any)?.specs_path} />
-        </DockablePanel>
+        {(!isMobileMode || activeMobileView === 'terminal') && (
+          isMobileMode ? (
+            <div data-testid="mobile-terminal-fullscreen" className="flex-1 flex flex-col h-full min-h-0 min-w-0 overflow-hidden bg-zinc-950">
+              <TerminalConsole
+                onWorkspaceRefresh={handleRefreshWorkspace}
+                isMobile={true}
+                targetWindowId={targetWindowId}
+              />
+            </div>
+          ) : (
+            <DockablePanel hideHeader isMobile={false}>
+              <TerminalConsole
+                onWorkspaceRefresh={handleRefreshWorkspace}
+                isMobile={false}
+                targetWindowId={targetWindowId}
+              />
+            </DockablePanel>
+          )
+        )}
       </div>
 
       {/* Settings Modal */}
@@ -699,6 +1051,14 @@ const MainWorkspace: React.FC = () => {
         onClose={() => setIsOmniSearchOpen(false)}
         onSelect={handleOmniSelect}
         searchIndex={globalSearchIndex}
+      />
+
+      {/* Mobile Pairing Modal */}
+      {/* @implements spec-ft-core-webui-shell::REQ-019 */}
+      <MobilePairingModal
+        isOpen={isPairingOpen}
+        onClose={() => setIsPairingOpen(false)}
+        windowId={windowId}
       />
     </ShellLayout>
   );

@@ -193,7 +193,23 @@ describe('TabBar and ProjectSwitcher', () => {
 
     const wheelEvent = new WheelEvent('wheel', { deltaY: 50, cancelable: true });
     scrollContainer!.dispatchEvent(wheelEvent);
-
     expect(wheelEvent.defaultPrevented).toBe(true);
   });
+
+  // @verifies spec-ft-core-webui-shell::REQ-017
+  it('isolates tab state to window sessionStorage and generates a persistent windowId', () => {
+    const store = useTabStore.getState();
+    expect(store.windowId).toMatch(/^win-/);
+
+    store.setActiveProject('project-isolated');
+    store.openTab('project-isolated', { id: 'tab-win-1', title: 'Window 1 Spec', type: 'spec' });
+
+    // Verify written to sessionStorage
+    const saved = window.sessionStorage.getItem('aico_tab_store_session_v1');
+    expect(saved).not.toBeNull();
+    const parsed = JSON.parse(saved!);
+    expect(parsed.tabsByProject['project-isolated']).toHaveLength(1);
+    expect(parsed.tabsByProject['project-isolated'][0].id).toBe('tab-win-1');
+  });
 });
+

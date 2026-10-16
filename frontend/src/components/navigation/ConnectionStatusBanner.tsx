@@ -5,15 +5,56 @@ import { Wifi, WifiOff, RefreshCw } from 'lucide-react';
 interface ConnectionStatusBannerProps {
   status: WebSocketStatus;
   onReconnect: () => void;
+  iconOnly?: boolean;
 }
 
 // @implements spec-ft-core-webui-shell::REQ-009
 // @implements spec-ft-core-webui-shell::REQ-014
+// @implements spec-ft-core-webui-shell::REQ-022
 export const ConnectionStatusBanner: React.FC<ConnectionStatusBannerProps> = ({
   status,
   onReconnect,
+  iconOnly = false,
 }) => {
   const getBadge = () => {
+    if (iconOnly) {
+      switch (status) {
+        case WebSocketStatus.Connected:
+          return (
+            <div
+              data-testid="connection-status-icon"
+              title="Connected to AICO Server"
+              className="flex items-center justify-center w-7 h-7 text-emerald-400 bg-emerald-950/60 border border-emerald-800 rounded-full"
+            >
+              <Wifi className="w-3.5 h-3.5" />
+            </div>
+          );
+        case WebSocketStatus.Reconnecting:
+          return (
+            <div
+              data-testid="connection-status-icon"
+              title="Reconnecting to AICO Server..."
+              className="flex items-center justify-center w-7 h-7 text-amber-400 bg-amber-950/60 border border-amber-800 rounded-full"
+            >
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            </div>
+          );
+        case WebSocketStatus.Offline:
+        default:
+          return (
+            <button
+              type="button"
+              data-testid="connection-status-icon"
+              onClick={onReconnect}
+              title="Offline - Click to reconnect"
+              className="flex items-center justify-center w-7 h-7 text-rose-400 bg-rose-950/60 border border-rose-800 rounded-full cursor-pointer hover:bg-rose-900/60 transition-colors"
+            >
+              <WifiOff className="w-3.5 h-3.5" />
+            </button>
+          );
+      }
+    }
+
     switch (status) {
       case WebSocketStatus.Connected:
         return (

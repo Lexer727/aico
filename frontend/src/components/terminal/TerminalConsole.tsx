@@ -1,9 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  Terminal,
+  Terminal as TerminalIcon,
   Plus,
   X,
-  Sparkles,
   ChevronDown,
   Square,
   PanelRight,
@@ -11,135 +10,80 @@ import {
   Minimize2,
   ChevronLeft,
   ChevronRight,
+  WifiOff,
 } from 'lucide-react';
+import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import '@xterm/xterm/css/xterm.css';
 import { useDockStore } from '../../stores/useDockStore';
+import { useWebSocket } from '../../context/WebSocketContext';
+import { getWindowId } from '../../stores/useTabStore';
 import clsx from 'clsx';
 
-export type ShellType = 'powershell' | 'bash' | 'cmd' | 'agy';
+export type ShellType = 'powershell' | 'bash' | 'cmd' | 'agy' | 'claude';
+
+export type AiTabStatusState = 'working' | 'waiting_for_input' | 'finished' | 'error';
+
+export interface AiTabStatus {
+  state: AiTabStatusState;
+  reason: string;
+}
 
 export interface TerminalTab {
   id: string;
   name: string;
   shortName: string;
   shell: ShellType;
-  history: string[];
-  pendingLine?: string;
 }
 
 export interface TerminalConsoleProps {
   cwd?: string;
+  onWorkspaceRefresh?: () => void;
+  isMobile?: boolean;
+  targetWindowId?: string;
 }
 
-export interface AnsiSegment {
-  text: string;
-  className: string;
-}
+const stripAnsi = (input: string): string =>
+  // eslint-disable-next-line no-control-regex
+  input.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '').replace(/\x1b\][^\x07]*(\x07|\x1b\\)/g, '');
 
-export interface SlashCommand {
-  name: string;
-  description: string;
-}
+const AntigravityIcon: React.FC<{ className?: string }> = ({ className = 'w-3.5 h-3.5' }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    className={className}
+    aria-hidden="true"
+  >
+    <defs>
+      <linearGradient id="agy-arch-grad" x1="2" y1="20" x2="22" y2="20" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor="#38bdf8" />
+        <stop offset="28%" stopColor="#34d399" />
+        <stop offset="50%" stopColor="#fb923c" />
+        <stop offset="72%" stopColor="#ec4899" />
+        <stop offset="100%" stopColor="#6366f1" />
+      </linearGradient>
+    </defs>
+    <path
+      d="M12 3L4 20h4.2l1.7-4h4.2l1.7 4H20L12 3zm-1.1 9.5L12 9.6l1.1 2.9h-2.2z"
+      fill="url(#agy-arch-grad)"
+    />
+  </svg>
+);
 
-export const SLASH_COMMANDS: SlashCommand[] = [
-  { name: '/help', description: 'Show available commands and keybindings' },
-  { name: '/skills', description: 'List available AICO skills in workspace' },
-  { name: '/agents', description: 'List available custom agents' },
-  { name: '/model', description: 'Set or view current LLM model' },
-  { name: '/effort', description: 'Set reasoning effort (low, medium, high, max)' },
-  { name: '/plan', description: 'Explore and draft execution plan' },
-  { name: '/grill-me', description: 'Interactive Socratic design interview' },
-  { name: '/clear', description: 'Clear conversation history and terminal screen' },
-  { name: '/exit', description: 'Exit the AI session' },
-];
-
-// Parses raw text containing ANSI escape color codes into styled text segments
-export function parseAnsi(input: string): AnsiSegment[] {
-  if (!input) return [];
-  const segments: AnsiSegment[] = [];
-  const regex = /\u001b\[([0-9;?]*)?([a-zA-Z])/g;
-  let lastIndex = 0;
-  let currentColor = '';
-  let isBold = false;
-
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(input)) !== null) {
-    if (match.index > lastIndex) {
-      const text = input.slice(lastIndex, match.index);
-      if (text) {
-        const classes = [currentColor, isBold ? 'font-bold' : ''].filter(Boolean).join(' ');
-        segments.push({ text, className: classes });
-      }
-    }
-    lastIndex = regex.lastIndex;
-
-    const command = match[2];
-    const params = match[1];
-
-    if (command === 'm') {
-      const codes = params ? params.split(';').map((s) => (s ? parseInt(s, 10) : 0)) : [0];
-      for (const code of codes) {
-        if (code === 0) {
-          currentColor = '';
-          isBold = false;
-        } else if (code === 1) {
-          isBold = true;
-        } else if (code === 30) {
-          currentColor = 'text-zinc-600';
-        } else if (code === 31 || code === 91) {
-          currentColor = 'text-rose-400';
-        } else if (code === 32 || code === 92) {
-          currentColor = 'text-emerald-400';
-        } else if (code === 33 || code === 93) {
-          currentColor = 'text-amber-400';
-        } else if (code === 34) {
-          currentColor = 'text-blue-400';
-        } else if (code === 35 || code === 95) {
-          currentColor = 'text-purple-400';
-        } else if (code === 36 || code === 96) {
-          currentColor = 'text-cyan-400';
-        } else if (code === 37) {
-          currentColor = 'text-zinc-100';
-        } else if (code === 90) {
-          currentColor = 'text-zinc-500';
-        } else if (code === 94) {
-          currentColor = 'text-sky-400';
-        }
-      }
-    }
-  }
-
-  if (lastIndex < input.length) {
-    const text = input.slice(lastIndex);
-    if (text) {
-      const classes = [currentColor, isBold ? 'font-bold' : ''].filter(Boolean).join(' ');
-      segments.push({ text, className: classes });
-    }
-  }
-
-  return segments;
-}
-
-// Authentic Google Antigravity Rainbow Arch Pixel Art Icon
-export const AntigravityArchLogo: React.FC<{ className?: string }> = ({ className = 'w-10 h-10' }) => (
-  <svg viewBox="0 0 36 36" fill="none" className={className} data-testid="agy-arch-logo">
-    {/* Orange / Amber top curve */}
-    <rect x="14" y="2" width="8" height="4" rx="0.5" fill="#F97316" />
-    <rect x="12" y="6" width="12" height="4" rx="0.5" fill="#F59E0B" />
-    {/* Yellow left, Magenta right */}
-    <rect x="9" y="10" width="6" height="4" rx="0.5" fill="#EAB308" />
-    <rect x="21" y="10" width="6" height="4" rx="0.5" fill="#EC4899" />
-    {/* Lime left, Purple right */}
-    <rect x="7" y="14" width="5" height="5" rx="0.5" fill="#84CC16" />
-    <rect x="24" y="14" width="5" height="5" rx="0.5" fill="#A855F7" />
-    {/* Emerald left, Violet right */}
-    <rect x="5" y="19" width="5" height="5" rx="0.5" fill="#10B981" />
-    <rect x="26" y="19" width="5" height="5" rx="0.5" fill="#8B5CF6" />
-    {/* Cyan left, Indigo right */}
-    <rect x="3" y="24" width="5" height="5" rx="0.5" fill="#06B6D4" />
-    <rect x="28" y="24" width="5" height="5" rx="0.5" fill="#6366F1" />
-    {/* Sky feet */}
-    <rect x="1" y="29" width="6" height="4" rx="0.5" fill="#38BDF8" />
-    <rect x="29" y="29" width="6" height="4" rx="0.5" fill="#3B82F6" />
+const ClaudeIcon: React.FC<{ className?: string }> = ({ className = 'w-3.5 h-3.5' }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    className={className}
+    aria-hidden="true"
+  >
+    <path
+      d="M12 2.25v19.5M2.25 12h19.5M5.1 5.1l13.8 13.8M18.9 5.1L5.1 18.9M8.27 3.01l7.46 17.98M15.73 3.01L8.27 20.99M3.01 8.27l17.98 7.46M20.99 8.27L3.01 15.73"
+      stroke="currentColor"
+      strokeWidth="2.1"
+      strokeLinecap="round"
+    />
+    <circle cx="12" cy="12" r="2.6" fill="currentColor" />
   </svg>
 );
 
@@ -161,23 +105,22 @@ const getInitialTabs = (): TerminalTab[] => {
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed)) {
-        return parsed.map((t) => ({
-          ...t,
-          history: Array.isArray(t.history)
-            ? t.history.filter((line: string) => {
-                const tr = line.trim().toLowerCase();
-                return (
-                  tr !== 'clear' &&
-                  tr !== 'cls' &&
-                  tr !== 'clear-host' &&
-                  !tr.endsWith('> clear') &&
-                  !tr.endsWith('> cls') &&
-                  !tr.endsWith('> clear-host')
-                );
-              })
-            : [],
-          pendingLine: '',
-        }));
+        const seenAiShells = new Set<ShellType>();
+        const restored: TerminalTab[] = [];
+        for (const t of parsed) {
+          const shell = t.shell as ShellType;
+          if (shell === 'agy' || shell === 'claude') {
+            if (seenAiShells.has(shell)) continue;
+            seenAiShells.add(shell);
+          }
+          restored.push({
+            id: String(t.id),
+            name: String(t.name),
+            shortName: String(t.shortName),
+            shell,
+          });
+        }
+        return restored;
       }
     }
   } catch {
@@ -197,6 +140,36 @@ const getInitialActiveTab = (initTabs: TerminalTab[]): string => {
   return initTabs.length > 0 ? initTabs[0].id : '';
 };
 
+const XTERM_THEME = {
+  background: '#09090b',
+  foreground: '#e4e4e7',
+  cursor: '#e4e4e7',
+  cursorAccent: '#09090b',
+  selectionBackground: '#3f3f46',
+  black: '#18181b',
+  red: '#fb7185',
+  green: '#34d399',
+  yellow: '#fbbf24',
+  blue: '#60a5fa',
+  magenta: '#c084fc',
+  cyan: '#22d3ee',
+  white: '#f4f4f5',
+  brightBlack: '#71717a',
+  brightRed: '#fda4af',
+  brightGreen: '#6ee7b7',
+  brightYellow: '#fcd34d',
+  brightBlue: '#93c5fd',
+  brightMagenta: '#d8b4fe',
+  brightCyan: '#67e8f9',
+  brightWhite: '#ffffff',
+};
+
+interface XtermSessionHandle {
+  term: Terminal;
+  fit: FitAddon;
+  container: HTMLDivElement;
+}
+
 // @implements spec-ft-core-webui-shell::REQ-009
 // @implements spec-ft-core-webui-shell::REQ-010
 // @implements spec-ft-core-webui-shell::REQ-011
@@ -206,32 +179,43 @@ const getInitialActiveTab = (initTabs: TerminalTab[]): string => {
 // @implements spec-ft-terminal-panel-ui::REQ-004
 // @implements spec-ft-terminal-panel-ui::REQ-005
 // @implements spec-ft-terminal-panel-ui::REQ-006
-// @implements spec-ft-terminal-panel-ui::REQ-007
 // @implements spec-ft-terminal-panel-ui::REQ-008
 // @implements spec-ft-terminal-panel-ui::REQ-009
 // @implements spec-ft-terminal-panel-ui::REQ-010
-// @implements spec-ft-terminal-panel-ui::REQ-011
-// @implements spec-ft-terminal-panel-ui::REQ-012
-// @implements spec-ft-terminal-panel-ui::REQ-013
-// @implements spec-ft-terminal-panel-ui::REQ-014
 // @implements spec-ft-terminal-panel-ui::REQ-015
-// @implements spec-ft-terminal-panel-ui::REQ-016
 // @implements spec-ft-terminal-panel-ui::REQ-017
-// @implements spec-ft-terminal-panel-ui::REQ-018
-// @implements spec-ft-terminal-panel-ui::REQ-019
-// @implements spec-ft-terminal-panel-ui::REQ-020
 // @implements spec-ft-terminal-panel-ui::REQ-021
 // @implements spec-ft-terminal-panel-ui::REQ-022
-export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
+// @implements spec-ft-terminal-xterm-ui::REQ-001
+// @implements spec-ft-terminal-xterm-ui::REQ-002
+// @implements spec-ft-terminal-xterm-ui::REQ-003
+// @implements spec-ft-terminal-xterm-ui::REQ-004
+// @implements spec-ft-terminal-xterm-ui::REQ-005
+// @implements spec-ft-terminal-xterm-ui::REQ-006
+// @implements spec-ft-terminal-xterm-ui::REQ-007
+// @implements spec-ft-terminal-xterm-ui::REQ-008
+// @implements spec-ft-terminal-xterm-ui::REQ-009
+// @implements spec-ft-terminal-xterm-ui::REQ-010
+// @implements spec-ft-terminal-xterm-ui::REQ-011
+// @implements spec-ft-terminal-xterm-ui::REQ-012
+// @implements spec-ft-terminal-xterm-ui::REQ-013
+// @implements spec-ft-terminal-xterm-ui::REQ-014
+// @implements spec-ft-terminal-xterm-ui::REQ-015
+export const TerminalConsole: React.FC<TerminalConsoleProps> = ({
+  cwd,
+  onWorkspaceRefresh,
+  isMobile = false,
+  targetWindowId,
+}) => {
   const { position, toggleDock } = useDockStore();
-  const isBottom = position === 'bottom';
+  const { status, sendMessage, lastMessage } = useWebSocket();
+  const isBottom = isMobile ? true : position === 'bottom';
 
   const [tabs, setTabs] = useState<TerminalTab[]>(getInitialTabs);
   const [activeTabId, setActiveTabId] = useState<string>(() => getInitialActiveTab(tabs));
-  const [inputVal, setInputVal] = useState('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [slashMenuOpen, setSlashMenuOpen] = useState(false);
-  const [slashIndex, setSlashIndex] = useState(0);
+  const [disconnectedTabs, setDisconnectedTabs] = useState<Record<string, boolean>>({});
+  const [aiTabStatuses, setAiTabStatuses] = useState<Record<string, AiTabStatus>>({});
 
   // Tab Strip Scroll & Overflow states
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -250,43 +234,122 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
     cwdRef.current = cwd;
   }, [cwd]);
 
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const onWorkspaceRefreshRef = useRef(onWorkspaceRefresh);
+  useEffect(() => {
+    onWorkspaceRefreshRef.current = onWorkspaceRefresh;
+  }, [onWorkspaceRefresh]);
+
+  const viewportHostRef = useRef<HTMLDivElement>(null);
+  const xtermsRef = useRef<Record<string, XtermSessionHandle>>({});
   const socketsRef = useRef<Record<string, WebSocket>>({});
+  const initializedRef = useRef<Record<string, boolean>>({});
+  const intentionalCloseRef = useRef<Record<string, boolean>>({});
+  const awaitingAiResponseRef = useRef<Record<string, boolean>>({});
+  const lastUserKeystrokeAtRef = useRef<Record<string, number>>({});
+  const recentOutputRef = useRef<Record<string, string>>({});
+  const workingTimerRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const slashMenuRef = useRef<HTMLDivElement>(null);
-  const clearingTabsRef = useRef<Record<string, boolean>>({});
 
   const activeTab = tabs.find((t) => t.id === activeTabId) || (tabs.length > 0 ? tabs[0] : null);
-  const isAgy = activeTab?.shell === 'agy';
 
-  const filteredCommands = SLASH_COMMANDS.filter((cmd) =>
-    cmd.name.toLowerCase().startsWith(inputVal.toLowerCase())
-  );
-
-  // Save session tabs to sessionStorage
+  // Persist open tab descriptors across reloads.
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window === 'undefined') return;
+    try {
+      sessionStorage.setItem(SESSION_TABS_KEY, JSON.stringify(tabs));
+      sessionStorage.setItem(SESSION_ACTIVE_KEY, activeTabId);
+    } catch {
+      // ignore
+    }
+  }, [tabs, activeTabId]);
+
+  // @implements spec-ft-terminal-xterm-ui::REQ-015
+  // Desktop: Broadcast terminal tabs and active tab to companion clients periodically and on tab change
+  useEffect(() => {
+    if (isMobile) return;
+    const winId = getWindowId();
+    const broadcastTerminals = () => {
+      sendMessage('companion_terminals_sync', {
+        windowId: winId,
+        tabs,
+        activeTabId,
+      });
+    };
+    broadcastTerminals();
+    const interval = setInterval(broadcastTerminals, 3000);
+    return () => clearInterval(interval);
+  }, [isMobile, tabs, activeTabId, sendMessage]);
+
+  // @implements spec-ft-terminal-xterm-ui::REQ-015
+  // Desktop: Respond to companion requests and remote active tab selections
+  useEffect(() => {
+    if (isMobile || !lastMessage || typeof lastMessage !== 'object') return;
+    const msg = lastMessage as { topic?: string; payload?: unknown };
+    if (msg.topic === 'request_companion_terminals') {
       try {
-        sessionStorage.setItem(
-          SESSION_TABS_KEY,
-          JSON.stringify(
-            tabs.map((t) => ({
-              id: t.id,
-              name: t.name,
-              shortName: t.shortName,
-              shell: t.shell,
-              history: t.history.slice(-500),
-              pendingLine: t.pendingLine || '',
-            }))
-          )
-        );
-        sessionStorage.setItem(SESSION_ACTIVE_KEY, activeTabId);
+        const payload = typeof msg.payload === 'string' ? JSON.parse(msg.payload) : msg.payload;
+        const winId = getWindowId();
+        if (!payload?.targetWindowId || payload.targetWindowId === winId) {
+          sendMessage('companion_terminals_sync', {
+            windowId: winId,
+            tabs,
+            activeTabId,
+          });
+        }
+      } catch {
+        // ignore
+      }
+    } else if (msg.topic === 'companion_terminals_update') {
+      try {
+        const payload = typeof msg.payload === 'string' ? JSON.parse(msg.payload) : msg.payload;
+        const winId = getWindowId();
+        if (payload?.targetWindowId === winId) {
+          if (payload?.killTabId) {
+            disposeTabResources(payload.killTabId, 'kill');
+          } else if (payload?.closeTabId) {
+            disposeTabResources(payload.closeTabId, 'close');
+          }
+          if (Array.isArray(payload.tabs)) {
+            setTabs(payload.tabs);
+          }
+          if (payload?.activeTabId !== undefined) {
+            setActiveTabId(payload.activeTabId);
+          }
+        }
       } catch {
         // ignore
       }
     }
-  }, [tabs, activeTabId]);
+  }, [isMobile, lastMessage, tabs, activeTabId, sendMessage]);
+
+  // @implements spec-ft-terminal-xterm-ui::REQ-015
+  // Mobile Companion: Request terminal state from targeted desktop window on connect or window switch
+  useEffect(() => {
+    if (!isMobile || !targetWindowId || status !== 'connected') return;
+    sendMessage('request_companion_terminals', { targetWindowId });
+  }, [isMobile, targetWindowId, status, sendMessage]);
+
+  // @implements spec-ft-terminal-xterm-ui::REQ-015
+  // Mobile Companion: Mirror terminal tabs and active tab from target desktop window
+  useEffect(() => {
+    if (!isMobile || !lastMessage || typeof lastMessage !== 'object') return;
+    const msg = lastMessage as { topic?: string; payload?: unknown };
+    if (msg.topic === 'companion_terminals_sync') {
+      try {
+        const payload = typeof msg.payload === 'string' ? JSON.parse(msg.payload) : msg.payload;
+        if (payload && (!targetWindowId || payload.windowId === targetWindowId)) {
+          if (Array.isArray(payload.tabs)) {
+            setTabs(payload.tabs);
+          }
+          if (payload.activeTabId) {
+            setActiveTabId(payload.activeTabId);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }, [isMobile, lastMessage, targetWindowId]);
 
   // Tab strip overflow check
   const checkScroll = useCallback(() => {
@@ -320,9 +383,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
   }, [checkScroll, renderedTabs]);
 
   const scrollByAmount = (amount: number) => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollBy({ left: amount, behavior: 'smooth' });
-    }
+    scrollContainerRef.current?.scrollBy({ left: amount, behavior: 'smooth' });
   };
 
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
@@ -396,137 +457,286 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
     setPreviewTabs(null);
   };
 
-  const connectSocket = useCallback(
-    (tabId: string, shell: ShellType) => {
-      const existing = socketsRef.current[tabId];
-      if (existing && existing.readyState <= 1) return;
+  const scheduleWorkingToFinished = useCallback((tabId: string, delayMs = 1200) => {
+    if (workingTimerRef.current[tabId]) {
+      clearTimeout(workingTimerRef.current[tabId]);
+    }
+    workingTimerRef.current[tabId] = setTimeout(() => {
+      const wasWorking = awaitingAiResponseRef.current[tabId];
+      awaitingAiResponseRef.current[tabId] = false;
+      setAiTabStatuses((prev) => {
+        const cur = prev[tabId];
+        if (!cur || cur.state === 'working') {
+          return {
+            ...prev,
+            [tabId]: { state: 'finished', reason: 'Finished — ready for prompt' },
+          };
+        }
+        return prev;
+      });
+      if (wasWorking) {
+        onWorkspaceRefreshRef.current?.();
+      }
+    }, delayMs);
+  }, []);
 
-      const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = typeof window !== 'undefined' && window.location.host ? window.location.host : '127.0.0.1:4242';
-      const wsUrl = `${protocol}//${host}/api/v1/terminal/ws`;
+  const analyzeAiOutputChunk = useCallback(
+    (tabId: string, rawChunk: string) => {
+      const clean = stripAnsi(rawChunk);
+      if (!clean.trim()) return;
+
+      const combined = ((recentOutputRef.current[tabId] || '') + clean).slice(-600);
+      recentOutputRef.current[tabId] = combined;
+
+      // 1. Error / Not logged in / Out of tokens checks (Red static circle)
+      if (/not logged in|please run \/login|auth login|authentication failed|login required/i.test(combined)) {
+        if (workingTimerRef.current[tabId]) clearTimeout(workingTimerRef.current[tabId]);
+        awaitingAiResponseRef.current[tabId] = false;
+        setAiTabStatuses((prev) => ({
+          ...prev,
+          [tabId]: { state: 'error', reason: 'Not logged in' },
+        }));
+        return;
+      }
+
+      if (/rate limit|quota exceeded|out of tokens|insufficient_quota|429 too many requests/i.test(combined)) {
+        if (workingTimerRef.current[tabId]) clearTimeout(workingTimerRef.current[tabId]);
+        awaitingAiResponseRef.current[tabId] = false;
+        setAiTabStatuses((prev) => ({
+          ...prev,
+          [tabId]: { state: 'error', reason: 'Out of tokens / rate limit' },
+        }));
+        return;
+      }
+
+      if (/\[Process Error\]|unhandled error|fatal error/i.test(combined)) {
+        if (workingTimerRef.current[tabId]) clearTimeout(workingTimerRef.current[tabId]);
+        awaitingAiResponseRef.current[tabId] = false;
+        setAiTabStatuses((prev) => ({
+          ...prev,
+          [tabId]: { state: 'error', reason: 'Error in AI session' },
+        }));
+        return;
+      }
+
+      // 2. Waiting for user permission / confirmation / multiple-choice (Blue bouncing circle)
+      if (
+        /\[y\/n\]|\(y\/n\)|allow .* to|approve\?|do you want to proceed|use arrow keys|select an option|press enter to confirm|waiting for confirmation/i.test(
+          combined
+        )
+      ) {
+        if (workingTimerRef.current[tabId]) clearTimeout(workingTimerRef.current[tabId]);
+        awaitingAiResponseRef.current[tabId] = false;
+        setAiTabStatuses((prev) => ({
+          ...prev,
+          [tabId]: { state: 'waiting_for_input', reason: 'Waiting for confirmation / input' },
+        }));
+        return;
+      }
+
+      // 3. Ignore local keystroke echo when the user is simply typing at the prompt before pressing Enter
+      const sinceKeystroke = Date.now() - (lastUserKeystrokeAtRef.current[tabId] || 0);
+      if (!awaitingAiResponseRef.current[tabId] && sinceKeystroke < 250) {
+        return;
+      }
+
+      // 4. Active LLM working / spinner / streaming output (Orange spinning circle)
+      const hasSpinnerOrThinking = /[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏✻]|thinking|working\.\.\.|generating/i.test(clean);
+      if (awaitingAiResponseRef.current[tabId] || hasSpinnerOrThinking) {
+        setAiTabStatuses((prev) => ({
+          ...prev,
+          [tabId]: { state: 'working', reason: 'LLM is working' },
+        }));
+        scheduleWorkingToFinished(tabId, 1200);
+      }
+    },
+    [scheduleWorkingToFinished]
+  );
+
+  // Mount (or retrieve) the xterm instance for `tabId` and wire its WebSocket.
+  const ensureSession = useCallback(
+    (tabId: string, shell: ShellType) => {
+      const host = viewportHostRef.current;
+      if (!host) return;
+
+      const isAiShell = shell === 'agy' || shell === 'claude';
+      if (isAiShell) {
+        setAiTabStatuses((prev) =>
+          prev[tabId]
+            ? prev
+            : { ...prev, [tabId]: { state: 'finished', reason: 'Finished — ready for prompt' } }
+        );
+      }
+
+      let handle = xtermsRef.current[tabId];
+      if (!handle) {
+        const container = document.createElement('div');
+        container.className = 'w-full h-full';
+        container.dataset.tabId = tabId;
+        host.appendChild(container);
+
+        const term = new Terminal({
+          cursorBlink: true,
+          fontSize: 12,
+          fontFamily:
+            'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+          scrollback: 5000,
+          convertEol: false,
+          theme: XTERM_THEME,
+        });
+        const fit = new FitAddon();
+        term.loadAddon(fit);
+        term.open(container);
+        try {
+          fit.fit();
+        } catch {
+          // Container may have zero size in headless tests.
+        }
+
+        // @implements spec-ft-terminal-xterm-ui::REQ-013
+        term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
+          if (event.type !== 'keydown') return true;
+          const isMod = event.ctrlKey || event.metaKey;
+          if (!isMod || event.altKey) return true;
+
+          const key = event.key.toLowerCase();
+          if (key === 'c') {
+            if (term.hasSelection()) {
+              const selected = term.getSelection();
+              if (selected && typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+                navigator.clipboard.writeText(selected).catch(() => {});
+              }
+              term.clearSelection();
+              event.preventDefault();
+              return false;
+            }
+            if (event.shiftKey) {
+              event.preventDefault();
+              return false;
+            }
+            return true;
+          }
+
+          if (key === 'v') {
+            event.preventDefault();
+            event.stopPropagation();
+            if (typeof navigator !== 'undefined' && navigator.clipboard?.readText) {
+              navigator.clipboard
+                .readText()
+                .then((text) => {
+                  if (text) {
+                    term.paste(text);
+                  }
+                })
+                .catch(() => {});
+            }
+            return false;
+          }
+
+          return true;
+        });
+
+        term.onData((data) => {
+          if (isAiShell) {
+            if (data.includes('\r') || data.includes('\n')) {
+              awaitingAiResponseRef.current[tabId] = true;
+              recentOutputRef.current[tabId] = '';
+              setAiTabStatuses((prev) => ({
+                ...prev,
+                [tabId]: { state: 'working', reason: 'LLM is working' },
+              }));
+              scheduleWorkingToFinished(tabId, 1500);
+            } else {
+              // User is typing at the prompt — record timestamp so local echo never triggers `working`
+              lastUserKeystrokeAtRef.current[tabId] = Date.now();
+            }
+          }
+
+          const ws = socketsRef.current[tabId];
+          if (ws && ws.readyState === 1 && initializedRef.current[tabId]) {
+            ws.send(JSON.stringify({ type: 'input', data }));
+          }
+        });
+
+        term.onResize(({ cols, rows }) => {
+          const ws = socketsRef.current[tabId];
+          if (ws && ws.readyState === 1 && initializedRef.current[tabId]) {
+            ws.send(JSON.stringify({ type: 'resize', cols, rows }));
+          }
+        });
+
+        handle = { term, fit, container };
+        xtermsRef.current[tabId] = handle;
+      }
+
+      const existingWs = socketsRef.current[tabId];
+      if (existingWs && existingWs.readyState <= 1) return;
+
+      const protocol =
+        typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsHost =
+        typeof window !== 'undefined' && window.location.host ? window.location.host : '127.0.0.1:4242';
+      const wsUrl = `${protocol}//${wsHost}/api/v1/terminal/ws`;
 
       try {
+        intentionalCloseRef.current[tabId] = false;
+        initializedRef.current[tabId] = false;
         const ws = new WebSocket(wsUrl);
         socketsRef.current[tabId] = ws;
 
+        // @implements spec-ft-terminal-xterm-ui::REQ-014
         ws.onopen = () => {
+          setDisconnectedTabs((prev) => ({ ...prev, [tabId]: false }));
+          const currentHandle = xtermsRef.current[tabId];
+          try {
+            currentHandle?.fit.fit();
+          } catch {
+            // ignore
+          }
           ws.send(
             JSON.stringify({
               type: 'init',
+              tab_id: tabId,
               shell,
               cwd: cwdRef.current || undefined,
+              cols: currentHandle?.term.cols || 120,
+              rows: currentHandle?.term.rows || 30,
             })
           );
+          initializedRef.current[tabId] = true;
         };
 
         ws.onmessage = (event) => {
+          const currentHandle = xtermsRef.current[tabId];
+          if (!currentHandle) return;
           try {
             const msg = JSON.parse(event.data);
-            if (msg.type === 'output' && msg.data) {
-              setTabs((prev) =>
-                prev.map((t) => {
-                  if (t.id !== tabId) return t;
-
-                  let data = msg.data;
-                  let history = [...t.history];
-                  let pending = t.pendingLine || '';
-
-                  // If this tab was recently cleared, strip the echoed clear/cls command
-                  if (clearingTabsRef.current[tabId]) {
-                    pending = '';
-                    history = [];
-                    data = data.replace(/^[\r\n\s]*(?:clear|cls|clear-host)[\r\n\s]*/gi, '');
-                    data = data.replace(/^[\r\n\s]+/g, '');
-                    if (data.trim() === '') {
-                      data = '';
-                    } else {
-                      clearingTabsRef.current[tabId] = false;
-                    }
-                  }
-
-                  // Handle ANSI clear screen sequence (\x1b[2J)
-                  if (data.includes('\u001b[2J')) {
-                    const clearParts = data.split('\u001b[2J');
-                    data = clearParts[clearParts.length - 1];
-                    history = [];
-                    pending = '';
-                  }
-
-                  // Prevent duplicate prompt strings when reconnecting or re-emitting prompt (e.g. "PS D:\...> PS D:\...>")
-                  if (pending && data) {
-                    const trimmedPending = pending.trim();
-                    const trimmedData = data.trim();
-                    if (
-                      (trimmedPending.startsWith('PS ') && trimmedPending.endsWith('>')) ||
-                      trimmedPending.endsWith('$') ||
-                      trimmedPending.endsWith('>')
-                    ) {
-                      if (trimmedData.startsWith(trimmedPending) || trimmedPending === trimmedData) {
-                        pending = '';
-                      }
-                    }
-                  }
-
-                  const combined = pending + data;
-                  const normalized = combined.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-                  const parts = normalized.split('\n');
-                  let newPending = parts.pop() ?? '';
-                  const lowerNewPending = newPending.trim().toLowerCase();
-                  if (
-                    lowerNewPending === 'clear' ||
-                    lowerNewPending === 'cls' ||
-                    lowerNewPending === 'clear-host'
-                  ) {
-                    newPending = '';
-                  }
-                  const newCompleted = [...history, ...parts].filter((line) => {
-                    const trimmed = line.trim().toLowerCase();
-                    return (
-                      trimmed !== 'clear' &&
-                      trimmed !== 'cls' &&
-                      trimmed !== 'clear-host' &&
-                      !trimmed.endsWith('> clear') &&
-                      !trimmed.endsWith('> cls') &&
-                      !trimmed.endsWith('> clear-host')
-                    );
-                  });
-
-                  return {
-                    ...t,
-                    history: newCompleted,
-                    pendingLine: newPending,
-                  };
-                })
-              );
+            if (msg.type === 'output' && typeof msg.data === 'string') {
+              currentHandle.term.write(msg.data);
+              if (isAiShell) {
+                analyzeAiOutputChunk(tabId, msg.data);
+              }
             } else if (msg.type === 'error' && msg.message) {
-              setTabs((prev) =>
-                prev.map((t) =>
-                  t.id === tabId
-                    ? {
-                        ...t,
-                        history: [...t.history, `\u001b[31m[Process Error] ${msg.message}\u001b[0m`],
-                      }
-                    : t
-                )
-              );
+              currentHandle.term.write(`\r\n\u001b[31m[Process Error] ${msg.message}\u001b[0m\r\n`);
+              if (isAiShell) {
+                setAiTabStatuses((prev) => ({
+                  ...prev,
+                  [tabId]: { state: 'error', reason: `Error: ${msg.message}` },
+                }));
+              }
             } else if (msg.type === 'exit') {
-              setTabs((prev) =>
-                prev.map((t) =>
-                  t.id === tabId
-                    ? {
-                        ...t,
-                        history: [...t.history, `\u001b[90m[Process exited with code ${msg.code ?? 0}]\u001b[0m`],
-                      }
-                    : t
-                )
+              currentHandle.term.write(
+                `\r\n\u001b[90m[Process exited with code ${msg.code ?? 0}]\u001b[0m\r\n`
               );
+              if (isAiShell && msg.code && msg.code !== 0) {
+                setAiTabStatuses((prev) => ({
+                  ...prev,
+                  [tabId]: { state: 'error', reason: `Exited with code ${msg.code}` },
+                }));
+              }
             }
           } catch {
-            setTabs((prev) =>
-              prev.map((t) =>
-                t.id === tabId ? { ...t, history: [...t.history, event.data] } : t
-              )
-            );
+            currentHandle.term.write(String(event.data));
           }
         };
 
@@ -534,50 +744,104 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
           if (socketsRef.current[tabId] === ws) {
             delete socketsRef.current[tabId];
           }
+          if (!intentionalCloseRef.current[tabId]) {
+            setDisconnectedTabs((prev) => ({ ...prev, [tabId]: true }));
+            if (isAiShell) {
+              setAiTabStatuses((prev) => ({
+                ...prev,
+                [tabId]: { state: 'error', reason: 'Disconnected' },
+              }));
+            }
+          }
         };
 
-        ws.onerror = (err) => {
-          console.error(`WebSocket error on tab ${tabId}`, err);
+        ws.onerror = () => {
+          // `onclose` handles user-visible state.
         };
-      } catch (err) {
-        console.error('Failed to create WebSocket for terminal tab', err);
+      } catch {
+        setDisconnectedTabs((prev) => ({ ...prev, [tabId]: true }));
       }
     },
-    []
+    [analyzeAiOutputChunk, scheduleWorkingToFinished]
   );
 
-  // Connect active tab socket when switching or after reload
+  // Show only the active tab's xterm container and ensure its session is running.
   useEffect(() => {
-    if (activeTabId && activeTab) {
-      connectSocket(activeTabId, activeTab.shell);
+    if (activeTab) {
+      ensureSession(activeTab.id, activeTab.shell);
     }
-  }, [activeTabId, activeTab, connectSocket]);
+    Object.entries(xtermsRef.current).forEach(([id, h]) => {
+      const isVisible = activeTab?.id === id;
+      h.container.style.display = isVisible ? 'block' : 'none';
+      if (isVisible) {
+        try {
+          h.fit.fit();
+          h.term.focus();
+        } catch {
+          // ignore
+        }
+      }
+    });
+  }, [activeTab, ensureSession]);
 
-  // Cleanup all sockets on unmount
+  // Refit active terminal when the window or dock position changes.
+  useEffect(() => {
+    const refitActive = () => {
+      if (!activeTab) return;
+      const h = xtermsRef.current[activeTab.id];
+      if (!h) return;
+      try {
+        h.fit.fit();
+      } catch {
+        // ignore
+      }
+    };
+
+    window.addEventListener('resize', refitActive);
+    refitActive();
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined' && viewportHostRef.current) {
+      observer = new ResizeObserver(refitActive);
+      observer.observe(viewportHostRef.current);
+    }
+    return () => {
+      window.removeEventListener('resize', refitActive);
+      observer?.disconnect();
+    };
+  }, [activeTab, position]);
+
+  // Cleanup all sockets and xterm instances on unmount (preserve backend PTY sessions across F5 reload).
+  // @implements spec-ft-terminal-xterm-ui::REQ-014
   useEffect(() => {
     return () => {
-      Object.values(socketsRef.current).forEach((ws) => {
+      Object.values(workingTimerRef.current).forEach((t) => clearTimeout(t));
+      workingTimerRef.current = {};
+      Object.entries(socketsRef.current).forEach(([id, ws]) => {
+        intentionalCloseRef.current[id] = true;
         try {
-          if (ws.readyState === 1) {
-            ws.send(JSON.stringify({ type: 'close' }));
-          }
           ws.close();
         } catch {
           // ignore
         }
       });
       socketsRef.current = {};
+      Object.values(xtermsRef.current).forEach((h) => {
+        try {
+          h.term.dispose();
+        } catch {
+          // ignore
+        }
+      });
+      xtermsRef.current = {};
     };
   }, []);
 
-  // Close dropdown or slash menu on outside click
+  // Close shell dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setDropdownOpen(false);
-      }
-      if (slashMenuRef.current && !slashMenuRef.current.contains(event.target as Node)) {
-        setSlashMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -586,43 +850,20 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
     };
   }, []);
 
-  // Auto-scroll output log on new lines or pending updates
-  useEffect(() => {
-    if (typeof bottomRef.current?.scrollIntoView === 'function') {
-      bottomRef.current.scrollIntoView({ behavior: 'smooth' });
+  const disposeTabResources = (tabId: string, msgType: 'close' | 'kill') => {
+    intentionalCloseRef.current[tabId] = true;
+    if (workingTimerRef.current[tabId]) {
+      clearTimeout(workingTimerRef.current[tabId]);
+      delete workingTimerRef.current[tabId];
     }
-  }, [activeTab?.history, activeTab?.pendingLine]);
-
-  const handleAddTab = (shell: ShellType, baseName: string, baseShortName: string) => {
-    const existingSameShell = tabs.filter((t) => t.shell === shell);
-    const count = existingSameShell.length + 1;
-    const name = count === 1 ? baseName : `${baseName} ${count}`;
-    const shortName = count === 1 ? baseShortName : `${baseShortName} ${count}`;
-    const newId = `term-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const newTab: TerminalTab = {
-      id: newId,
-      name,
-      shortName,
-      shell,
-      history: [],
-      pendingLine: '',
-    };
-    setTabs((prev) => [...prev, newTab]);
-    setActiveTabId(newId);
-    connectSocket(newId, shell);
-    setTimeout(() => {
-      inputRef.current?.focus();
-    }, 50);
-  };
-
-  const handleCloseTab = (tabId: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-
+    delete awaitingAiResponseRef.current[tabId];
+    delete lastUserKeystrokeAtRef.current[tabId];
+    delete recentOutputRef.current[tabId];
     const ws = socketsRef.current[tabId];
     if (ws) {
       try {
         if (ws.readyState === 1) {
-          ws.send(JSON.stringify({ type: 'close' }));
+          ws.send(JSON.stringify({ type: msgType }));
         }
         ws.close();
       } catch {
@@ -630,168 +871,111 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
       }
       delete socketsRef.current[tabId];
     }
-
-    const remaining = tabs.filter((t) => t.id !== tabId);
-    setTabs(remaining);
-    if (activeTabId === tabId) {
-      setActiveTabId(remaining.length > 0 ? remaining[0].id : '');
-    }
-  };
-
-  const handleClearTerminal = () => {
-    if (!activeTabId) return;
-    clearingTabsRef.current[activeTabId] = true;
-    setTabs((prev) =>
-      prev.map((t) => {
-        if (t.id !== activeTabId) return t;
-        let prompt = t.pendingLine || '';
-        if (prompt.includes('>')) {
-          prompt = prompt.slice(0, prompt.lastIndexOf('>') + 1) + ' ';
-        } else if (prompt.includes('$')) {
-          prompt = prompt.slice(0, prompt.lastIndexOf('$') + 1) + ' ';
-        }
-        prompt = prompt.replace(/\s*(?:clear|cls|clear-host)\s*$/i, '');
-        if (prompt && !prompt.endsWith(' ') && (prompt.endsWith('>') || prompt.endsWith('$'))) {
-          prompt += ' ';
-        }
-        return { ...t, history: [], pendingLine: prompt };
-      })
-    );
-  };
-
-  const handleKillTerminal = () => {
-    if (!activeTabId) return;
-    const targetId = activeTabId;
-    const ws = socketsRef.current[targetId];
-    if (ws) {
+    const handle = xtermsRef.current[tabId];
+    if (handle) {
       try {
-        if (ws.readyState === 1) {
-          ws.send(JSON.stringify({ type: 'kill' }));
-        }
-        ws.close();
+        handle.term.dispose();
       } catch {
         // ignore
       }
-      delete socketsRef.current[targetId];
+      handle.container.remove();
+      delete xtermsRef.current[tabId];
     }
+    setDisconnectedTabs((prev) => {
+      const next = { ...prev };
+      delete next[tabId];
+      return next;
+    });
+    setAiTabStatuses((prev) => {
+      const next = { ...prev };
+      delete next[tabId];
+      return next;
+    });
+  };
 
-    const remaining = tabs.filter((t) => t.id !== targetId);
+  const handleAddTab = (shell: ShellType, baseName: string, baseShortName: string) => {
+    const existingSameShell = tabs.filter((t) => t.shell === shell);
+    if ((shell === 'agy' || shell === 'claude') && existingSameShell.length > 0) {
+      const existingId = existingSameShell[0].id;
+      setActiveTabId(existingId);
+      xtermsRef.current[existingId]?.term.focus();
+      if (isMobile && targetWindowId) {
+        sendMessage('companion_terminals_update', {
+          targetWindowId,
+          activeTabId: existingId,
+        });
+      }
+      return;
+    }
+    const count = existingSameShell.length + 1;
+    const name = count === 1 ? baseName : `${baseName} ${count}`;
+    const shortName = count === 1 ? baseShortName : `${baseShortName} ${count}`;
+    const newId = `term-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const newTab: TerminalTab = { id: newId, name, shortName, shell };
+    if (shell === 'agy' || shell === 'claude') {
+      setAiTabStatuses((prev) => ({
+        ...prev,
+        [newId]: { state: 'finished', reason: 'Finished — ready for prompt' },
+      }));
+    }
+    const nextTabs = [...tabs, newTab];
+    setTabs(nextTabs);
+    setActiveTabId(newId);
+    if (isMobile && targetWindowId) {
+      sendMessage('companion_terminals_update', {
+        targetWindowId,
+        tabs: nextTabs,
+        activeTabId: newId,
+      });
+    }
+  };
+
+  const handleCloseTab = (tabId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    disposeTabResources(tabId, 'close');
+    const remaining = tabs.filter((t) => t.id !== tabId);
     setTabs(remaining);
-    if (activeTabId === targetId) {
-      setActiveTabId(remaining.length > 0 ? remaining[0].id : '');
+    const nextActiveId = activeTabId === tabId ? (remaining.length > 0 ? remaining[0].id : '') : activeTabId;
+    if (activeTabId === tabId) {
+      setActiveTabId(nextActiveId);
+    }
+    if (isMobile && targetWindowId) {
+      sendMessage('companion_terminals_update', {
+        targetWindowId,
+        tabs: remaining,
+        activeTabId: nextActiveId,
+        closeTabId: tabId,
+      });
     }
   };
 
-  const handleCommand = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!activeTabId || !activeTab) return;
-    const cmd = inputVal.trim();
-    if (!cmd) return;
-
-    const lowerCmd = cmd.toLowerCase();
-    if (
-      lowerCmd === 'clear' ||
-      lowerCmd === 'cls' ||
-      lowerCmd === 'clear-host' ||
-      lowerCmd === '/clear'
-    ) {
-      setInputVal('');
-      setSlashMenuOpen(false);
-      handleClearTerminal();
-      return;
-    }
-
-    let ws = socketsRef.current[activeTabId];
-    if (!ws || ws.readyState !== 1) {
-      connectSocket(activeTabId, activeTab.shell);
-      ws = socketsRef.current[activeTabId];
-    }
-
-    if (ws && ws.readyState === 1) {
-      ws.send(JSON.stringify({ type: 'input', data: `${cmd}\r\n` }));
-    }
-
-    setTabs((prev) =>
-      prev.map((t) => {
-        if (t.id !== activeTabId) return t;
-
-        // In agy AI mode, display user turn in history
-        if (t.shell === 'agy') {
-          return {
-            ...t,
-            history: [...t.history, `> ${cmd}`],
-          };
-        }
-
-        // Standard shells (PowerShell, Bash, CMD) echo command on stdout into pendingLine
-        return t;
-      })
-    );
-
-    setInputVal('');
-    setSlashMenuOpen(false);
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    setInputVal(val);
-    if (activeTab?.shell === 'agy' && val.startsWith('/')) {
-      setSlashMenuOpen(true);
-      setSlashIndex(0);
-    } else {
-      setSlashMenuOpen(false);
+  const handleKillTerminal = () => {
+    if (!activeTab) return;
+    const targetId = activeTab.id;
+    disposeTabResources(targetId, 'kill');
+    const remaining = tabs.filter((t) => t.id !== targetId);
+    const nextActiveId = remaining.length > 0 ? remaining[0].id : '';
+    setTabs(remaining);
+    setActiveTabId(nextActiveId);
+    if (isMobile && targetWindowId) {
+      sendMessage('companion_terminals_update', {
+        targetWindowId,
+        tabs: remaining,
+        activeTabId: nextActiveId,
+        killTabId: targetId,
+      });
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (slashMenuOpen && filteredCommands.length > 0) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setSlashIndex((prev) => (prev + 1) % filteredCommands.length);
-        return;
-      }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setSlashIndex((prev) => (prev - 1 + filteredCommands.length) % filteredCommands.length);
-        return;
-      }
-      // Enter or Tab in slash menu fills in the command without immediately submitting the form
-      if (e.key === 'Tab' || e.key === 'Enter') {
-        e.preventDefault();
-        handleSelectSlashCommand(filteredCommands[slashIndex].name);
-        return;
-      }
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        setSlashMenuOpen(false);
-        return;
-      }
-    }
-  };
-
-  const handleSelectSlashCommand = (cmdName: string) => {
-    setInputVal(`${cmdName} `);
-    setSlashMenuOpen(false);
-    inputRef.current?.focus();
-  };
-
-  // Preserve text selection on mouseup so copying is effortless
-  const handleTerminalClick = () => {
-    const selection = window.getSelection();
-    if (selection && selection.toString().trim().length > 0) {
-      return;
-    }
-    inputRef.current?.focus();
-  };
+  const activeDisconnected = Boolean(activeTab && disconnectedTabs[activeTab.id]);
 
   return (
     <div className="flex flex-col h-full font-mono text-xs text-zinc-300 bg-zinc-950 overflow-hidden select-none">
-      {/* 1. Header Row (Same row as TERMINALS) */}
+      {/* 1. Header Row */}
       <header className="flex items-center justify-between px-3 py-1.5 border-b border-zinc-800/80 bg-zinc-900/50 shrink-0">
-        {/* Left: Terminal icon + TERMINALS title + action buttons */}
         <div className="flex items-center gap-2 min-w-0">
           <div className="flex items-center gap-1.5 shrink-0 text-zinc-300">
-            <Terminal className="w-3.5 h-3.5 text-indigo-400" />
+            <TerminalIcon className="w-3.5 h-3.5 text-indigo-400" />
             <span className="text-xs font-semibold uppercase tracking-wider hidden sm:inline">
               TERMINALS
             </span>
@@ -799,20 +983,29 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
 
           <div className="h-3.5 w-px bg-zinc-800 mx-0.5 shrink-0" />
 
-          {/* Action buttons group */}
           <div className="flex items-center gap-1 relative shrink-0" ref={dropdownRef}>
-            {/* Dedicated AI Button */}
+            {/* Icon-only Antigravity (agy) launcher button */}
             <button
-              onClick={() => handleAddTab('agy', 'AI (agy)', 'agy')}
-              data-testid="ai-terminal-btn"
-              className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded transition-colors bg-purple-900/40 text-purple-300 border border-purple-700/50 hover:bg-purple-800/50 hover:text-purple-100 shrink-0 cursor-pointer"
-              title="Launch Antigravity AI Assistant (agy)"
+              onClick={() => handleAddTab('agy', 'Antigravity', 'AGY')}
+              data-testid="agy-terminal-btn"
+              aria-label="Launch Antigravity Terminal"
+              className="flex items-center justify-center p-1 rounded transition-colors bg-indigo-950/60 hover:bg-indigo-900/70 text-indigo-300 border border-indigo-700/60 shrink-0 cursor-pointer"
+              title="Open Antigravity Terminal (agy)"
             >
-              <Sparkles className="w-3 h-3 text-purple-400 shrink-0" />
-              <span>AI</span>
+              <AntigravityIcon className="w-3.5 h-3.5 shrink-0" />
             </button>
 
-            {/* Split Button: Plus (PowerShell) + Dropdown trigger */}
+            {/* Icon-only Claude launcher button */}
+            <button
+              onClick={() => handleAddTab('claude', 'Claude', 'claude')}
+              data-testid="claude-terminal-btn"
+              aria-label="Launch Claude Terminal"
+              className="flex items-center justify-center p-1 rounded transition-colors bg-[#d97757]/15 hover:bg-[#d97757]/30 text-[#e88b6d] border border-[#d97757]/45 shrink-0 cursor-pointer"
+              title="Open Claude Terminal (claude)"
+            >
+              <ClaudeIcon className="w-3.5 h-3.5 shrink-0" />
+            </button>
+
             <div className="flex items-center rounded bg-zinc-800/80 border border-zinc-700/60 hover:border-zinc-600 transition-colors shrink-0">
               <button
                 onClick={() => handleAddTab('powershell', 'PowerShell', 'ps')}
@@ -833,10 +1026,9 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
               </button>
             </div>
 
-            {/* Shell Dropdown Menu */}
             {dropdownOpen && (
               <div
-                className="absolute top-full left-10 mt-1 w-44 bg-zinc-900 border border-zinc-700 rounded-md shadow-xl py-1 z-50 text-xs"
+                className="absolute top-full left-16 mt-1 w-44 bg-zinc-900 border border-zinc-700 rounded-md shadow-xl py-1 z-50 text-xs"
                 role="menu"
               >
                 <button
@@ -847,7 +1039,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
                   data-testid="shell-option-powershell"
                   className="w-full text-left px-3 py-1.5 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800 flex items-center gap-2 transition-colors cursor-pointer"
                 >
-                  <Terminal className="w-3.5 h-3.5 text-sky-400" />
+                  <TerminalIcon className="w-3.5 h-3.5 text-sky-400" />
                   <span>PowerShell</span>
                 </button>
 
@@ -859,7 +1051,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
                   data-testid="shell-option-bash"
                   className="w-full text-left px-3 py-1.5 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800 flex items-center gap-2 transition-colors cursor-pointer"
                 >
-                  <Terminal className="w-3.5 h-3.5 text-emerald-400" />
+                  <TerminalIcon className="w-3.5 h-3.5 text-emerald-400" />
                   <span>Git Bash</span>
                 </button>
 
@@ -871,18 +1063,18 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
                   data-testid="shell-option-cmd"
                   className="w-full text-left px-3 py-1.5 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800 flex items-center gap-2 transition-colors cursor-pointer"
                 >
-                  <Terminal className="w-3.5 h-3.5 text-amber-400" />
+                  <TerminalIcon className="w-3.5 h-3.5 text-amber-400" />
                   <span>Command Prompt</span>
                 </button>
               </div>
             )}
 
-            {/* Kill Terminal Button */}
             <button
+              type="button"
               onClick={handleKillTerminal}
               disabled={tabs.length === 0}
               data-testid="kill-terminal-btn"
-              className="p-1 text-zinc-500 hover:text-rose-400 hover:bg-rose-950/40 transition-colors rounded disabled:opacity-30 disabled:pointer-events-none shrink-0 ml-0.5 cursor-pointer"
+              className="p-1.5 sm:p-1 min-w-[28px] min-h-[28px] flex items-center justify-center text-zinc-500 hover:text-rose-400 hover:bg-rose-950/40 transition-colors rounded disabled:opacity-30 disabled:pointer-events-none shrink-0 ml-0.5 cursor-pointer"
               title="Kill Terminal (Force Terminate & Close Tab)"
             >
               <Square className="w-3.5 h-3.5 fill-current" />
@@ -890,7 +1082,6 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
           </div>
         </div>
 
-        {/* Right: Dock position toggle + Minimize */}
         <div className="flex items-center gap-1 shrink-0">
           <button
             data-testid="dock-toggle-button"
@@ -909,9 +1100,8 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
         </div>
       </header>
 
-      {/* 2. Dedicated Tab Bar Row (Matching TabBar.tsx with Drag-and-Drop & Overflow Navigation) */}
+      {/* 2. Tab Strip */}
       <div className="flex items-center h-8 bg-zinc-900/60 border-b border-zinc-800 overflow-hidden shrink-0">
-        {/* Scroll Left Button if overflow */}
         {canScrollLeft && (
           <button
             type="button"
@@ -923,7 +1113,6 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
           </button>
         )}
 
-        {/* Scrollable Tab Strip with Mouse Wheel & Drag Reorder */}
         <div
           ref={scrollContainerRef}
           onWheel={handleWheel}
@@ -936,8 +1125,18 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
           ) : (
             renderedTabs.map((tab) => {
               const isActive = tab.id === activeTabId;
-              const tabIsAgy = tab.shell === 'agy';
+              const isAgy = tab.shell === 'agy';
+              const isClaude = tab.shell === 'claude';
+              const tabIsAi = isAgy || isClaude;
               const isBeingDragged = tab.id === draggedTabId;
+              const tabStatus: AiTabStatus = aiTabStatuses[tab.id] || {
+                state: 'finished',
+                reason: 'Finished — ready for prompt',
+              };
+
+              const tabTitle = tabIsAi
+                ? `${tab.name} — ${tabStatus.reason}`
+                : `${tab.name} (${tab.shortName}) - Drag to reorder, Middle-click to close`;
 
               return (
                 <div
@@ -949,34 +1148,64 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
                   onDrop={handleDrop}
                   onDragEnd={handleDragEnd}
                   onClick={() => {
-                    if (!draggedTabId) setActiveTabId(tab.id);
+                    if (!draggedTabId) {
+                      setActiveTabId(tab.id);
+                      if (isMobile && targetWindowId) {
+                        sendMessage('companion_terminals_update', {
+                          targetWindowId,
+                          activeTabId: tab.id,
+                        });
+                      }
+                    }
                   }}
                   onMouseDown={(e) => {
-                    // Middle mouse click closes tab
                     if (e.button === 1) {
                       e.preventDefault();
                       handleCloseTab(tab.id, e);
                     }
                   }}
-                  title={`${tab.name} (${tab.shortName}) - Drag to reorder, Middle-click to close`}
+                  title={tabTitle}
                   className={clsx(
-                    'group flex items-center gap-2 px-3 h-full min-h-[32px] border-r border-zinc-800 text-xs font-medium cursor-pointer transition-all duration-150 ease-out max-w-[200px] shrink-0 whitespace-nowrap',
+                    'group flex items-center gap-2 px-3 h-full min-h-[32px] border-r border-zinc-800 text-xs font-medium cursor-pointer transition-all duration-150 ease-out max-w-[220px] shrink-0 whitespace-nowrap',
                     isActive && !isBeingDragged
-                      ? tabIsAgy
-                        ? 'bg-zinc-950 text-purple-300 border-b-2 border-b-purple-500 font-semibold'
-                        : 'bg-zinc-950 text-zinc-100 border-b-2 border-b-indigo-500 font-semibold'
+                      ? isAgy
+                        ? 'bg-zinc-950 text-indigo-300 border-b-2 border-b-indigo-500 font-semibold'
+                        : isClaude
+                          ? 'bg-zinc-950 text-[#e88b6d] border-b-2 border-b-[#d97757] font-semibold'
+                          : 'bg-zinc-950 text-zinc-100 border-b-2 border-b-indigo-500 font-semibold'
                       : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40',
                     isBeingDragged &&
                       'opacity-60 bg-indigo-950/40 border-2 border-dashed border-indigo-400 text-indigo-300 ring-2 ring-indigo-500/20 scale-[0.98]'
                   )}
                 >
-                  {tabIsAgy ? (
-                    <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                  {isAgy ? (
+                    <AntigravityIcon className="w-3.5 h-3.5 shrink-0" />
+                  ) : isClaude ? (
+                    <ClaudeIcon className="w-3.5 h-3.5 text-[#d97757] shrink-0" />
                   ) : (
-                    <Terminal className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                    <TerminalIcon className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
                   )}
                   <span className="hidden sm:inline truncate">{tab.name}</span>
                   <span className="sm:hidden">{tab.shortName}</span>
+
+                  {/* Per-tab 4-state circular AI status indicator (REQ-011) */}
+                  {tabIsAi && (
+                    <span
+                      data-testid={`ai-tab-status-${tab.id}`}
+                      data-status={tabStatus.state}
+                      title={tabStatus.reason}
+                      className={clsx(
+                        'rounded-full shrink-0 inline-block',
+                        tabStatus.state === 'working' &&
+                          'w-2.5 h-2.5 border-2 border-amber-400 border-t-transparent animate-spin',
+                        tabStatus.state === 'waiting_for_input' &&
+                          'w-2 h-2 bg-sky-400 animate-bounce',
+                        tabStatus.state === 'finished' && 'w-2 h-2 bg-emerald-400',
+                        tabStatus.state === 'error' && 'w-2 h-2 bg-rose-500'
+                      )}
+                    />
+                  )}
+
                   <button
                     onClick={(e) => handleCloseTab(tab.id, e)}
                     className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:text-red-400 hover:bg-zinc-800 transition-opacity ml-1 cursor-pointer shrink-0"
@@ -990,7 +1219,6 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
           )}
         </div>
 
-        {/* Scroll Right Button if overflow */}
         {canScrollRight && (
           <button
             type="button"
@@ -1003,15 +1231,35 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
         )}
       </div>
 
-      {/* 3. Terminal Body: Output Log or Empty State */}
-      {tabs.length === 0 ? (
+      {/* 3. Disconnected Banner (REQ-009) */}
+      {activeDisconnected && (
+        <div
+          data-testid="terminal-disconnected-banner"
+          className="flex items-center justify-between px-3 py-1 bg-rose-950/70 border-b border-rose-800/60 text-rose-200 text-[11px] font-sans shrink-0"
+        >
+          <span className="flex items-center gap-1.5">
+            <WifiOff className="w-3 h-3 text-rose-400" />
+            Terminal session disconnected. Input is disabled until reconnected.
+          </span>
+          <button
+            type="button"
+            onClick={() => activeTab && ensureSession(activeTab.id, activeTab.shell)}
+            className="px-2 py-0.5 rounded bg-rose-900/60 hover:bg-rose-800/80 text-rose-100 font-medium cursor-pointer"
+          >
+            Reconnect
+          </button>
+        </div>
+      )}
+
+      {/* 4. Terminal Body: xterm Viewport Host or Empty State */}
+      {tabs.length === 0 && (
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center select-none">
           <div className="w-12 h-12 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-3">
-            <Terminal className="w-6 h-6 text-zinc-500" />
+            <TerminalIcon className="w-6 h-6 text-zinc-500" />
           </div>
           <h3 className="text-sm font-semibold text-zinc-300 mb-1">No Active Terminals</h3>
           <p className="text-xs text-zinc-500 max-w-xs mb-4">
-            Open a new terminal shell or launch the Antigravity AI Assistant to run commands.
+            Open a new terminal shell or launch Antigravity or Claude to run commands.
           </p>
           <div className="flex items-center gap-2">
             <button
@@ -1023,164 +1271,30 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({ cwd }) => {
               <span>New Terminal</span>
             </button>
             <button
-              onClick={() => handleAddTab('agy', 'AI (agy)', 'agy')}
+              onClick={() => handleAddTab('agy', 'Antigravity', 'AGY')}
               data-testid="empty-launch-ai"
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-900/40 hover:bg-purple-800/50 text-purple-300 text-xs rounded font-medium border border-purple-700/50 transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-950/60 hover:bg-indigo-900/70 text-indigo-300 text-xs rounded font-medium border border-indigo-700/60 transition-colors cursor-pointer"
             >
-              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-              <span>Launch AI (agy)</span>
+              <AntigravityIcon className="w-3.5 h-3.5 shrink-0" />
+              <span>Antigravity</span>
+            </button>
+            <button
+              onClick={() => handleAddTab('claude', 'Claude', 'claude')}
+              data-testid="empty-launch-claude"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#d97757]/15 hover:bg-[#d97757]/30 text-[#e88b6d] text-xs rounded font-medium border border-[#d97757]/45 transition-colors cursor-pointer"
+            >
+              <ClaudeIcon className="w-3.5 h-3.5 shrink-0" />
+              <span>Claude</span>
             </button>
           </div>
         </div>
-      ) : (
-        <div
-          data-testid="terminal-body"
-          className="flex-1 overflow-y-auto overflow-x-hidden p-3 font-mono text-xs select-text whitespace-pre-wrap break-words leading-5 flex flex-col justify-between"
-          onClick={handleTerminalClick}
-        >
-          <div>
-            {/* Authentic Antigravity CLI Banner Header when in agy tab */}
-            {isAgy && (
-              <div className="mb-3 select-none">
-                <div className="flex items-center gap-4 py-1">
-                  <AntigravityArchLogo className="w-10 h-10 shrink-0" />
-                  <div className="flex flex-col justify-center">
-                    <div className="font-semibold text-sky-400 text-xs tracking-wide">
-                      Antigravity CLI 1.3.2
-                    </div>
-                    <div className="text-zinc-400 text-[11px]">
-                      a.staub1307@gmail.com (Google AI Pro)
-                    </div>
-                    <div className="text-zinc-400 text-[11px]">
-                      Gemini 3.8 Flash (High)
-                    </div>
-                    <div className="text-zinc-500 text-[11px] font-mono">
-                      {cwd || '~'}
-                    </div>
-                  </div>
-                </div>
-                <div className="border-b border-zinc-800/80 my-2 w-full" />
-              </div>
-            )}
-
-            {/* Completed Output Lines */}
-            {activeTab?.history
-              .filter((line) => {
-                const tr = line.trim().toLowerCase();
-                return (
-                  tr !== 'clear' &&
-                  tr !== 'cls' &&
-                  tr !== 'clear-host' &&
-                  !tr.endsWith('> clear') &&
-                  !tr.endsWith('> cls') &&
-                  !tr.endsWith('> clear-host')
-                );
-              })
-              .map((line, idx) => {
-              const isCommand = line.startsWith('>') || line.startsWith('$');
-              if (isCommand) {
-                return (
-                  <div key={idx} className="font-semibold text-sky-400 whitespace-pre-wrap break-words leading-5 my-0.5">
-                    {line}
-                  </div>
-                );
-              }
-
-              const segments = parseAnsi(line);
-              return (
-                <div key={idx} className="text-zinc-300 min-h-[1.25em] whitespace-pre-wrap break-words leading-5">
-                  {segments.length > 0 ? (
-                    segments.map((seg, sIdx) => (
-                      <span key={sIdx} className={seg.className || undefined}>
-                        {seg.text}
-                      </span>
-                    ))
-                  ) : (
-                    <span>&nbsp;</span>
-                  )}
-                </div>
-              );
-            })}
-
-            {/* Active Inline Prompt Line + Typing directly at Prompt */}
-            {activeTab && (
-              <div className="text-zinc-300 min-h-[1.25em] whitespace-pre-wrap break-words leading-5 flex items-baseline flex-wrap gap-x-1 relative my-0.5">
-                {activeTab.pendingLine ? (
-                  parseAnsi(activeTab.pendingLine).map((seg, sIdx) => (
-                    <span key={sIdx} className={seg.className || undefined}>
-                      {seg.text}
-                    </span>
-                  ))
-                ) : isAgy ? (
-                  <span className="text-sky-400 font-bold select-none">&gt;&nbsp;</span>
-                ) : null}
-
-                {/* Slash autocomplete menu floating directly above active input */}
-                {slashMenuOpen && isAgy && filteredCommands.length > 0 && (
-                  <div
-                    ref={slashMenuRef}
-                    data-testid="slash-command-menu"
-                    className="absolute bottom-full left-0 mb-1 w-96 max-h-60 overflow-y-auto bg-zinc-900 border border-purple-500/40 rounded-lg shadow-2xl p-1 z-50 text-xs font-sans"
-                  >
-                    <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-purple-400 flex items-center gap-1 border-b border-zinc-800">
-                      <Sparkles className="w-3 h-3 text-purple-400" />
-                      <span>Available Slash Commands</span>
-                    </div>
-                    <div className="py-1">
-                      {filteredCommands.map((cmd, idx) => {
-                        const isSelected = idx === slashIndex;
-                        return (
-                          <button
-                            key={cmd.name}
-                            type="button"
-                            data-testid={`slash-option-${cmd.name.slice(1)}`}
-                            onClick={() => handleSelectSlashCommand(cmd.name)}
-                            onMouseEnter={() => setSlashIndex(idx)}
-                            className={clsx(
-                              'w-full text-left px-2.5 py-1.5 rounded flex items-center justify-between gap-2 transition-colors cursor-pointer',
-                              isSelected
-                                ? 'bg-purple-950/70 text-purple-100 border border-purple-700/50'
-                                : 'text-zinc-300 hover:bg-zinc-800/60'
-                            )}
-                          >
-                            <span className="font-mono font-bold text-purple-300">{cmd.name}</span>
-                            <span className="text-[11px] text-zinc-400 truncate">{cmd.description}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Inline form directly inside terminal prompt */}
-                <form onSubmit={handleCommand} className="inline-flex items-center flex-1 min-w-[120px]">
-                  <input
-                    ref={inputRef}
-                    data-testid="terminal-inline-input"
-                    type="text"
-                    value={inputVal}
-                    onChange={handleInputChange}
-                    onKeyDown={handleKeyDown}
-                    placeholder={isAgy ? 'Ask AI or type / for commands...' : ''}
-                    className="bg-transparent border-none outline-none text-zinc-100 placeholder-zinc-700 font-mono text-xs flex-1 min-w-[80px]"
-                  />
-                </form>
-                <span className="inline-block w-1.5 h-3.5 bg-zinc-400 animate-pulse ml-0.5 align-middle self-center select-none" />
-              </div>
-            )}
-
-            <div ref={bottomRef} />
-          </div>
-
-          {/* Authentic Antigravity Status Footer in AGY Tab */}
-          {isAgy && (
-            <div className="flex items-center justify-between pt-2 mt-4 border-t border-zinc-800/60 text-[11px] text-zinc-500 select-none font-sans shrink-0">
-              <span className="text-zinc-400">? for shortcuts</span>
-              <span className="text-zinc-400">Gemini 3.8 Flash · high</span>
-            </div>
-          )}
-        </div>
       )}
+
+      <div
+        ref={viewportHostRef}
+        data-testid="terminal-body"
+        className={clsx('flex-1 w-full overflow-hidden p-1 bg-zinc-950 select-text', tabs.length === 0 && 'hidden')}
+      />
     </div>
   );
 };

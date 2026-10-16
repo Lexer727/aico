@@ -1,4 +1,5 @@
 use aico_core::scanner::RootScanner;
+use aico_core::SkillsSynchronizer;
 use aico_server::{AppState, HostServer, ServerConfig};
 use std::env;
 use std::path::{Path, PathBuf};
@@ -32,6 +33,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
 
     println!("[*] Workspace root: {}", root_dir.display());
+
+    // 2b. Synchronize workspace .agents/skills, .agents/rules, and GEMINI.md from codebase/aico/skills
+    // @implements spec-ft-core-skills-sync::REQ-002
+    // @implements spec-ft-core-skills-sync::REQ-005
+    // @implements spec-ft-core-skills-sync::REQ-007
+    match SkillsSynchronizer::sync_workspace(&root_dir) {
+        Ok(report) if report.skills_synced > 0 => {
+            println!(
+                "[*] Workspace skills & rules synced ({} skills, {} files updated, {} stale entries pruned)",
+                report.skills_synced, report.files_updated, report.entries_removed
+            );
+        }
+        Ok(_) => {
+            tracing::warn!(
+                "Skills submodule not found or empty under {}/codebase/aico/skills; skipping workspace sync",
+                root_dir.display()
+            );
+        }
+        Err(e) => {
+            tracing::warn!("Failed to synchronize workspace skills and rules: {}", e);
+        }
+    }
 
     let state = AppState::default();
 

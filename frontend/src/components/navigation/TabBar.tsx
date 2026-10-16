@@ -11,6 +11,7 @@ import {
   Scale,
   GitFork,
   Undo2,
+  FolderArchive,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -19,6 +20,7 @@ import clsx from 'clsx';
 // @implements spec-ft-core-webui-shell::REQ-004
 // @implements spec-ft-core-webui-shell::REQ-005
 // @implements spec-ft-core-epic-hub::REQ-007
+// @implements spec-ft-core-assets-manager::REQ-007
 export const TabBar: React.FC = () => {
   const {
     activeProjectId,
@@ -83,6 +85,7 @@ export const TabBar: React.FC = () => {
 
   // @implements spec-ft-core-ui-visual-consistency::REQ-003
   // @implements spec-ft-core-ui-visual-consistency::REQ-005
+  // @implements spec-ft-core-assets-manager::REQ-007
   const getIcon = (type: string) => {
     const iconClass = 'w-3.5 h-3.5 shrink-0';
     switch (type) {
@@ -104,6 +107,8 @@ export const TabBar: React.FC = () => {
         return <Scale className={clsx(iconClass, 'text-amber-400')} />;
       case 'glossary':
         return <BookOpen className={clsx(iconClass, 'text-amber-400')} />;
+      case 'asset':
+        return <FolderArchive className={clsx(iconClass, 'text-amber-400')} />;
       default:
         return <Package className={clsx(iconClass, 'text-purple-400')} />;
     }

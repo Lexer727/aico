@@ -8,6 +8,7 @@ interface DockablePanelProps {
   children: React.ReactNode;
   className?: string;
   hideHeader?: boolean;
+  isMobile?: boolean;
 }
 
 // @implements spec-ft-core-webui-shell::REQ-010
@@ -17,10 +18,11 @@ export const DockablePanel: React.FC<DockablePanelProps> = ({
   children,
   className,
   hideHeader = false,
+  isMobile = false,
 }) => {
   const { position, toggleDock } = useDockStore();
 
-  const isBottom = position === 'bottom';
+  const isBottom = isMobile ? true : position === 'bottom';
 
   return (
     <aside

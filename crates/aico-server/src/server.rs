@@ -5,7 +5,7 @@ use axum::{
     },
     http::StatusCode,
     response::IntoResponse,
-    routing::{get, post},
+    routing::{delete, get, post},
     Json, Router,
 };
 use futures_util::{SinkExt, StreamExt};
@@ -17,7 +17,7 @@ use thiserror::Error;
 use tokio::net::TcpListener;
 use tokio::sync::RwLock;
 
-use aico_core::{DiscoveredProject, WorkspaceRegistry};
+use aico_core::{AicoConfig, DiscoveredProject, WorkspaceRegistry};
 use crate::auth::LanAuthenticator;
 use crate::git::{GitRepoStatus, GitStatusScanner};
 use crate::ws::WebSocketHub;
@@ -65,6 +65,9 @@ pub struct AppState {
     pub registry: Arc<RwLock<WorkspaceRegistry>>,
     pub ws_hub: Arc<WebSocketHub>,
     pub auth: Arc<LanAuthenticator>,
+    pub terminal_sessions: Arc<crate::terminal::TerminalSessionRegistry>,
+    pub quota_service: Arc<crate::quotas::QuotaDiscoveryService>,
+    pub bound_port: Arc<std::sync::atomic::AtomicU16>,
 }
 
 impl Default for AppState {
@@ -74,6 +77,9 @@ impl Default for AppState {
             registry: Arc::new(RwLock::new(WorkspaceRegistry::new())),
             ws_hub: Arc::new(WebSocketHub::default()),
             auth: Arc::new(LanAuthenticator::new()),
+            terminal_sessions: Arc::new(crate::terminal::TerminalSessionRegistry::default()),
+            quota_service: Arc::new(crate::quotas::QuotaDiscoveryService::default()),
+            bound_port: Arc::new(std::sync::atomic::AtomicU16::new(4242)),
         }
     }
 }
@@ -123,6 +129,7 @@ impl HostServer {
                         .local_addr()
                         .map_err(|e| ServerError::BindError(e.to_string()))?;
                     self.bound_addr = Some(local_addr);
+                    self.state.bound_port.store(local_addr.port(), std::sync::atomic::Ordering::Relaxed);
                     self.listener = Some(listener);
                     tracing::info!("HostServer successfully bound to {}", local_addr);
                     return Ok(local_addr);
@@ -156,6 +163,10 @@ impl HostServer {
     pub fn build_router(state: AppState) -> Router {
         Router::new()
             .route("/api/v1/health", get(health_check_handler))
+            // @implements spec-ft-core-webui-shell::REQ-019
+            .route("/api/v1/auth/pairing", get(get_pairing_handler))
+            // @implements spec-ft-core-assets-manager::REQ-013
+            .route("/api/v1/config", get(get_config_handler))
             .route("/api/v1/projects", get(list_projects_handler))
             .route("/api/v1/projects/active", post(set_active_project_handler))
             .route("/api/v1/epics", get(list_epics_handler))
@@ -169,8 +180,26 @@ impl HostServer {
             .route("/api/v1/git/status", get(get_git_status_handler))
             .route("/api/v1/raw", get(get_raw_file_handler))
             .route("/api/v1/search", get(search_handler))
+            // @implements spec-ft-core-assets-manager::REQ-004
+            .route("/api/v1/epics/:id/assets", get(crate::assets::list_epic_assets_handler))
+            // @implements spec-ft-core-assets-manager::REQ-005
+            .route("/api/v1/features/:id/assets", get(crate::assets::list_feature_assets_handler))
+            // @implements spec-ft-core-assets-manager::REQ-001
+            // @implements spec-ft-core-assets-manager::REQ-002
+            .route("/api/v1/assets/upload", post(crate::assets::upload_asset_handler))
+            // @implements spec-ft-core-assets-manager::REQ-003
+            .route("/api/v1/assets/raw", get(crate::assets::get_asset_raw_handler))
+            // @implements spec-ft-core-assets-manager::REQ-008
+            .route("/api/v1/assets/open-system", post(crate::assets::open_system_handler))
+            // @implements spec-ft-core-assets-manager::REQ-003
+            // @implements spec-ft-core-assets-manager::REQ-009
+            .route("/api/v1/assets", delete(crate::assets::delete_asset_handler))
             // @implements spec-ft-terminal-backend-stream-bridge::REQ-001
             .route("/api/v1/terminal/ws", get(crate::terminal::terminal_ws_handler))
+            // @implements spec-ft-terminal-conpty-bridge::REQ-008
+            .route("/api/v1/terminal/sessions", get(crate::terminal::terminal_sessions_handler))
+            // @implements spec-ft-terminal-ai-quota-monitor::REQ-001
+            .route("/api/v1/ai/quotas", get(crate::quotas::get_ai_quotas_handler))
             .route("/ws", get(ws_handler))
             .fallback(crate::assets::static_asset_handler)
             .with_state(state)
@@ -216,6 +245,43 @@ impl HostServer {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PairingResponse {
+    pub lan_ip: String,
+    pub port: u16,
+    pub token: String,
+    pub pairing_url: String,
+}
+
+pub fn get_lan_ip() -> String {
+    if let Ok(socket) = std::net::UdpSocket::bind("0.0.0.0:0") {
+        if socket.connect("8.8.8.8:80").is_ok() {
+            if let Ok(addr) = socket.local_addr() {
+                let ip = addr.ip().to_string();
+                if ip != "0.0.0.0" {
+                    return ip;
+                }
+            }
+        }
+    }
+    "127.0.0.1".to_string()
+}
+
+// @implements spec-ft-core-webui-shell::REQ-019
+async fn get_pairing_handler(
+    State(state): State<AppState>,
+) -> Json<PairingResponse> {
+    let port = state.bound_port.load(std::sync::atomic::Ordering::Relaxed);
+    let lan_ip = get_lan_ip();
+    let pairing_url = state.auth.pairing_url(&lan_ip, port);
+    Json(PairingResponse {
+        lan_ip,
+        port,
+        token: state.auth.token().to_string(),
+        pairing_url,
+    })
+}
+
 async fn health_check_handler(
     State(state): State<AppState>,
 ) -> Json<HealthResponse> {
@@ -224,6 +290,14 @@ async fn health_check_handler(
         uptime_seconds: state.start_time.elapsed().as_secs(),
         aico_version: env!("CARGO_PKG_VERSION").to_string(),
     })
+}
+
+// @implements spec-ft-core-assets-manager::REQ-013
+async fn get_config_handler(
+    State(state): State<AppState>,
+) -> Json<AicoConfig> {
+    let config = crate::assets::get_active_config(&state).await;
+    Json(config)
 }
 
 // @implements spec-ft-core-discovery::REQ-008

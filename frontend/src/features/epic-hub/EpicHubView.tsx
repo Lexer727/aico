@@ -12,8 +12,9 @@ import {
   BookOpen,
   FolderGit2,
 } from 'lucide-react';
-import { FileDropZone } from '../../components/common/FileDropZone';
 import { MarkdownView, stripDocumentHeader } from '../../components/common/MarkdownView';
+import { AssetPanel, type DiscoveredAssetInfo } from '../assets/AssetPanel';
+import { useAccordionStore } from '../../stores/useAccordionStore';
 import {
   fetchEpic,
   normalizeAdrId,
@@ -70,6 +71,7 @@ interface EpicHubViewProps {
   onPopOut?: (epicId: string, section: string) => void;
   onOpenSpec?: (specId: string, title: string) => void;
   onOpenFeature?: (featureId: string, name: string) => void;
+  onOpenAsset?: (asset: DiscoveredAssetInfo) => void;
   uploadedFiles?: string[];
   onFileUpload?: (file: File) => void;
 }
@@ -79,6 +81,11 @@ interface EpicHubViewProps {
 // @implements spec-ft-core-epic-hub::REQ-003
 // @implements spec-ft-core-epic-hub::REQ-005
 // @implements spec-ft-core-epic-hub::REQ-011
+// @implements spec-ft-core-assets-manager::REQ-004
+// @implements spec-ft-core-assets-manager::REQ-006
+// @implements spec-ft-core-assets-manager::REQ-007
+// @implements spec-ft-core-assets-manager::REQ-011
+// @implements spec-ft-core-assets-manager::REQ-012
 export const EpicHubView: React.FC<EpicHubViewProps> = ({
   epic: initialEpic,
   allFeatures,
@@ -87,13 +94,16 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
   onPopOut,
   onOpenSpec: _onOpenSpec,
   onOpenFeature,
-  uploadedFiles = [],
-  onFileUpload,
+  onOpenAsset,
+  uploadedFiles: _uploadedFiles = [],
+  onFileUpload: _onFileUpload,
 }) => {
   const [epic, setEpic] = useState<EpicData>(initialEpic);
+  const [assetCount, setAssetCount] = useState<number>(0);
 
   useEffect(() => {
     setEpic(initialEpic);
+    setAssetCount(0);
   }, [initialEpic]);
 
   // Fetch full live artifact details if features or summary are not yet populated
@@ -123,23 +133,29 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
     };
   }, [initialEpic.id]);
 
-  // Layout states:
-  // Left column (Features, Brainstorm, ADRs, Deep Dive, Assets): closed by default (collapsed = true)
-  // Right column (Task Plan): open by default (collapsed = false)
-  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
-    features: true,
-    brainstorm: true,
-    adrs: true,
-    deepDive: true,
-    assets: true,
-    taskPlan: false,
-  });
+  const entityCollapsed = useAccordionStore((s) => s.collapsedByEntity[epic.id]);
+  const toggleSectionInStore = useAccordionStore((s) => s.toggleSection);
+
+  const isCollapsed = (section: string) => {
+    const def = section === 'taskPlan' ? false : true;
+    if (!entityCollapsed || entityCollapsed[section] === undefined) {
+      return def;
+    }
+    return entityCollapsed[section];
+  };
 
   const toggleSection = (section: string) => {
-    setCollapsedSections((prev) => ({
-      ...prev,
-      [section]: !prev[section],
-    }));
+    const def = section === 'taskPlan' ? false : true;
+    toggleSectionInStore(epic.id, section, def);
+  };
+
+  const collapsedSections = {
+    features: isCollapsed('features'),
+    brainstorm: isCollapsed('brainstorm'),
+    adrs: isCollapsed('adrs'),
+    deepDive: isCollapsed('deepDive'),
+    assets: isCollapsed('assets'),
+    taskPlan: isCollapsed('taskPlan'),
   };
 
   const currentFeaturesList: DiscoveredFeature[] = epic.features || [];
@@ -588,6 +604,14 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
                 )}
                 <FolderArchive className="w-4 h-4 text-amber-400 flex-shrink-0" />
                 <span className="font-semibold text-sm text-zinc-200">Assets</span>
+                {assetCount > 0 && (
+                  <span
+                    data-testid="asset-counter-badge"
+                    className="text-[11px] font-mono font-medium text-amber-300 bg-amber-950/80 px-1.5 py-0.5 rounded border border-amber-800/80"
+                  >
+                    ({assetCount})
+                  </span>
+                )}
                 {collapsedSections.assets && (
                   <span className="text-xs text-zinc-500 truncate ml-2 italic">
                     — {epic.sections?.assets || 'Attached artifacts and multimodal drops'}
@@ -606,20 +630,14 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
                 <ExternalLink className="w-3.5 h-3.5" />
               </button>
             </div>
-            {!collapsedSections.assets && (
-              <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-3">
-                <div className="pt-1">
-                  <FileDropZone onFileUpload={(f) => onFileUpload?.(f)}>
-                    <span>Drag & drop design mockups, audio files, or specifications here</span>
-                  </FileDropZone>
-                  {uploadedFiles.length > 0 && (
-                    <div className="text-[11px] text-zinc-400 mt-2">
-                      Attached: {uploadedFiles.join(', ')}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
+            <div className={`p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 ${collapsedSections.assets ? 'hidden' : 'block'}`}>
+              <AssetPanel
+                scopeType="epic"
+                scopeId={epic.id}
+                onOpenAsset={onOpenAsset}
+                onCountChange={setAssetCount}
+              />
+            </div>
           </div>
         </div>
 

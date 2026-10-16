@@ -1,11 +1,16 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { FeatureViewer } from '../src/features/feature-viewer/FeatureViewer';
+import { useAccordionStore } from '../src/stores/useAccordionStore';
 
 // @verifies spec-ft-core-epic-hub::REQ-001
 // @verifies spec-ft-core-epic-hub::REQ-004
 describe('FeatureViewer Component', () => {
+  beforeEach(() => {
+    useAccordionStore.setState({ collapsedByEntity: {} });
+  });
+
   const mockFeature = {
     id: '01-host-runtime',
     name: 'Host Runtime & Local Server',
@@ -274,5 +279,48 @@ describe('FeatureViewer Component', () => {
     const depPill = screen.getByText(/TASK-CORE-001-9 \(Unfinished Service\) \(Pending\)/);
     expect(depPill).toBeInTheDocument();
     expect(depPill.className).toContain('text-rose-400');
+  });
+
+  // @verifies spec-ft-core-assets-manager::REQ-012
+  it('preserves accordion expansion state per entity ID across switches', () => {
+    const feature1 = {
+      ...mockFeature,
+      id: 'ft-01-first',
+      name: 'First Feature',
+    };
+    const feature2 = {
+      ...mockFeature,
+      id: 'ft-02-second',
+      name: 'Second Feature',
+    };
+
+    // Render Feature 1
+    const { rerender } = render(<FeatureViewer key={feature1.id} feature={feature1} />);
+
+    // Initially assets panel is collapsed
+    const assetsHeaderF1 = screen.getByText('Assets');
+    fireEvent.click(assetsHeaderF1);
+
+    // Now in the store, ft-01-first assets is expanded (collapsed: false)
+    expect(useAccordionStore.getState().isSectionCollapsed('ft-01-first', 'assets', true)).toBe(false);
+
+    // Switch to Feature 2
+    rerender(<FeatureViewer key={feature2.id} feature={feature2} />);
+
+    // Feature 2's assets panel must still be in its own default state (collapsed: true)
+    expect(useAccordionStore.getState().isSectionCollapsed('ft-02-second', 'assets', true)).toBe(true);
+
+    // Expand Deep Dive on Feature 2
+    const deepDiveHeaderF2 = screen.getByText('Deep Dive');
+    fireEvent.click(deepDiveHeaderF2);
+    expect(useAccordionStore.getState().isSectionCollapsed('ft-02-second', 'deepDive', true)).toBe(false);
+
+    // Switch back to Feature 1
+    rerender(<FeatureViewer key={feature1.id} feature={feature1} />);
+
+    // Feature 1 preserves its opened Assets panel
+    expect(useAccordionStore.getState().isSectionCollapsed('ft-01-first', 'assets', true)).toBe(false);
+    // And its Deep Dive was never opened
+    expect(useAccordionStore.getState().isSectionCollapsed('ft-01-first', 'deepDive', true)).toBe(true);
   });
 });

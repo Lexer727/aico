@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { ShellLayout } from '../src/components/layout/ShellLayout';
@@ -7,6 +7,7 @@ import { ShellLayout } from '../src/components/layout/ShellLayout';
 // @verifies spec-ft-core-webui-shell::REQ-002
 // @verifies spec-ft-core-webui-shell::REQ-008
 // @verifies spec-ft-core-webui-shell::REQ-013
+// @verifies spec-ft-core-webui-shell::REQ-016
 describe('ShellLayout Component', () => {
   it('renders full-height left sidebar and accordion navigation items', () => {
     render(
@@ -37,20 +38,74 @@ describe('ShellLayout Component', () => {
     expect(screen.getByText(/Main Canvas Content/i)).toBeInTheDocument();
   });
 
-  it('renders responsive mobile drawer trigger when viewport is mobile', () => {
-    render(
-      <ShellLayout isMobile={true}>
-        <div>Mobile Canvas</div>
+  // @verifies spec-ft-core-webui-shell::REQ-013
+  // @verifies spec-ft-core-webui-shell::REQ-021
+  it('renders fixed mobile bottom navbar and supports full-screen view swapping and tree auto-transition', () => {
+    const onMobileViewChange = vi.fn();
+    const onSelectEpic = vi.fn();
+
+    const { rerender } = render(
+      <ShellLayout
+        isMobile={true}
+        activeMobileView="main"
+        onMobileViewChange={onMobileViewChange}
+        onSelectEpic={onSelectEpic}
+      >
+        <div>Mobile Canvas Content</div>
       </ShellLayout>
     );
 
-    // Hamburger trigger should be visible in mobile mode
-    const drawerToggle = screen.getByTestId('mobile-drawer-toggle');
-    expect(drawerToggle).toBeInTheDocument();
+    // Floating drawer trigger must NOT be rendered
+    expect(screen.queryByTestId('mobile-drawer-toggle')).not.toBeInTheDocument();
 
-    // Open drawer
-    fireEvent.click(drawerToggle);
-    const mobileDrawer = screen.getByTestId('mobile-drawer');
-    expect(mobileDrawer).toBeInTheDocument();
+    // Bottom navigation bar must be present with Tree, Main, Terminal tabs
+    const navbar = screen.getByTestId('mobile-bottom-navbar');
+    expect(navbar).toBeInTheDocument();
+    expect(navbar.className).toContain('pb-[env(safe-area-inset-bottom,0px)]');
+    expect(screen.getByTestId('mobile-tab-tree')).toBeInTheDocument();
+    expect(screen.getByTestId('mobile-tab-main')).toBeInTheDocument();
+    expect(screen.getByTestId('mobile-tab-terminal')).toBeInTheDocument();
+
+    // In 'main' view, main canvas content is rendered
+    expect(screen.getByText('Mobile Canvas Content')).toBeInTheDocument();
+
+    // Switch to 'tree' view
+    fireEvent.click(screen.getByTestId('mobile-tab-tree'));
+    expect(onMobileViewChange).toHaveBeenCalledWith('tree');
+
+    // Re-render with activeMobileView="tree"
+    rerender(
+      <ShellLayout
+        isMobile={true}
+        activeMobileView="tree"
+        onMobileViewChange={onMobileViewChange}
+        onSelectEpic={onSelectEpic}
+      >
+        <div>Mobile Canvas Content</div>
+      </ShellLayout>
+    );
+
+    // Full-screen tree view should be displayed
+    expect(screen.getByTestId('mobile-tree-view')).toBeInTheDocument();
+    expect(screen.queryByText('Mobile Canvas Content')).not.toBeInTheDocument();
+
+    // Click an epic in the tree view: must invoke onSelectEpic and auto-transition to 'main'
+    const epicNode = screen.getByTestId('nav-epic-ec-core');
+    fireEvent.click(epicNode);
+
+    expect(onSelectEpic).toHaveBeenCalledWith('ec-core');
+    expect(onMobileViewChange).toHaveBeenCalledWith('main');
+  });
+
+  it('does not render redundant workspace refresh button in sidebar header, preserving v0.1.1 version badge (REQ-016)', () => {
+    render(
+      <ShellLayout>
+        <div>Workspace Canvas</div>
+      </ShellLayout>
+    );
+
+    expect(screen.queryByTestId('refresh-workspace-btn')).not.toBeInTheDocument();
+    expect(screen.getByText('v0.1.1')).toBeInTheDocument();
   });
 });
+

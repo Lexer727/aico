@@ -4,6 +4,8 @@ pub mod registry;
 pub mod wizard;
 pub mod watcher;
 pub mod human_gate;
+pub mod config;
+pub mod skills_sync;
 
 pub use manifest::{ProjectManifest, ProjectRepository, ManifestError};
 pub use scanner::{RootScanner, DiscoveredProject, ProjectStatus};
@@ -14,3 +16,6 @@ pub use human_gate::{
     HumanGateManager, HumanGateError, PlanTask, TaskRole, TaskStatus,
     FrontierTransition, TaskUnblockedEvent,
 };
+pub use config::{AicoConfig, AssetsConfig};
+pub use skills_sync::{SkillsSynchronizer, SyncReport, SkillsSyncError};
+

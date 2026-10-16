@@ -1,13 +1,17 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 import { EpicHubView } from '../src/features/epic-hub/EpicHubView';
+import { useAccordionStore } from '../src/stores/useAccordionStore';
 
 // @verifies spec-ft-core-epic-hub::REQ-001
 // @verifies spec-ft-core-epic-hub::REQ-002
 // @verifies spec-ft-core-epic-hub::REQ-005
 // @verifies spec-ft-core-epic-hub::REQ-011
 describe('EpicHubView Component', () => {
+  beforeEach(() => {
+    useAccordionStore.setState({ collapsedByEntity: {} });
+  });
   const mockEpic = {
     id: '001-aico-core',
     title: 'AICO Core SDD Platform',
@@ -79,5 +83,67 @@ describe('EpicHubView Component', () => {
     expect(collapsedHandleProgress).toBeInTheDocument();
     expect(collapsedHandleProgress).toHaveTextContent('1/2');
     expect(collapsedHandleProgress).toHaveTextContent('Done (50%)');
+  });
+
+  // @verifies spec-ft-core-assets-manager::REQ-011
+  it('renders (x) count badge only when asset count is greater than zero and omits badge when zero', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/assets')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([
+            {
+              id: 'a1',
+              filename: 'diagram.png',
+              path: 'assets/diagram.png',
+              scope_type: 'epic',
+              scope_id: '001-aico-core',
+              source_label: '001-aico-core',
+              is_subfeature: false,
+              mime_type: 'image/png',
+              size_bytes: 1024,
+              updated_at: '2026-10-15T00:00:00Z',
+            },
+            {
+              id: 'a2',
+              filename: 'doc.txt',
+              path: 'assets/doc.txt',
+              scope_type: 'epic',
+              scope_id: '001-aico-core',
+              source_label: '001-aico-core',
+              is_subfeature: false,
+              mime_type: 'text/plain',
+              size_bytes: 512,
+              updated_at: '2026-10-15T00:00:00Z',
+            },
+          ]),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+    }));
+
+    const { rerender } = render(<EpicHubView epic={mockEpic} />);
+
+    // Non-zero asset count badge appears
+    const badge = await screen.findByTestId('asset-counter-badge');
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveTextContent('(2)');
+
+    // Now re-render with zero assets
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/assets')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([]),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+    }));
+
+    rerender(<EpicHubView epic={{ ...mockEpic, id: '002-empty-epic' }} />);
+    // Badge should not be in the document
+    await waitFor(() => {
+      expect(screen.queryByTestId('asset-counter-badge')).toBeNull();
+    });
   });
 });

@@ -58,3 +58,179 @@ fn test_workspace_registry_tracks_active_project() {
     let active = registry.get_active().expect("Active project should be set");
     assert_eq!(active.id, "alpha");
 }
+
+// @verifies spec-ft-core-skills-sync::REQ-001
+// @verifies spec-ft-core-skills-sync::REQ-002
+// @verifies spec-ft-core-skills-sync::REQ-003
+// @verifies spec-ft-core-skills-sync::REQ-004
+// @verifies spec-ft-core-skills-sync::REQ-005
+// @verifies spec-ft-core-skills-sync::REQ-006
+// @verifies spec-ft-core-skills-sync::REQ-008
+#[test]
+fn test_skills_synchronizer_updates_skills_rules_and_prunes_stale_entries() {
+    use aico_core::SkillsSynchronizer;
+
+    let temp_root = std::env::temp_dir().join(format!(
+        "aico_skills_sync_test_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+
+    let submodule_skills = temp_root.join("codebase").join("aico").join("skills");
+    let skill_start = submodule_skills.join("aico-start");
+    let skill_verify_scripts = submodule_skills.join("aico-verify").join("scripts");
+    let source_scripts = submodule_skills.join("scripts");
+    let source_rules = submodule_skills.join("rules");
+
+    fs::create_dir_all(&skill_start).unwrap();
+    fs::create_dir_all(&skill_verify_scripts).unwrap();
+    fs::create_dir_all(&source_scripts).unwrap();
+    fs::create_dir_all(&source_rules).unwrap();
+
+    fs::write(skill_start.join("SKILL.md"), "# AICO Start v0.1.2").unwrap();
+    fs::write(
+         submodule_skills.join("aico-verify").join("SKILL.md"),
+        "# AICO Verify v0.1.2",
+    )
+    .unwrap();
+    fs::write(
+        skill_verify_scripts.join("verify-artifacts.mjs"),
+        "console.log('verify');",
+    )
+    .unwrap();
+    fs::write(submodule_skills.join("VERSION"), "0.1.2\n").unwrap();
+    fs::write(submodule_skills.join("README.md"), "# Skills Catalog").unwrap();
+    fs::write(source_scripts.join("get-version.mjs"), "export default '0.1.2';").unwrap();
+    fs::write(source_rules.join("GEMINI.md"), "# Canonical 4-Phase GEMINI Rules").unwrap();
+    fs::write(source_rules.join("AGENTS.md"), "# Canonical 4-Phase AGENTS Rules").unwrap();
+
+    // Pre-populate stale .agents/skills entries and outdated GEMINI.md
+    let agents_skills = temp_root.join(".agents").join("skills");
+    let stale_skill = agents_skills.join("aico-obsolete-skill");
+    fs::create_dir_all(&stale_skill).unwrap();
+    fs::write(stale_skill.join("SKILL.md"), "# Obsolete Skill").unwrap();
+    fs::write(agents_skills.join("SKILL.md"), "# Stray root SKILL.md").unwrap();
+    fs::write(temp_root.join("GEMINI.md"), "# Old Manual GEMINI Rules").unwrap();
+
+    // First sync: should copy skills, metadata, scripts, rules, and prune stale entries
+    let report1 = SkillsSynchronizer::sync_workspace(&temp_root)
+        .expect("Workspace skills sync should succeed");
+    assert!(report1.files_updated > 0, "First sync should write files");
+    assert!(report1.entries_removed >= 2, "Should remove stale skill dir and stray SKILL.md");
+
+    // Verify skills and supporting files
+    assert_eq!(
+        fs::read_to_string(agents_skills.join("aico-start").join("SKILL.md")).unwrap(),
+        "# AICO Start v0.1.2"
+    );
+    assert_eq!(
+        fs::read_to_string(
+            agents_skills
+                .join("aico-verify")
+                .join("scripts")
+                .join("verify-artifacts.mjs")
+        )
+        .unwrap(),
+        "console.log('verify');"
+    );
+    assert_eq!(
+        fs::read_to_string(agents_skills.join("VERSION")).unwrap(),
+        "0.1.2\n"
+    );
+    assert_eq!(
+        fs::read_to_string(agents_skills.join("README.md")).unwrap(),
+        "# Skills Catalog"
+    );
+    assert_eq!(
+        fs::read_to_string(agents_skills.join("scripts").join("get-version.mjs")).unwrap(),
+        "export default '0.1.2';"
+    );
+
+    // Verify stale entries pruned
+    assert!(!stale_skill.exists(), "Stale aico-* directory should be pruned");
+    assert!(
+        !agents_skills.join("SKILL.md").exists(),
+        "Stray root .agents/skills/SKILL.md should be removed"
+    );
+
+    // Verify rule files synced to both <root>/GEMINI.md and <root>/.agents/rules/
+    assert_eq!(
+        fs::read_to_string(temp_root.join("GEMINI.md")).unwrap(),
+        "# Canonical 4-Phase GEMINI Rules"
+    );
+    assert_eq!(
+        fs::read_to_string(temp_root.join(".agents").join("rules").join("GEMINI.md")).unwrap(),
+        "# Canonical 4-Phase GEMINI Rules"
+    );
+    assert_eq!(
+        fs::read_to_string(temp_root.join(".agents").join("rules").join("AGENTS.md")).unwrap(),
+        "# Canonical 4-Phase AGENTS Rules"
+    );
+
+    // Second sync: idempotent content-diff check should result in 0 writes
+    let report2 = SkillsSynchronizer::sync_workspace(&temp_root)
+        .expect("Second workspace skills sync should succeed");
+    assert_eq!(
+        report2.files_updated, 0,
+        "Second sync with identical content should not rewrite any files"
+    );
+    assert!(report2.files_unchanged > 0);
+
+    let _ = fs::remove_dir_all(temp_root);
+}
+
+// @verifies spec-ft-core-skills-sync::REQ-007
+#[test]
+fn test_skills_synchronizer_graceful_when_submodule_missing() {
+    use aico_core::SkillsSynchronizer;
+
+    let temp_root = std::env::temp_dir().join(format!(
+        "aico_skills_sync_missing_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let existing_skill = temp_root.join(".agents").join("skills").join("aico-existing");
+    fs::create_dir_all(&existing_skill).unwrap();
+    fs::write(existing_skill.join("SKILL.md"), "# Keep Me").unwrap();
+
+    let report = SkillsSynchronizer::sync_workspace(&temp_root)
+        .expect("Missing submodule should not error out startup");
+    assert_eq!(report.files_updated, 0);
+    assert!(
+        existing_skill.join("SKILL.md").exists(),
+        "Existing .agents files must not be deleted when submodule is missing"
+    );
+
+    let _ = fs::remove_dir_all(temp_root);
+}
+
+// @verifies spec-ft-core-skills-sync::REQ-001
+// @verifies spec-ft-core-skills-sync::REQ-002
+// @verifies spec-ft-core-skills-sync::REQ-005
+// @verifies spec-ft-core-skills-sync::REQ-006
+#[test]
+fn test_real_aico_workspace_skills_and_rules_sync() {
+    use aico_core::SkillsSynchronizer;
+    use std::path::Path;
+
+    let root = Path::new("d:/aico");
+    if root.join("codebase/aico/skills").exists() {
+        let report = SkillsSynchronizer::sync_workspace(root)
+            .expect("Real d:/aico workspace sync should succeed");
+        assert!(report.skills_synced >= 22, "All 22+ aico-* skills should be synced");
+        assert!(root.join(".agents/skills/aico-start/SKILL.md").is_file());
+        assert!(root.join(".agents/skills/aico-feature/SKILL.md").is_file());
+        assert!(root.join(".agents/skills/aico-verify/SKILL.md").is_file());
+        assert!(root.join(".agents/skills/VERSION").is_file());
+        assert!(!root.join(".agents/skills/SKILL.md").exists());
+        assert!(root.join("GEMINI.md").is_file());
+        assert!(root.join(".agents/rules/GEMINI.md").is_file());
+        assert!(root.join(".agents/rules/AGENTS.md").is_file());
+    }
+}
+
+

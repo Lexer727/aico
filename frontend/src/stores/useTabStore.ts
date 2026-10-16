@@ -3,11 +3,12 @@ import { create } from 'zustand';
 export interface TabItem {
   id: string;
   title: string;
-  type: 'epic' | 'feature' | 'spec' | 'plan' | 'code' | 'adr' | 'glossary' | 'brainstorm' | 'deep_dive';
+  type: 'epic' | 'feature' | 'spec' | 'plan' | 'code' | 'adr' | 'glossary' | 'brainstorm' | 'deep_dive' | 'asset';
   path?: string;
 }
 
 interface TabState {
+  windowId: string;
   activeProjectId: string;
   tabsByProject: Record<string, TabItem[]>;
   activeTabId: string | null;
@@ -27,12 +28,28 @@ interface TabState {
   goBack: () => void;
   goForward: () => void;
   getProjectTabs: (projectId: string) => TabItem[];
+  replaceState: (newState: Partial<PersistedTabState>) => void;
   reset: () => void;
 }
 
-const STORAGE_KEY = 'aico_tab_store_v1';
+const STORAGE_KEY = 'aico_tab_store_session_v1';
+const WINDOW_ID_KEY = 'aico_window_id';
 
-interface PersistedTabState {
+export const getWindowId = (): string => {
+  if (typeof window === 'undefined') return 'win-server';
+  try {
+    let id = window.sessionStorage.getItem(WINDOW_ID_KEY);
+    if (!id) {
+      id = `win-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
+      window.sessionStorage.setItem(WINDOW_ID_KEY, id);
+    }
+    return id;
+  } catch {
+    return 'win-fallback';
+  }
+};
+
+export interface PersistedTabState {
   activeProjectId: string;
   tabsByProject: Record<string, TabItem[]>;
   activeTabId: string | null;
@@ -43,9 +60,9 @@ interface PersistedTabState {
 }
 
 const loadPersistedState = (): PersistedTabState | null => {
-  if (typeof window === 'undefined' || !window.localStorage) return null;
+  if (typeof window === 'undefined' || !window.sessionStorage) return null;
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.sessionStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === 'object') {
@@ -58,19 +75,13 @@ const loadPersistedState = (): PersistedTabState | null => {
 };
 
 const savePersistedState = (state: PersistedTabState) => {
-  if (typeof window === 'undefined' || !window.localStorage) return;
+  if (typeof window === 'undefined' || !window.sessionStorage) return;
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {
     // QuotaExceededError or restricted storage
   }
 };
-
-// Multi-window synchronization channel
-const syncChannel =
-  typeof window !== 'undefined' && 'BroadcastChannel' in window
-    ? new BroadcastChannel('aico_tabs_sync')
-    : null;
 
 // Clean up any legacy ?tab= query parameter from URL to maintain clean SPA
 if (typeof window !== 'undefined' && window.location && window.location.search.includes('tab=')) {
@@ -86,6 +97,7 @@ if (typeof window !== 'undefined' && window.location && window.location.search.i
 // @implements spec-ft-core-webui-shell::REQ-004
 // @implements spec-ft-core-webui-shell::REQ-005
 // @implements spec-ft-core-webui-shell::REQ-006
+// @implements spec-ft-core-webui-shell::REQ-017
 export const useTabStore = create<TabState>((set, get) => {
   const initial = loadPersistedState();
   const initialProjectId = initial?.activeProjectId || 'default';
@@ -95,6 +107,7 @@ export const useTabStore = create<TabState>((set, get) => {
   const initialHistoryIndex = typeof initial?.historyIndex === 'number' ? initial.historyIndex : 0;
   const initialTabCache = initial?.tabCache || {};
   const initialRecentlyClosedTabs = Array.isArray(initial?.recentlyClosedTabs) ? initial.recentlyClosedTabs : [];
+  const currentWindowId = getWindowId();
 
   const persistCurrentState = () => {
     const current = get();
@@ -109,45 +122,8 @@ export const useTabStore = create<TabState>((set, get) => {
     });
   };
 
-  const broadcastState = () => {
-    if (syncChannel) {
-      const state = get();
-      syncChannel.postMessage({
-        type: 'SYNC_TABS',
-        activeProjectId: state.activeProjectId,
-        tabsByProject: state.tabsByProject,
-        activeTabId: state.activeTabId,
-        history: state.history,
-        historyIndex: state.historyIndex,
-        tabCache: state.tabCache,
-        recentlyClosedTabs: state.recentlyClosedTabs,
-      });
-    }
-  };
-
-  // Listen for multi-window tab updates
-  if (syncChannel) {
-    syncChannel.onmessage = (event) => {
-      if (event.data?.type === 'SYNC_TABS') {
-        set({
-          activeProjectId: event.data.activeProjectId,
-          tabsByProject: event.data.tabsByProject,
-          activeTabId: event.data.activeTabId,
-          history: event.data.history || ['dashboard'],
-          historyIndex: event.data.historyIndex ?? 0,
-          canGoBack: (event.data.historyIndex ?? 0) > 0,
-          canGoForward:
-            (event.data.historyIndex ?? 0) <
-            (event.data.history ? event.data.history.length - 1 : 0),
-          tabCache: event.data.tabCache || {},
-          recentlyClosedTabs: event.data.recentlyClosedTabs || [],
-        });
-        persistCurrentState();
-      }
-    };
-  }
-
   return {
+    windowId: currentWindowId,
     activeProjectId: initialProjectId,
     tabsByProject: initialTabsByProject,
     activeTabId: initialActiveTabId,
@@ -174,7 +150,6 @@ export const useTabStore = create<TabState>((set, get) => {
         activeTabId: newActive,
       });
       persistCurrentState();
-      broadcastState();
     },
 
     openTab: (projectId: string, tab: TabItem) => {
@@ -213,7 +188,6 @@ export const useTabStore = create<TabState>((set, get) => {
         };
       });
       persistCurrentState();
-      broadcastState();
     },
 
     closeTab: (projectId: string, tabId: string) => {
@@ -270,7 +244,6 @@ export const useTabStore = create<TabState>((set, get) => {
         };
       });
       persistCurrentState();
-      broadcastState();
     },
 
     reorderTabs: (projectId: string, fromIndex: number, toIndex: number) => {
@@ -295,7 +268,6 @@ export const useTabStore = create<TabState>((set, get) => {
         };
       });
       persistCurrentState();
-      broadcastState();
     },
 
     setProjectTabs: (projectId: string, tabs: TabItem[]) => {
@@ -306,7 +278,6 @@ export const useTabStore = create<TabState>((set, get) => {
         },
       }));
       persistCurrentState();
-      broadcastState();
     },
 
     reopenLastClosedTab: (projectId?: string) => {
@@ -338,7 +309,6 @@ export const useTabStore = create<TabState>((set, get) => {
         };
       });
       persistCurrentState();
-      broadcastState();
     },
 
     goBack: () => {
@@ -369,7 +339,6 @@ export const useTabStore = create<TabState>((set, get) => {
         canGoForward: newIndex < state.history.length - 1,
       });
       persistCurrentState();
-      broadcastState();
     },
 
     goForward: () => {
@@ -400,17 +369,33 @@ export const useTabStore = create<TabState>((set, get) => {
         canGoForward: newIndex < state.history.length - 1,
       });
       persistCurrentState();
-      broadcastState();
     },
 
     getProjectTabs: (projectId: string) => {
       return get().tabsByProject[projectId] || [];
     },
 
+    replaceState: (newState: Partial<PersistedTabState>) => {
+      set((state) => {
+        const updated = {
+          ...state,
+          ...newState,
+        };
+        const hist = updated.history || ['dashboard'];
+        const idx = typeof updated.historyIndex === 'number' ? updated.historyIndex : 0;
+        return {
+          ...updated,
+          canGoBack: idx > 0,
+          canGoForward: idx < hist.length - 1,
+        };
+      });
+      persistCurrentState();
+    },
+
     reset: () => {
-      if (typeof window !== 'undefined' && window.localStorage) {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
         try {
-          window.localStorage.removeItem(STORAGE_KEY);
+          window.sessionStorage.removeItem(STORAGE_KEY);
         } catch {}
       }
       set({

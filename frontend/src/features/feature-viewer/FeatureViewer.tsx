@@ -14,8 +14,9 @@ import {
   Crosshair,
   FolderGit2,
 } from 'lucide-react';
-import { FileDropZone } from '../../components/common/FileDropZone';
+import { AssetPanel, type DiscoveredAssetInfo } from '../assets/AssetPanel';
 import { MarkdownView, stripDocumentHeader, extractExecutiveSummary } from '../../components/common/MarkdownView';
+import { useAccordionStore } from '../../stores/useAccordionStore';
 import {
   fetchFeature,
   normalizeAdrId,
@@ -73,12 +74,18 @@ export interface FeatureViewerProps {
   onOpenSpec?: (specId: string, title: string) => void;
   onOpenPlan?: (planId: string, title: string) => void;
   onOpenAdr?: (adrId: string) => void;
+  onOpenAsset?: (asset: DiscoveredAssetInfo) => void;
   uploadedFiles?: string[];
   onFileUpload?: (file: File) => void;
 }
 
 // @implements spec-ft-core-epic-hub::REQ-001
 // @implements spec-ft-core-epic-hub::REQ-004
+// @implements spec-ft-core-assets-manager::REQ-005
+// @implements spec-ft-core-assets-manager::REQ-006
+// @implements spec-ft-core-assets-manager::REQ-007
+// @implements spec-ft-core-assets-manager::REQ-011
+// @implements spec-ft-core-assets-manager::REQ-012
 export const FeatureViewer: React.FC<FeatureViewerProps> = ({
   feature: initialFeature,
   allFeatures,
@@ -88,10 +95,12 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
   onOpenSpec,
   onOpenPlan,
   onOpenAdr,
-  uploadedFiles = [],
-  onFileUpload,
+  onOpenAsset,
+  uploadedFiles: _uploadedFiles = [],
+  onFileUpload: _onFileUpload,
 }) => {
   const [feature, setFeature] = useState<FeatureData>(initialFeature);
+  const [assetCount, setAssetCount] = useState<number>(0);
 
   // Sync state if initialFeature prop changes
   // @implements spec-ft-core-repository-badges-alignment::REQ-005
@@ -104,6 +113,7 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
           ? initialFeature.repositories
           : prev.repositories,
     }));
+    setAssetCount(0);
   }, [initialFeature]);
 
   // Fetch full live artifact data if details are missing
@@ -147,23 +157,29 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
     };
   }, [initialFeature.id]);
 
-  // Accordion state:
-  // Left column (Brainstorm, ADRs, Deep Dive, Specs, Assets): closed by default (true)
-  // Right column (Task Plan): open by default (false)
-  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
-    brainstorm: true,
-    adrs: true,
-    deepDive: true,
-    specifications: true,
-    assets: true,
-    taskPlan: false,
-  });
+  const entityCollapsed = useAccordionStore((s) => s.collapsedByEntity[feature.id]);
+  const toggleSectionInStore = useAccordionStore((s) => s.toggleSection);
+
+  const isCollapsed = (section: string) => {
+    const def = section === 'taskPlan' ? false : true;
+    if (!entityCollapsed || entityCollapsed[section] === undefined) {
+      return def;
+    }
+    return entityCollapsed[section];
+  };
 
   const toggleSection = (section: string) => {
-    setCollapsedSections((prev) => ({
-      ...prev,
-      [section]: !prev[section],
-    }));
+    const def = section === 'taskPlan' ? false : true;
+    toggleSectionInStore(feature.id, section, def);
+  };
+
+  const collapsedSections = {
+    brainstorm: isCollapsed('brainstorm'),
+    adrs: isCollapsed('adrs'),
+    deepDive: isCollapsed('deepDive'),
+    specifications: isCollapsed('specifications'),
+    assets: isCollapsed('assets'),
+    taskPlan: isCollapsed('taskPlan'),
   };
 
   const isStandalone = Boolean(
@@ -707,6 +723,14 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
                 )}
                 <FolderArchive className="w-4 h-4 text-amber-400 flex-shrink-0" />
                 <span className="font-semibold text-sm text-zinc-200">Assets</span>
+                {assetCount > 0 && (
+                  <span
+                    data-testid="asset-counter-badge"
+                    className="text-[11px] font-mono font-medium text-amber-300 bg-amber-950/80 px-1.5 py-0.5 rounded border border-amber-800/80"
+                  >
+                    ({assetCount})
+                  </span>
+                )}
                 {collapsedSections.assets && (
                   <span className="text-xs text-zinc-500 truncate ml-2 italic">
                     — Attached artifacts and multimodal drops
@@ -725,20 +749,14 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
                 <ExternalLink className="w-3.5 h-3.5" />
               </button>
             </div>
-            {!collapsedSections.assets && (
-              <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-3">
-                <div className="pt-1">
-                  <FileDropZone onFileUpload={(f) => onFileUpload?.(f)}>
-                    <span>Drag & drop design mockups, logs, or audio files for this feature</span>
-                  </FileDropZone>
-                  {uploadedFiles.length > 0 && (
-                    <div className="text-[11px] text-zinc-400 mt-2">
-                      Attached: {uploadedFiles.join(', ')}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
+            <div className={`p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 ${collapsedSections.assets ? 'hidden' : 'block'}`}>
+              <AssetPanel
+                scopeType="feature"
+                scopeId={feature.id}
+                onOpenAsset={onOpenAsset}
+                onCountChange={setAssetCount}
+              />
+            </div>
           </div>
         </div>
 

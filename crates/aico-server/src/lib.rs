@@ -4,6 +4,7 @@ pub mod auth;
 pub mod assets;
 pub mod git;
 pub mod terminal;
+pub mod quotas;
 
 pub use server::{
     AppState, DiscoveredEpic, DiscoveredSpecInfo, HealthResponse, HostServer, ServerConfig,

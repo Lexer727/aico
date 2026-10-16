@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
+import clsx from 'clsx';
 import {
-  Menu,
   ChevronDown,
   ChevronRight,
   Folder,
@@ -11,8 +11,11 @@ import {
   Settings,
   Package,
   Scale,
+  FolderTree,
+  LayoutGrid,
+  Terminal,
 } from 'lucide-react';
-import { ActivityMonitor } from './ActivityMonitor';
+import { AiStatusMonitor } from './AiStatusMonitor';
 import type {
   DiscoveredEpic,
   DiscoveredFeature,
@@ -20,10 +23,13 @@ import type {
 } from '../../features/feature-task-data';
 import { createSearchIndex, searchWorkspace } from '../../utils/searchEngine';
 
+export type MobileViewType = 'tree' | 'main' | 'terminal';
+
 export interface DiscoveredFeatureNav {
   id: string;
   name: string;
   epicId: string;
+  status?: string;
   isStandalone?: boolean;
 }
 
@@ -44,6 +50,8 @@ export interface DiscoveredAdrNav {
 export interface ShellLayoutProps {
   children: React.ReactNode;
   isMobile?: boolean;
+  activeMobileView?: MobileViewType;
+  onMobileViewChange?: (view: MobileViewType) => void;
   epics?: DiscoveredEpicNav[];
   features?: DiscoveredFeatureNav[];
   adrs?: DiscoveredAdrNav[];
@@ -57,6 +65,8 @@ export interface ShellLayoutProps {
   onSelectAdr?: (adrId: string) => void;
   onOpenSettings?: () => void;
   onOpenOmniSearch?: () => void;
+  onRefreshWorkspace?: () => void;
+  isRefreshing?: boolean;
 }
 
 const defaultEpics: DiscoveredEpicNav[] = [
@@ -135,12 +145,15 @@ const defaultAdrs: DiscoveredAdrNav[] = [
 // @implements spec-ft-core-webui-shell::REQ-008
 // @implements spec-ft-core-webui-shell::REQ-012
 // @implements spec-ft-core-webui-shell::REQ-013
+// @implements spec-ft-core-webui-shell::REQ-016
 // @implements spec-ft-core-epic-hub::REQ-001
 // @implements spec-ft-core-omni-search-fulltext::REQ-003
 // @implements spec-ft-core-omni-search-fulltext::REQ-004
 export const ShellLayout: React.FC<ShellLayoutProps> = ({
   children,
   isMobile = false,
+  activeMobileView,
+  onMobileViewChange,
   epics = defaultEpics,
   features = defaultFeatures,
   adrs = defaultAdrs,
@@ -154,8 +167,42 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
   onSelectAdr,
   onOpenSettings,
   onOpenOmniSearch: _onOpenOmniSearch,
+  onRefreshWorkspace: _onRefreshWorkspace,
+  isRefreshing: _isRefreshing = false,
 }) => {
-  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [internalMobileView, setInternalMobileView] = useState<MobileViewType>('main');
+  const currentMobileView = activeMobileView ?? internalMobileView;
+
+  const handleMobileViewChange = (view: MobileViewType) => {
+    setInternalMobileView(view);
+    onMobileViewChange?.(view);
+  };
+
+  const handleSelectEpic = (epicId: string) => {
+    onSelectEpic?.(epicId);
+    if (isMobile) handleMobileViewChange('main');
+  };
+
+  const handleSelectFeature = (featureId: string, name: string) => {
+    onSelectFeature?.(featureId, name);
+    if (isMobile) handleMobileViewChange('main');
+  };
+
+  const handleSelectSpec = (specId: string, title: string) => {
+    onSelectSpec?.(specId, title);
+    if (isMobile) handleMobileViewChange('main');
+  };
+
+  const handleSelectCode = (file: string) => {
+    onSelectCode?.(file);
+    if (isMobile) handleMobileViewChange('main');
+  };
+
+  const handleSelectAdr = (adrId: string) => {
+    onSelectAdr?.(adrId);
+    if (isMobile) handleMobileViewChange('main');
+  };
+
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     epics: true,
     features: true,
@@ -216,6 +263,7 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
         id: f.id,
         name: f.name || f.id,
         epicId: f.epic_id || (f as any).epicId || '',
+        status: f.status,
         isStandalone: f.is_standalone ?? (f as any).isStandalone ?? false,
       }));
     }
@@ -312,6 +360,7 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
           <span>AICO WORKSPACE</span>
         </div>
         {/* @implements spec-ft-core-ui-visual-consistency::REQ-001 */}
+        {/* @implements spec-ft-core-webui-shell::REQ-016 */}
         <div className="flex items-center gap-1.5">
           <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400" title="AICO Platform Version">
             v0.1.1
@@ -417,7 +466,7 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
                     <div
                       key={epic.id}
                       data-testid={`nav-epic-${epic.id}`}
-                      onClick={() => onSelectEpic?.(epic.id)}
+                      onClick={() => handleSelectEpic(epic.id)}
                       className="py-1 px-2 hover:bg-zinc-800/60 rounded cursor-pointer flex items-center justify-between group transition-colors"
                     >
                       <span className="group-hover:text-zinc-200 font-medium">{epic.id}</span>
@@ -465,7 +514,7 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
                     <div
                       key={feat.id}
                       data-testid={`nav-feature-${feat.id}`}
-                      onClick={() => onSelectFeature?.(feat.id, feat.name)}
+                      onClick={() => handleSelectFeature(feat.id, feat.name)}
                       className="py-1 px-2 hover:bg-zinc-800/60 rounded cursor-pointer flex items-center justify-between group transition-colors"
                       title={`${feat.id}: ${feat.name} (${feat.epicId})`}
                     >
@@ -517,7 +566,7 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
                   filteredSpecs.map((sp) => (
                     <div
                       key={sp.id}
-                      onClick={() => onSelectSpec?.(sp.id, sp.title)}
+                      onClick={() => handleSelectSpec(sp.id, sp.title)}
                       className="py-1 px-2 hover:bg-zinc-800/60 rounded cursor-pointer truncate text-zinc-400 hover:text-zinc-200 transition-colors"
                       title={`${sp.id}: ${sp.title}`}
                     >
@@ -562,7 +611,7 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
                   filteredCode.map((file) => (
                     <div
                       key={file}
-                      onClick={() => onSelectCode?.(file)}
+                      onClick={() => handleSelectCode(file)}
                       className="flex items-center gap-1.5 py-1 px-2 hover:bg-zinc-800/60 rounded cursor-pointer text-zinc-400 hover:text-zinc-200 transition-colors truncate"
                       title={file}
                     >
@@ -608,7 +657,7 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
                   filteredAdrs.map((adr) => (
                     <div
                       key={adr.id}
-                      onClick={() => onSelectAdr?.(adr.id)}
+                      onClick={() => handleSelectAdr(adr.id)}
                       className="py-1 px-2 hover:bg-zinc-800/60 rounded cursor-pointer truncate text-zinc-400 hover:text-zinc-200 transition-colors"
                       title={`${adr.id}: ${adr.title}`}
                     >
@@ -623,9 +672,9 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
         )}
       </div>
 
-      {/* Sidebar Bottom: Activity Monitor & Settings Button */}
+      {/* Sidebar Bottom: AI Status Monitor & Settings Button */}
       <div className="p-3 border-t border-zinc-800 bg-zinc-950/60 space-y-2">
-        <ActivityMonitor />
+        <AiStatusMonitor />
 
         <div className="flex items-center justify-between pt-1">
           <button
@@ -644,49 +693,81 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
   );
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-zinc-950 font-sans text-zinc-100">
+    <div className="flex flex-col md:flex-row h-full min-h-[100dvh] h-[100dvh] w-full max-w-full overflow-hidden bg-zinc-950 font-sans text-zinc-100">
       {/* Desktop Full-Height Sidebar */}
       {!isMobile && (
         <aside
           data-testid="left-sidebar"
-          className="h-screen w-64 flex-shrink-0 z-20 flex flex-col"
+          className="h-screen w-64 flex-shrink-0 z-30 flex flex-col"
         >
           {renderNavContent()}
         </aside>
       )}
 
-      {/* Mobile Drawer Trigger & Slide-Over */}
+      {/* Main Content Area */}
+      <main className="flex-1 flex flex-col min-h-0 overflow-hidden min-w-0 bg-zinc-950 relative">
+        {isMobile && currentMobileView === 'tree' ? (
+          <div data-testid="mobile-tree-view" className="flex-1 overflow-y-auto h-full w-full">
+            {renderNavContent()}
+          </div>
+        ) : (
+          children
+        )}
+      </main>
+
+      {/* Mobile Bottom Navigation Bar */}
+      {/* @implements spec-ft-core-webui-shell::REQ-013 */}
       {isMobile && (
-        <>
+        <nav
+          data-testid="mobile-bottom-navbar"
+          className="min-h-14 h-[calc(3.5rem+env(safe-area-inset-bottom,0px))] pb-[env(safe-area-inset-bottom,0px)] bg-zinc-900 border-t border-zinc-800 flex items-center justify-around z-30 shrink-0 px-2"
+        >
           <button
-            data-testid="mobile-drawer-toggle"
-            onClick={() => setMobileDrawerOpen(!mobileDrawerOpen)}
-            className="fixed top-3 left-3 z-40 p-2 rounded-lg bg-zinc-800 text-zinc-100 shadow-lg border border-zinc-700"
+            type="button"
+            data-testid="mobile-tab-tree"
+            onClick={() => handleMobileViewChange('tree')}
+            className={clsx(
+              'flex flex-col items-center justify-center flex-1 py-1 px-2 rounded transition-colors cursor-pointer',
+              currentMobileView === 'tree'
+                ? 'text-indigo-400 font-semibold'
+                : 'text-zinc-400 hover:text-zinc-200'
+            )}
           >
-            <Menu className="w-5 h-5" />
+            <FolderTree className="w-5 h-5 mb-0.5" />
+            <span className="text-[10px] tracking-tight">Tree</span>
           </button>
 
-          {mobileDrawerOpen && (
-            <div
-              data-testid="mobile-drawer"
-              className="fixed inset-0 z-50 flex bg-black/60 backdrop-blur-sm"
-              onClick={() => setMobileDrawerOpen(false)}
-            >
-              <div
-                className="w-72 h-full shadow-2xl"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {renderNavContent()}
-              </div>
-            </div>
-          )}
-        </>
-      )}
+          <button
+            type="button"
+            data-testid="mobile-tab-main"
+            onClick={() => handleMobileViewChange('main')}
+            className={clsx(
+              'flex flex-col items-center justify-center flex-1 py-1 px-2 rounded transition-colors cursor-pointer',
+              currentMobileView === 'main'
+                ? 'text-indigo-400 font-semibold'
+                : 'text-zinc-400 hover:text-zinc-200'
+            )}
+          >
+            <LayoutGrid className="w-5 h-5 mb-0.5" />
+            <span className="text-[10px] tracking-tight">Main</span>
+          </button>
 
-      {/* Main Content Area */}
-      <main className="flex-1 flex flex-col h-full overflow-hidden min-w-0 bg-zinc-950 relative">
-        {children}
-      </main>
+          <button
+            type="button"
+            data-testid="mobile-tab-terminal"
+            onClick={() => handleMobileViewChange('terminal')}
+            className={clsx(
+              'flex flex-col items-center justify-center flex-1 py-1 px-2 rounded transition-colors cursor-pointer',
+              currentMobileView === 'terminal'
+                ? 'text-indigo-400 font-semibold'
+                : 'text-zinc-400 hover:text-zinc-200'
+            )}
+          >
+            <Terminal className="w-5 h-5 mb-0.5" />
+            <span className="text-[10px] tracking-tight">Terminal</span>
+          </button>
+        </nav>
+      )}
     </div>
   );
 };
