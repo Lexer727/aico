@@ -15,8 +15,8 @@ fn test_parse_valid_manifest() {
         .expect("Valid manifest should parse successfully");
 
     assert_eq!(manifest.name, "aico");
-    assert_eq!(manifest.version, "0.1.0");
-    assert_eq!(manifest.codebase_path, "../codebase/aico");
+    assert_eq!(manifest.version.as_deref(), Some("0.1.0"));
+    assert_eq!(manifest.codebase_path.as_deref(), Some("../codebase/aico"));
     assert_eq!(manifest.created_at, Some("2026-10-05T18:45:00Z".to_string()));
 }
 
@@ -44,12 +44,19 @@ fn test_resolve_relative_codebase_path() {
 #[test]
 fn test_reject_manifest_missing_required_fields() {
     let invalid_json = r#"{
-        "name": "missing-codebase",
         "version": "1.0.0"
     }"#;
 
     let result = ProjectManifest::from_json_str(invalid_json);
-    assert!(result.is_err(), "Manifest missing codebase_path must be rejected");
+    assert!(result.is_err(), "Manifest missing name must be rejected");
+
+    let minimal_json = r#"{
+        "name": "minimal-project"
+    }"#;
+    let manifest = ProjectManifest::from_json_str(minimal_json).expect("Minimal manifest with only name should parse");
+    assert_eq!(manifest.name, "minimal-project");
+    assert!(manifest.codebase_path.is_none());
+    assert!(manifest.version.is_none());
 }
 
 // @verifies spec-ft-core-discovery::REQ-007
@@ -72,11 +79,9 @@ fn test_manifest_multi_repo_parsing() {
     // 1. Explicit repositories declared
     let multi_repo_json = r#"{
         "name": "aico",
-        "version": "0.1.1",
-        "codebase_path": "../codebase/aico",
         "repositories": [
-            { "id": "aico", "name": "AICO Engine & WebUI", "path": "d:/dev/aico", "type": "codebase" },
-            { "id": "aico-specs", "name": "AICO Specs", "path": "d:/aico/aico-specs", "type": "specs" },
+            { "id": "aico", "name": "AICO Engine & WebUI", "path": "d:/dev/aico", "type": "codebase", "url": "https://github.com/Lexer727/aico" },
+            { "id": "aico-specs", "name": "AICO Specs", "path": "d:/aico/aico-specs", "type": "specs", "url": "https://github.com/Lexer727/aico-specs" },
             { "id": "aico-skills", "name": "AICO Skills Suite", "path": "d:/aico/codebase/aico-skills", "type": "skills" }
         ]
     }"#;
@@ -89,14 +94,18 @@ fn test_manifest_multi_repo_parsing() {
     assert_eq!(repos.len(), 3);
     assert_eq!(repos[0].id, "aico");
     assert_eq!(repos[0].repo_type, "codebase");
+    assert_eq!(repos[0].url.as_deref(), Some("https://github.com/Lexer727/aico"));
     assert_eq!(repos[1].id, "aico-specs");
     assert_eq!(repos[1].repo_type, "specs");
+    assert_eq!(repos[1].url.as_deref(), Some("https://github.com/Lexer727/aico-specs"));
     assert_eq!(repos[2].id, "aico-skills");
     assert_eq!(repos[2].repo_type, "skills");
+    assert_eq!(repos[2].url, None);
 
     let specs_dir = PathBuf::from("d:/aico/aico-specs");
     let effective = manifest.get_effective_repositories(&specs_dir);
     assert_eq!(effective.len(), 3);
+    assert_eq!(effective[0].url.as_deref(), Some("https://github.com/Lexer727/aico"));
 
     // 2. Fallback when repositories is omitted
     let single_repo_json = r#"{

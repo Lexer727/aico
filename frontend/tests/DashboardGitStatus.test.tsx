@@ -14,6 +14,7 @@ describe('DashboardView Git Repositories Status', () => {
       name: 'AICO Engine & WebUI',
       path: 'd:/dev/aico',
       type: 'codebase',
+      url: 'https://github.com/Lexer727/aico',
       is_available: true,
       branch: 'main',
       upstream: 'origin/main',
@@ -36,6 +37,7 @@ describe('DashboardView Git Repositories Status', () => {
       name: 'AICO Specs',
       path: 'd:/aico/aico-specs',
       type: 'specs',
+      url: 'https://github.com/Lexer727/aico-specs',
       is_available: true,
       branch: 'master',
       upstream: 'origin/master',
@@ -117,5 +119,24 @@ describe('DashboardView Git Repositories Status', () => {
     expect(typeBadge).toHaveTextContent('specs');
     expect(typeBadge).toHaveClass('text-sky-400');
     expect(typeBadge).toHaveClass('bg-sky-950/80');
+  });
+
+  // @verifies spec-ft-git-backend-status::REQ-002
+  it('renders remote github/external link when repo url is configured', () => {
+    render(
+      <DashboardView
+        onOpenEpic={vi.fn()}
+        onOpenSpec={vi.fn()}
+        gitStatuses={mockGitStatuses}
+      />
+    );
+
+    const aicoLink = screen.getByTestId('git-repo-url-aico');
+    expect(aicoLink).toBeInTheDocument();
+    expect(aicoLink).toHaveAttribute('href', 'https://github.com/Lexer727/aico');
+    expect(aicoLink).toHaveAttribute('target', '_blank');
+    expect(aicoLink).toHaveAttribute('rel', 'noopener noreferrer');
+
+    expect(screen.queryByTestId('git-repo-url-missing-repo')).toBeNull();
   });
 });

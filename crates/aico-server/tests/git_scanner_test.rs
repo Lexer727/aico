@@ -44,10 +44,12 @@ async fn test_git_status_scanner_missing_path() {
         "missing-repo",
         "Missing Repository",
         "d:/non_existent_directory_for_git_testing_xyz_123",
-        "codebase"
+        "codebase",
+        Some("https://github.com/example/missing-repo"),
     ).await;
 
     assert!(!status.is_available, "Non-existent path must report is_available: false");
+    assert_eq!(status.url.as_deref(), Some("https://github.com/example/missing-repo"));
     assert!(status.error.is_some());
     assert!(status.error.unwrap().contains("does not exist"));
 }

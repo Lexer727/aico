@@ -16,7 +16,8 @@ pub struct DiscoveredProject {
     pub id: String,
     pub name: String,
     pub specs_path: PathBuf,
-    pub codebase_path: PathBuf,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub codebase_path: Option<PathBuf>,
     pub manifest: ProjectManifest,
     pub status: ProjectStatus,
 }
@@ -50,12 +51,11 @@ impl RootScanner {
                         .map_err(|e| ManifestError::JsonParseError(e.to_string()))?;
 
                     let manifest = ProjectManifest::from_json_str(&content)?;
-                    let codebase_path = manifest.resolve_codebase_path(&path)?;
+                    let codebase_path = manifest.resolve_codebase_path(&path);
 
-                    let status = if codebase_path.exists() {
-                        ProjectStatus::Active
-                    } else {
-                        ProjectStatus::CodebaseMissing
+                    let status = match codebase_path {
+                        Some(ref cb) if !cb.exists() => ProjectStatus::CodebaseMissing,
+                        _ => ProjectStatus::Active,
                     };
 
                     discovered.push(DiscoveredProject {

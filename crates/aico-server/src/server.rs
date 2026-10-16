@@ -1565,7 +1565,7 @@ async fn get_git_status_handler(
     let mut scan_futures = Vec::new();
     for repo in repos {
         scan_futures.push(async move {
-            GitStatusScanner::scan_repo(&repo.id, &repo.name, &repo.path, &repo.repo_type).await
+            GitStatusScanner::scan_repo(&repo.id, &repo.name, &repo.path, &repo.repo_type, repo.url.as_deref()).await
         });
     }
 

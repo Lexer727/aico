@@ -17,6 +17,8 @@ pub struct GitRepoStatus {
     pub path: String,
     #[serde(rename = "type")]
     pub repo_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
     pub is_available: bool,
     pub branch: Option<String>,
     pub upstream: Option<String>,
@@ -36,14 +38,17 @@ impl GitStatusScanner {
     // @implements spec-ft-git-backend-status::REQ-003
     // @implements spec-ft-git-backend-status::REQ-004
     // @implements spec-ft-git-backend-status::REQ-006
-    pub async fn scan_repo(id: &str, name: &str, path: &str, repo_type: &str) -> GitRepoStatus {
+    // @implements spec-ft-git-backend-status::REQ-007
+    pub async fn scan_repo(id: &str, name: &str, path: &str, repo_type: &str, url: Option<&str>) -> GitRepoStatus {
         let path_obj = Path::new(path);
+        let url_owned = url.map(|u| u.to_string());
         if !path_obj.exists() {
             return GitRepoStatus {
                 id: id.to_string(),
                 name: name.to_string(),
                 path: path.to_string(),
                 repo_type: repo_type.to_string(),
+                url: url_owned,
                 is_available: false,
                 branch: None,
                 upstream: None,
@@ -74,6 +79,7 @@ impl GitStatusScanner {
                         name: name.to_string(),
                         path: path.to_string(),
                         repo_type: repo_type.to_string(),
+                        url: url_owned.clone(),
                         is_available: false,
                         branch: None,
                         upstream: None,
@@ -95,6 +101,7 @@ impl GitStatusScanner {
                     name: name.to_string(),
                     path: path.to_string(),
                     repo_type: repo_type.to_string(),
+                    url: url_owned,
                     is_available: false,
                     branch: None,
                     upstream: None,
@@ -115,6 +122,7 @@ impl GitStatusScanner {
         parsed.name = name.to_string();
         parsed.path = path.to_string();
         parsed.repo_type = repo_type.to_string();
+        parsed.url = url_owned;
         parsed.is_available = true;
 
         if let Ok(log_output) = Command::new("git")
@@ -191,6 +199,7 @@ impl GitStatusScanner {
             name: String::new(),
             path: String::new(),
             repo_type: "codebase".to_string(),
+            url: None,
             is_available: true,
             branch,
             upstream,

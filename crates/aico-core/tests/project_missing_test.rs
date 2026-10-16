@@ -27,14 +27,15 @@ fn test_missing_codebase_handling() {
 
     // Status must be flagged as CodebaseMissing
     assert_eq!(project.status, ProjectStatus::CodebaseMissing);
-    assert!(!project.codebase_path.exists());
+    let cb_path = project.codebase_path.as_ref().expect("codebase_path should be present");
+    assert!(!cb_path.exists());
 
     // Use CodebaseWizard to initialize empty codebase
     let wizard = CodebaseWizard::new();
-    wizard.initialize_codebase(&project.codebase_path).expect("Failed to initialize empty codebase");
+    wizard.initialize_codebase(cb_path).expect("Failed to initialize empty codebase");
 
-    assert!(project.codebase_path.exists());
-    assert!(project.codebase_path.join(".git").exists());
+    assert!(cb_path.exists());
+    assert!(cb_path.join(".git").exists());
 
     // Rescan: status should now be Active
     let rescanned = RootScanner::scan(&temp_dir).unwrap();

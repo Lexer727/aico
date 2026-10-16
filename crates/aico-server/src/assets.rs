@@ -168,8 +168,10 @@ pub async fn get_effective_codebase_path(state: &AppState) -> Option<PathBuf> {
         .or_else(|| registry.list_cloned().into_iter().next());
 
     if let Some(proj) = active_project {
-        if proj.codebase_path.exists() {
-            return Some(proj.codebase_path.clone());
+        if let Some(ref cb) = proj.codebase_path {
+            if cb.exists() {
+                return Some(cb.clone());
+            }
         }
     }
     None

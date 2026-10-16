@@ -8,6 +8,7 @@ import {
   AlertCircle,
   RefreshCw,
   FolderGit2,
+  ExternalLink,
 } from 'lucide-react';
 import { fetchGitStatus, type GitRepoStatus } from '../feature-task-data';
 
@@ -140,8 +141,22 @@ export const GitRepositoriesCard: React.FC<GitRepositoriesCardProps> = ({
             {/* Header: Name and Type badge */}
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <div className="font-semibold text-xs text-zinc-100 truncate" title={repo.name}>
-                  {repo.name}
+                <div className="flex items-center gap-1.5">
+                  <div className="font-semibold text-xs text-zinc-100 truncate" title={repo.name}>
+                    {repo.name}
+                  </div>
+                  {repo.url && (
+                    <a
+                      href={repo.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={`Open ${repo.name} on GitHub / Remote`}
+                      data-testid={`git-repo-url-${repo.id}`}
+                      className="text-zinc-500 hover:text-indigo-400 transition-colors shrink-0"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
                 </div>
                 <div className="font-mono text-[10px] text-zinc-500 truncate" title={repo.path}>
                   {repo.id}

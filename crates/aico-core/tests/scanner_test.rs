@@ -23,7 +23,7 @@ fn test_root_scanner_discovers_specs_and_codebases() {
     assert_eq!(discovered.len(), 1, "Should discover exactly 1 project");
     assert_eq!(discovered[0].name, "alpha");
     assert_eq!(discovered[0].specs_path, project_specs);
-    assert_eq!(discovered[0].codebase_path, codebase_dir);
+    assert_eq!(discovered[0].codebase_path, Some(codebase_dir));
 
     // Cleanup
     let _ = fs::remove_dir_all(temp_root);
@@ -38,11 +38,11 @@ fn test_workspace_registry_tracks_active_project() {
         id: "alpha".to_string(),
         name: "alpha".to_string(),
         specs_path: PathBuf::from("d:/aico/alpha-specs"),
-        codebase_path: PathBuf::from("d:/aico/codebase/alpha"),
+        codebase_path: Some(PathBuf::from("d:/aico/codebase/alpha")),
         manifest: ProjectManifest {
             name: "alpha".to_string(),
-            version: "0.1.0".to_string(),
-            codebase_path: "../codebase/alpha".to_string(),
+            version: Some("0.1.0".to_string()),
+            codebase_path: Some("../codebase/alpha".to_string()),
             created_at: None,
             repositories: None,
         },

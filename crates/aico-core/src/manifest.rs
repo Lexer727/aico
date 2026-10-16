@@ -21,6 +21,8 @@ pub struct ProjectRepository {
     pub path: String,
     #[serde(rename = "type", default = "default_repo_type")]
     pub repo_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
 }
 
 fn default_repo_type() -> String {
@@ -30,9 +32,11 @@ fn default_repo_type() -> String {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ProjectManifest {
     pub name: String,
-    pub version: String,
-    pub codebase_path: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub codebase_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub repositories: Option<Vec<ProjectRepository>>,
@@ -57,14 +61,6 @@ impl ProjectManifest {
 
         if !Self::is_valid_identifier(&manifest.name) {
             return Err(ManifestError::InvalidIdentifier(manifest.name));
-        }
-
-        if manifest.version.trim().is_empty() {
-            return Err(ManifestError::MissingField("version".to_string()));
-        }
-
-        if manifest.codebase_path.trim().is_empty() {
-            return Err(ManifestError::MissingField("codebase_path".to_string()));
         }
 
         Ok(manifest)
@@ -94,13 +90,25 @@ impl ProjectManifest {
         normalized
     }
 
-    /// Resolve codebase path relative to specs repository directory
+    /// Resolve primary codebase path if declared or from first codebase repository
     // @implements spec-ft-core-discovery::REQ-003
-    pub fn resolve_codebase_path<P: AsRef<Path>>(&self, specs_dir: P) -> Result<PathBuf, ManifestError> {
-        Ok(Self::resolve_path(&self.codebase_path, specs_dir))
+    pub fn resolve_codebase_path<P: AsRef<Path>>(&self, specs_dir: P) -> Option<PathBuf> {
+        if let Some(ref cb) = self.codebase_path {
+            if !cb.trim().is_empty() {
+                return Some(Self::resolve_path(cb, specs_dir));
+            }
+        }
+        if let Some(ref repos) = self.repositories {
+            for r in repos {
+                if r.repo_type == "codebase" {
+                    return Some(Self::resolve_path(&r.path, specs_dir));
+                }
+            }
+        }
+        None
     }
 
-    /// Returns declared repositories, or defaults to codebase and specs repositories
+    /// Returns declared repositories, or defaults to specs repository (and codebase if declared)
     // @implements spec-ft-git-backend-status::REQ-001
     // @implements spec-ft-git-backend-status::REQ-002
     pub fn get_effective_repositories<P: AsRef<Path>>(&self, specs_dir: P) -> Vec<ProjectRepository> {
@@ -118,25 +126,27 @@ impl ProjectManifest {
             }
         }
 
-        // Fallback default
-        let codebase_resolved = self.resolve_codebase_path(&specs_dir)
-            .map(|p| p.to_string_lossy().replace('\\', "/"))
-            .unwrap_or_else(|_| self.codebase_path.clone());
         let specs_resolved = specs_dir.as_ref().to_string_lossy().replace('\\', "/");
+        let mut result = Vec::new();
 
-        vec![
-            ProjectRepository {
+        if let Some(codebase_path) = self.resolve_codebase_path(&specs_dir) {
+            result.push(ProjectRepository {
                 id: self.name.clone(),
-                name: format!("{} Engine", self.name),
-                path: codebase_resolved,
+                name: self.name.clone(),
+                path: codebase_path.to_string_lossy().replace('\\', "/"),
                 repo_type: "codebase".to_string(),
-            },
-            ProjectRepository {
-                id: format!("{}-specs", self.name),
-                name: format!("{} Specs", self.name),
-                path: specs_resolved,
-                repo_type: "specs".to_string(),
-            },
-        ]
+                url: None,
+            });
+        }
+
+        result.push(ProjectRepository {
+            id: format!("{}-specs", self.name),
+            name: format!("{} Specs", self.name),
+            path: specs_resolved,
+            repo_type: "specs".to_string(),
+            url: None,
+        });
+
+        result
     }
 }

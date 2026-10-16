@@ -383,6 +383,7 @@ export interface GitRepoStatus {
   name: string;
   path: string;
   type: string;
+  url?: string | null;
   is_available: boolean;
   branch: string | null;
   upstream: string | null;
