@@ -84,7 +84,7 @@ impl ArtifactToolGate {
         Ok(path)
     }
 
-    /// Dynamically resolve aico_skills_version from VERSION file or environment
+    /// Dynamically resolve aico_skills_version from plugin.json, VERSION file, or environment
     pub fn resolve_skills_version(specs_root: &Path) -> String {
         if let Ok(v) = std::env::var("AICO_SKILLS_VERSION") {
             let trimmed = v.trim();
@@ -94,6 +94,12 @@ impl ArtifactToolGate {
         }
 
         let candidates = [
+            specs_root.join("../codebase/aico-skills/plugin.json"),
+            specs_root.join("../aico-skills/plugin.json"),
+            specs_root.join("../.agents/skills/plugin.json"),
+            specs_root.join(".agents/skills/plugin.json"),
+            specs_root.join("plugin.json"),
+            // Fallback candidates to legacy VERSION file
             specs_root.join("../codebase/aico-skills/VERSION"),
             specs_root.join("../aico-skills/VERSION"),
             specs_root.join("VERSION"),
@@ -101,14 +107,42 @@ impl ArtifactToolGate {
 
         for candidate in &candidates {
             if let Ok(content) = fs::read_to_string(candidate) {
-                let trimmed = content.trim();
-                if !trimmed.is_empty() {
-                    return trimmed.to_string();
+                if candidate.extension().and_then(|e| e.to_str()) == Some("json") {
+                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+                        if let Some(ver) = val.get("version").and_then(|v| v.as_str()) {
+                            let trimmed = ver.trim();
+                            if !trimmed.is_empty() {
+                                return trimmed.to_string();
+                            }
+                        }
+                    }
+                } else {
+                    let trimmed = content.trim();
+                    if !trimmed.is_empty() {
+                        return trimmed.to_string();
+                    }
                 }
             }
         }
 
         if let Ok(userprofile) = std::env::var("USERPROFILE") {
+            let plugin_json = Path::new(&userprofile)
+                .join(".gemini")
+                .join("config")
+                .join("plugins")
+                .join("aico-skills")
+                .join("plugin.json");
+            if let Ok(content) = fs::read_to_string(plugin_json) {
+                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+                    if let Some(ver) = val.get("version").and_then(|v| v.as_str()) {
+                        let trimmed = ver.trim();
+                        if !trimmed.is_empty() {
+                            return trimmed.to_string();
+                        }
+                    }
+                }
+            }
+
             let plugin_version = Path::new(&userprofile)
                 .join(".gemini")
                 .join("config")

@@ -100,7 +100,7 @@ fn test_skills_synchronizer_updates_skills_rules_and_prunes_stale_entries() {
         "console.log('verify');",
     )
     .unwrap();
-    fs::write(submodule_skills.join("VERSION"), "0.1.2\n").unwrap();
+    fs::write(submodule_skills.join("plugin.json"), "{\n  \"name\": \"aico-skills\",\n  \"version\": \"0.1.2\"\n}").unwrap();
     fs::write(submodule_skills.join("README.md"), "# Skills Catalog").unwrap();
     fs::write(source_scripts.join("get-version.mjs"), "export default '0.1.2';").unwrap();
     fs::write(source_rules.join("GEMINI.md"), "# Canonical 4-Phase GEMINI Rules").unwrap();
@@ -136,8 +136,8 @@ fn test_skills_synchronizer_updates_skills_rules_and_prunes_stale_entries() {
         "console.log('verify');"
     );
     assert_eq!(
-        fs::read_to_string(agents_skills.join("VERSION")).unwrap(),
-        "0.1.2\n"
+        fs::read_to_string(agents_skills.join("plugin.json")).unwrap(),
+        "{\n  \"name\": \"aico-skills\",\n  \"version\": \"0.1.2\"\n}"
     );
     assert_eq!(
         fs::read_to_string(agents_skills.join("README.md")).unwrap(),
@@ -225,7 +225,7 @@ fn test_real_aico_workspace_skills_and_rules_sync() {
         assert!(root.join(".agents/skills/aico-start/SKILL.md").is_file());
         assert!(root.join(".agents/skills/aico-feature/SKILL.md").is_file());
         assert!(root.join(".agents/skills/aico-verify/SKILL.md").is_file());
-        assert!(root.join(".agents/skills/VERSION").is_file());
+        assert!(root.join(".agents/skills/plugin.json").is_file() || root.join(".agents/skills/VERSION").is_file());
         assert!(!root.join(".agents/skills/SKILL.md").exists());
         assert!(root.join("GEMINI.md").is_file());
         assert!(root.join(".agents/rules/GEMINI.md").is_file());

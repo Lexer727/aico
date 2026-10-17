@@ -98,8 +98,8 @@ impl SkillsSynchronizer {
             report.skills_synced += 1;
         }
 
-        // REQ-003: Synchronize supporting root files (VERSION, README.md) and scripts/
-        for root_file in ["VERSION", "README.md"] {
+        // REQ-003: Synchronize supporting root files (plugin.json, README.md, VERSION) and scripts/
+        for root_file in ["plugin.json", "README.md", "VERSION"] {
             let src_file = src_dir.join(root_file);
             if src_file.is_file() {
                 let dst_file = target_agents_skills.join(root_file);
