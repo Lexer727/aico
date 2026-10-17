@@ -399,8 +399,8 @@ export interface GitRepoStatus {
 
 /**
  * Fetch Git repository statuses for the active project from Axum backend
- * @implements spec-ft-git-dashboard-ui::REQ-001
- * @implements spec-ft-git-dashboard-ui::REQ-005
+ * @implements ft-git-dashboard-ui::TASK-GIT-003-1::REQ-001
+ * @implements ft-git-dashboard-ui::TASK-GIT-003-1::REQ-005
  */
 export async function fetchGitStatus(): Promise<GitRepoStatus[]> {
   try {

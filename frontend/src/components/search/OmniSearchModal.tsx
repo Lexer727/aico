@@ -25,10 +25,12 @@ interface OmniSearchModalProps {
   searchIndex?: SearchableEntity[];
 }
 
-// @implements spec-ft-core-webui-shell::REQ-007
-// @implements spec-ft-core-omni-search-fulltext::REQ-005
-// @implements spec-ft-core-omni-search-fulltext::REQ-006
-// @implements spec-ft-core-omni-search-fulltext::REQ-007
+// @implements ft-core-webui-shell::TASK-CORE-006-11::REQ-007
+// @implements ft-core-omni-search-fulltext::TASK-CORE-009-3::REQ-005
+// @implements ft-core-omni-search-fulltext::TASK-CORE-009-3::REQ-006
+// @implements ft-core-omni-search-fulltext::TASK-CORE-009-3::REQ-007
+// @implements ft-core-code-path-simplification-and-omnisearch::TASK-CORE-015-2::REQ-004
+// @implements ft-core-multirepo-code-path-normalization::TASK-CORE-016-2::REQ-005
 export const OmniSearchModal: React.FC<OmniSearchModalProps> = ({
   isOpen,
   onClose,
@@ -257,7 +259,7 @@ export const OmniSearchModal: React.FC<OmniSearchModalProps> = ({
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-zinc-200 truncate">
+                    <span className={`text-xs font-medium text-zinc-200 truncate ${item.scope === 'code' ? 'font-mono' : ''}`}>
                       {item.title}
                     </span>
                     {item.projectName && (

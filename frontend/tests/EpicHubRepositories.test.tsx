@@ -3,9 +3,9 @@ import { render, screen } from '@testing-library/react';
 import React from 'react';
 import { EpicHubView, type EpicData } from '../src/features/epic-hub/EpicHubView';
 
-// @verifies spec-ft-git-dashboard-ui::REQ-003
-// @verifies spec-ft-core-repository-badges-alignment::REQ-003
-// @verifies spec-ft-core-repository-badges-alignment::REQ-004
+// @verifies ft-git-dashboard-ui::TASK-GIT-003-2::REQ-003
+// @verifies ft-core-repository-badges-alignment::TASK-CORE-008-2::REQ-003
+// @verifies ft-core-repository-badges-alignment::TASK-CORE-008-2::REQ-004
 describe('EpicHubView Repositories Roll-up', () => {
   it('dynamically aggregates and displays repositories declared across child feature plans under title with icon only', () => {
     const mockEpic: EpicData = {

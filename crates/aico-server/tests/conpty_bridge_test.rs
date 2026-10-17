@@ -75,12 +75,12 @@ async fn read_until(read: &mut WsRead, marker: &str, secs: u64) -> String {
     out
 }
 
-// @verifies spec-ft-terminal-conpty-bridge::REQ-001
-// @verifies spec-ft-terminal-conpty-bridge::REQ-002
-// @verifies spec-ft-terminal-conpty-bridge::REQ-003
-// @verifies spec-ft-terminal-conpty-bridge::REQ-004
-// @verifies spec-ft-terminal-conpty-bridge::REQ-007
-// @verifies spec-ft-terminal-conpty-bridge::REQ-009
+// @verifies ft-terminal-conpty-bridge::TASK-PTY-004::REQ-001
+// @verifies ft-terminal-conpty-bridge::TASK-PTY-004::REQ-002
+// @verifies ft-terminal-conpty-bridge::TASK-PTY-006::REQ-003
+// @verifies ft-terminal-conpty-bridge::TASK-PTY-004::REQ-004
+// @verifies ft-terminal-conpty-bridge::TASK-PTY-006::REQ-007
+// @verifies ft-terminal-conpty-bridge::TASK-PTY-002::REQ-009
 #[tokio::test]
 async fn test_child_process_sees_a_real_tty() {
     let (addr, server) = start_server(5010).await;
@@ -103,7 +103,7 @@ async fn test_child_process_sees_a_real_tty() {
     server.abort();
 }
 
-// @verifies spec-ft-terminal-conpty-bridge::REQ-005
+// @verifies ft-terminal-conpty-bridge::TASK-PTY-004::REQ-005
 #[tokio::test]
 async fn test_resize_message_updates_pty_geometry() {
     let (addr, server) = start_server(5020).await;
@@ -128,8 +128,8 @@ async fn test_resize_message_updates_pty_geometry() {
     server.abort();
 }
 
-// @verifies spec-ft-terminal-conpty-bridge::REQ-006
-// @verifies spec-ft-terminal-conpty-bridge::REQ-008
+// @verifies ft-terminal-conpty-bridge::TASK-PTY-007::REQ-006
+// @verifies ft-terminal-conpty-bridge::TASK-PTY-003::REQ-008
 #[tokio::test]
 async fn test_session_registry_tracks_state_and_cleans_up() {
     let (addr, server) = start_server(5030).await;
@@ -174,8 +174,8 @@ async fn test_session_registry_tracks_state_and_cleans_up() {
     server.abort();
 }
 
-// @verifies spec-ft-terminal-conpty-bridge::REQ-003
-// @verifies spec-ft-terminal-panel-ui::REQ-011
+// @verifies ft-terminal-conpty-bridge::TASK-PTY-006::REQ-003
+// @verifies ft-terminal-panel-ui::TASK-TERM-002-7::REQ-011
 #[tokio::test]
 async fn test_default_cwd_resolves_to_workspace_root_parent_of_specs_path() {
     use aico_core::{DiscoveredProject, ProjectManifest, ProjectStatus};
@@ -240,7 +240,7 @@ async fn test_default_cwd_resolves_to_workspace_root_parent_of_specs_path() {
     let _ = std::fs::remove_dir_all(&temp_root);
 }
 
-// @verifies spec-ft-terminal-conpty-bridge::REQ-010
+// @verifies ft-terminal-conpty-bridge::TASK-PTY-006::REQ-010
 #[tokio::test]
 async fn test_initial_conpty_dsr_query_is_stripped_from_websocket_output() {
     let (addr, server) = start_server(5050).await;
@@ -271,8 +271,8 @@ async fn test_initial_conpty_dsr_query_is_stripped_from_websocket_output() {
     server.abort();
 }
 
-// @verifies spec-ft-terminal-conpty-bridge::REQ-006
-// @verifies spec-ft-terminal-conpty-bridge::REQ-011
+// @verifies ft-terminal-conpty-bridge::TASK-PTY-007::REQ-006
+// @verifies ft-terminal-conpty-bridge::TASK-PTY-007::REQ-011
 #[tokio::test]
 async fn test_named_tab_session_persists_across_reconnect_and_replays_scrollback() {
     let (addr, server) = start_server(5060).await;
@@ -338,7 +338,7 @@ async fn test_named_tab_session_persists_across_reconnect_and_replays_scrollback
 }
 
 #[tokio::test]
-// @verifies spec-ft-terminal-conpty-bridge::REQ-012
+// @verifies ft-terminal-conpty-bridge::TASK-PTY-008::REQ-012
 async fn test_named_tab_session_supports_concurrent_clients_with_fanout() {
     let (addr, server) = start_server(5080).await;
     let init_payload = serde_json::json!({

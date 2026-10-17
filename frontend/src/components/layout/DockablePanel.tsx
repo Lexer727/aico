@@ -11,8 +11,8 @@ interface DockablePanelProps {
   isMobile?: boolean;
 }
 
-// @implements spec-ft-core-webui-shell::REQ-010
-// @implements spec-ft-core-webui-shell::REQ-011
+// @implements ft-core-webui-shell::TASK-CORE-006-9::REQ-010
+// @implements ft-core-webui-shell::TASK-CORE-006-9::REQ-011
 export const DockablePanel: React.FC<DockablePanelProps> = ({
   title = 'Docked Panel',
   children,

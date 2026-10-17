@@ -5,9 +5,9 @@ import { TabBar } from '../src/components/navigation/TabBar';
 import { ProjectSwitcher } from '../src/components/navigation/ProjectSwitcher';
 import { useTabStore } from '../src/stores/useTabStore';
 
-// @verifies spec-ft-core-webui-shell::REQ-004
-// @verifies spec-ft-core-webui-shell::REQ-005
-// @verifies spec-ft-core-webui-shell::REQ-006
+// @verifies ft-core-webui-shell::TASK-CORE-006-2::REQ-004
+// @verifies ft-core-webui-shell::TASK-CORE-006-7::REQ-005
+// @verifies ft-core-webui-shell::TASK-CORE-006-3::REQ-006
 describe('TabBar and ProjectSwitcher', () => {
   beforeEach(() => {
     useTabStore.getState().reset();
@@ -160,8 +160,8 @@ describe('TabBar and ProjectSwitcher', () => {
     ]);
   });
 
-  // @verifies spec-ft-core-ui-visual-consistency::REQ-003
-  // @verifies spec-ft-core-ui-visual-consistency::REQ-005
+  // @verifies ft-core-ui-visual-consistency::TASK-CORE-010-3::REQ-003
+  // @verifies ft-core-ui-visual-consistency::TASK-CORE-010-5::REQ-005
   it('renders feature tabs with purple Package icon and adr tabs with Scale icon', () => {
     const store = useTabStore.getState();
     store.setActiveProject('project-test');
@@ -181,7 +181,7 @@ describe('TabBar and ProjectSwitcher', () => {
     expect(adrSvg).toHaveClass('text-amber-400');
   });
 
-  // @verifies spec-ft-terminal-panel-ui::REQ-021
+  // @verifies ft-terminal-panel-ui::TASK-TERM-002-17::REQ-021
   it('prevents default vertical scroll on mouse wheel and scrolls tab container horizontally', () => {
     const store = useTabStore.getState();
     store.setActiveProject('project-test');
@@ -196,7 +196,7 @@ describe('TabBar and ProjectSwitcher', () => {
     expect(wheelEvent.defaultPrevented).toBe(true);
   });
 
-  // @verifies spec-ft-core-webui-shell::REQ-017
+  // @verifies ft-core-webui-shell::TASK-CORE-006-13::REQ-017
   it('isolates tab state to window sessionStorage and generates a persistent windowId', () => {
     const store = useTabStore.getState();
     expect(store.windowId).toMatch(/^win-/);

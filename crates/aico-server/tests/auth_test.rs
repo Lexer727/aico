@@ -1,7 +1,7 @@
 use aico_server::LanAuthenticator;
 
-// @verifies spec-ft-core-host-runtime::REQ-004
-// @verifies spec-ft-core-host-runtime::REQ-008
+// @verifies ft-core-host-runtime::TASK-CORE-001-4::REQ-004
+// @verifies ft-core-host-runtime::TASK-CORE-001-4::REQ-008
 #[test]
 fn test_lan_authenticator_token_generation_and_validation() {
     let auth = LanAuthenticator::new();
@@ -21,7 +21,7 @@ fn test_lan_authenticator_token_generation_and_validation() {
 }
 
 #[tokio::test]
-// @verifies spec-ft-core-webui-shell::REQ-019
+// @verifies ft-core-webui-shell::TASK-CORE-006-17::REQ-019
 async fn test_pairing_rest_endpoint() {
     use aico_server::{AppState, HostServer, ServerConfig};
 

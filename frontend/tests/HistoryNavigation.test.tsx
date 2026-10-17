@@ -34,9 +34,9 @@ vi.mock('../src/features/feature-task-data', () => ({
   ),
 }));
 
-// @verifies spec-ft-core-webui-shell::REQ-004
-// @verifies spec-ft-core-webui-shell::REQ-005
-// @verifies spec-ft-core-webui-shell::REQ-006
+// @verifies ft-core-webui-shell::TASK-CORE-006-2::REQ-004
+// @verifies ft-core-webui-shell::TASK-CORE-006-7::REQ-005
+// @verifies ft-core-webui-shell::TASK-CORE-006-3::REQ-006
 describe('History Navigation & NavButtons', () => {
   beforeEach(() => {
     useTabStore.getState().reset();

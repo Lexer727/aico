@@ -94,10 +94,10 @@ if (typeof window !== 'undefined' && window.location && window.location.search.i
   }
 }
 
-// @implements spec-ft-core-webui-shell::REQ-004
-// @implements spec-ft-core-webui-shell::REQ-005
-// @implements spec-ft-core-webui-shell::REQ-006
-// @implements spec-ft-core-webui-shell::REQ-017
+// @implements ft-core-webui-shell::TASK-CORE-006-2::REQ-004
+// @implements ft-core-webui-shell::TASK-CORE-006-7::REQ-005
+// @implements ft-core-webui-shell::TASK-CORE-006-3::REQ-006
+// @implements ft-core-webui-shell::TASK-CORE-006-13::REQ-017
 export const useTabStore = create<TabState>((set, get) => {
   const initial = loadPersistedState();
   const initialProjectId = initial?.activeProjectId || 'default';

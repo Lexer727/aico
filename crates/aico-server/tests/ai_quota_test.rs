@@ -8,10 +8,10 @@ use aico_server::{
 use std::sync::Arc;
 use std::time::Duration;
 
-// @verifies spec-ft-terminal-ai-quota-monitor::REQ-001
-// @verifies spec-ft-terminal-ai-quota-monitor::REQ-002
-// @verifies spec-ft-terminal-ai-quota-monitor::REQ-009
-// @verifies spec-ft-terminal-ai-quota-monitor::REQ-011
+// @verifies ft-terminal-ai-quota-monitor::TASK-QUOTA-005::REQ-001
+// @verifies ft-terminal-ai-quota-monitor::TASK-QUOTA-007::REQ-002
+// @verifies ft-terminal-ai-quota-monitor::TASK-QUOTA-007::REQ-009
+// @verifies ft-terminal-ai-quota-monitor::TASK-QUOTA-004::REQ-011
 #[tokio::test]
 async fn test_ai_quotas_endpoint_filters_connected_providers_and_detects_login() {
     let temp_dir = std::env::temp_dir().join(format!("aico_quota_test_{}", rand::random::<u32>()));
@@ -102,9 +102,9 @@ async fn test_ai_quotas_endpoint_filters_connected_providers_and_detects_login()
     let _ = std::fs::remove_dir_all(&temp_dir);
 }
 
-// @verifies spec-ft-terminal-ai-quota-monitor::REQ-006
-// @verifies spec-ft-terminal-ai-quota-monitor::REQ-007
-// @verifies spec-ft-terminal-ai-quota-monitor::REQ-008
+// @verifies ft-terminal-ai-quota-monitor::TASK-QUOTA-007::REQ-006
+// @verifies ft-terminal-ai-quota-monitor::TASK-QUOTA-002::REQ-007
+// @verifies ft-terminal-ai-quota-monitor::TASK-QUOTA-005::REQ-008
 #[tokio::test]
 async fn test_ai_quotas_tracks_terminal_session_state_transitions() {
     let temp_dir = std::env::temp_dir().join(format!("aico_quota_state_{}", rand::random::<u32>()));
@@ -198,8 +198,8 @@ async fn test_ai_quotas_tracks_terminal_session_state_transitions() {
     assert_eq!(res5["ai_state"], "inactive");
 }
 
-// @verifies spec-ft-terminal-ai-quota-monitor::REQ-004
-// @verifies spec-ft-terminal-ai-quota-monitor::REQ-005
+// @verifies ft-terminal-ai-quota-monitor::TASK-QUOTA-006::REQ-004
+// @verifies ft-terminal-ai-quota-monitor::TASK-QUOTA-007::REQ-005
 #[test]
 fn test_parse_language_server_quota_summary_extracts_distinct_gemini_buckets_and_ignores_claude_3p() {
     let summary_json = serde_json::json!({

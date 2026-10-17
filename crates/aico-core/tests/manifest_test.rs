@@ -1,7 +1,7 @@
 use aico_core::{ProjectManifest, ManifestError};
 use std::path::PathBuf;
 
-// @verifies spec-ft-core-discovery::REQ-002
+// @verifies ft-core-discovery::TASK-CORE-004-1::REQ-002
 #[test]
 fn test_parse_valid_manifest() {
     let json_content = r#"{
@@ -20,7 +20,7 @@ fn test_parse_valid_manifest() {
     assert_eq!(manifest.created_at, Some("2026-10-05T18:45:00Z".to_string()));
 }
 
-// @verifies spec-ft-core-discovery::REQ-003
+// @verifies ft-core-discovery::TASK-CORE-004-1::REQ-003
 #[test]
 fn test_resolve_relative_codebase_path() {
     let json_content = r#"{
@@ -40,7 +40,7 @@ fn test_resolve_relative_codebase_path() {
     assert!(resolved.ends_with(PathBuf::from("codebase/project-a")) || resolved.to_string_lossy().contains("project-a"));
 }
 
-// @verifies spec-ft-core-discovery::REQ-007
+// @verifies ft-core-discovery::TASK-CORE-004-1::REQ-007
 #[test]
 fn test_reject_manifest_missing_required_fields() {
     let invalid_json = r#"{
@@ -59,7 +59,7 @@ fn test_reject_manifest_missing_required_fields() {
     assert!(manifest.version.is_none());
 }
 
-// @verifies spec-ft-core-discovery::REQ-007
+// @verifies ft-core-discovery::TASK-CORE-004-1::REQ-007
 #[test]
 fn test_reject_invalid_project_identifier() {
     let invalid_json = r#"{
@@ -72,8 +72,8 @@ fn test_reject_invalid_project_identifier() {
     assert!(matches!(result, Err(ManifestError::InvalidIdentifier(_))), "Invalid project name format must be rejected");
 }
 
-// @verifies spec-ft-git-backend-status::REQ-001
-// @verifies spec-ft-git-backend-status::REQ-002
+// @verifies ft-git-backend-status::TASK-GIT-001-6::REQ-001
+// @verifies ft-git-backend-status::TASK-GIT-001-6::REQ-002
 #[test]
 fn test_manifest_multi_repo_parsing() {
     // 1. Explicit repositories declared
@@ -127,10 +127,10 @@ fn test_manifest_multi_repo_parsing() {
     assert_eq!(default_effective[1].repo_type, "specs");
 }
 
-// @verifies spec-ft-git-relative-paths-manifest::REQ-001
-// @verifies spec-ft-git-relative-paths-manifest::REQ-002
-// @verifies spec-ft-git-relative-paths-manifest::REQ-003
-// @verifies spec-ft-git-relative-paths-manifest::REQ-004
+// @verifies ft-git-relative-paths-manifest::TASK-GIT-004-1::REQ-001
+// @verifies ft-git-relative-paths-manifest::TASK-GIT-004-2::REQ-002
+// @verifies ft-git-relative-paths-manifest::TASK-GIT-004-2::REQ-003
+// @verifies ft-git-relative-paths-manifest::TASK-GIT-004-2::REQ-004
 #[test]
 fn test_manifest_relative_repositories_resolution() {
     let json_content = r#"{

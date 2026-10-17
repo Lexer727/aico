@@ -35,10 +35,10 @@ pub struct GitRepoStatus {
 pub struct GitStatusScanner;
 
 impl GitStatusScanner {
-    // @implements spec-ft-git-backend-status::REQ-003
-    // @implements spec-ft-git-backend-status::REQ-004
-    // @implements spec-ft-git-backend-status::REQ-006
-    // @implements spec-ft-git-backend-status::REQ-007
+    // @implements ft-git-backend-status::TASK-GIT-001-2::REQ-003
+    // @implements ft-git-backend-status::TASK-GIT-001-2::REQ-004
+    // @implements ft-git-backend-status::TASK-GIT-001-2::REQ-006
+    // @implements ft-git-backend-status::TASK-GIT-001-5::REQ-007
     pub async fn scan_repo(id: &str, name: &str, path: &str, repo_type: &str, url: Option<&str>) -> GitRepoStatus {
         let path_obj = Path::new(path);
         let url_owned = url.map(|u| u.to_string());
@@ -145,8 +145,8 @@ impl GitStatusScanner {
     }
 
     /// Parse porcelain v2 format output
-    // @implements spec-ft-git-backend-status::REQ-003
-    // @implements spec-ft-git-backend-status::REQ-004
+    // @implements ft-git-backend-status::TASK-GIT-001-2::REQ-003
+    // @implements ft-git-backend-status::TASK-GIT-001-2::REQ-004
     pub fn parse_porcelain_v2(output: &str) -> GitRepoStatus {
         let mut branch = None;
         let mut upstream = None;

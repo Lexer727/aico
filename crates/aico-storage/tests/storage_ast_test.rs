@@ -1,6 +1,6 @@
 use aico_storage::{CodeSymbolParser, SymbolKind, LanguageKind, StorageManager};
 
-// @verifies spec-ft-core-local-storage::REQ-005
+// @verifies ft-core-local-storage::TASK-CORE-003-3::REQ-005
 #[tokio::test]
 async fn test_treesitter_symbol_and_callgraph_ingestion() {
     let temp_dir = std::env::temp_dir().join("aico_ast_test_1");

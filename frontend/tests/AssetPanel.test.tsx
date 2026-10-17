@@ -113,7 +113,7 @@ describe('AssetPanel Component', () => {
     vi.unstubAllGlobals();
   });
 
-  // @verifies spec-ft-core-assets-manager::REQ-004
+  // @verifies ft-core-assets-manager::TASK-ASSET-004::REQ-004
   it('renders epic assets with origin badges for direct epic assets and sub-feature assets', async () => {
     render(<AssetPanel scopeType="epic" scopeId="ec-core" />);
 
@@ -126,7 +126,7 @@ describe('AssetPanel Component', () => {
     expect(screen.getByTestId('asset-origin-subfeature')).toHaveTextContent('ft-sub');
   });
 
-  // @verifies spec-ft-core-assets-manager::REQ-005
+  // @verifies ft-core-assets-manager::TASK-ASSET-004::REQ-005
   it('renders isolated feature assets without epic origin badges', async () => {
     render(<AssetPanel scopeType="feature" scopeId="ft-sub" />);
 
@@ -138,7 +138,7 @@ describe('AssetPanel Component', () => {
     expect(screen.queryByTestId('asset-origin-subfeature')).not.toBeInTheDocument();
   });
 
-  // @verifies spec-ft-core-assets-manager::REQ-006
+  // @verifies ft-core-assets-manager::TASK-ASSET-006::REQ-006
   it('renders hover preview popover showing text snippet on card mouse enter', async () => {
     render(<AssetPanel scopeType="epic" scopeId="ec-core" />);
 
@@ -156,7 +156,7 @@ describe('AssetPanel Component', () => {
     expect(screen.queryByTestId('asset-hover-popover')).not.toBeInTheDocument();
   });
 
-  // @verifies spec-ft-core-assets-manager::REQ-007
+  // @verifies ft-core-assets-manager::TASK-ASSET-005::REQ-007
   it('triggers onOpenAsset callback when asset card is double clicked', async () => {
     const handleOpen = vi.fn();
     render(<AssetPanel scopeType="epic" scopeId="ec-core" onOpenAsset={handleOpen} />);
@@ -171,7 +171,7 @@ describe('AssetPanel Component', () => {
     expect(handleOpen).toHaveBeenCalledWith(mockEpicAssets[0]);
   });
 
-  // @verifies spec-ft-core-assets-manager::REQ-008
+  // @verifies ft-core-assets-manager::TASK-ASSET-006::REQ-008
   it('opens context menu on right click and dispatches open on system', async () => {
     render(<AssetPanel scopeType="epic" scopeId="ec-core" />);
 
@@ -196,7 +196,7 @@ describe('AssetPanel Component', () => {
     );
   });
 
-  // @verifies spec-ft-core-assets-manager::REQ-009
+  // @verifies ft-core-assets-manager::TASK-ASSET-007::REQ-009
   it('opens confirmation modal on context menu delete and dispatches DELETE on confirm', async () => {
     const handleDeleted = vi.fn();
     render(<AssetPanel scopeType="epic" scopeId="ec-core" onAssetDeleted={handleDeleted} />);
@@ -233,7 +233,7 @@ describe('AssetPanel Component', () => {
     expect(handleDeleted).toHaveBeenCalledWith(mockEpicAssets[0]);
   });
 
-  // @verifies spec-ft-core-assets-manager::REQ-009
+  // @verifies ft-core-assets-manager::TASK-ASSET-007::REQ-009
   it('cancels deletion when cancel is clicked in confirmation dialog', async () => {
     render(<AssetPanel scopeType="epic" scopeId="ec-core" />);
 
@@ -258,7 +258,7 @@ describe('AssetPanel Component', () => {
     );
   });
 
-  // @verifies spec-ft-core-assets-manager::REQ-010
+  // @verifies ft-core-assets-manager::TASK-ASSET-008::REQ-010
   it('clamps context menu coordinates when right clicking near viewport bottom and right edges', async () => {
     // Mock window innerWidth and innerHeight
     vi.stubGlobal('innerWidth', 1000);
@@ -284,7 +284,7 @@ describe('AssetPanel Component', () => {
     expect(menu.style.top).toBe('555px');
   });
 
-  // @verifies spec-ft-core-assets-manager::REQ-011
+  // @verifies ft-core-assets-manager::TASK-ASSET-008::REQ-011
   it('calls onCountChange callback with asset count on load', async () => {
     const handleCount = vi.fn();
     render(<AssetPanel scopeType="epic" scopeId="ec-core" onCountChange={handleCount} />);
@@ -294,8 +294,8 @@ describe('AssetPanel Component', () => {
     });
   });
 
-  // @verifies spec-ft-core-assets-manager::REQ-013
-  // @verifies spec-ft-core-assets-manager::REQ-014
+  // @verifies ft-core-assets-manager::TASK-ASSET-009::REQ-013
+  // @verifies ft-core-assets-manager::TASK-ASSET-009::REQ-014
   it('loads config from /api/v1/config and rejects disallowed binary uploads', async () => {
     render(<AssetPanel scopeType="epic" scopeId="ec-core" />);
 

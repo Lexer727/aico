@@ -3,10 +3,10 @@ import { render, screen } from '@testing-library/react';
 import React from 'react';
 import { FeatureViewer, type FeatureData } from '../src/features/feature-viewer/FeatureViewer';
 
-// @verifies spec-ft-git-dashboard-ui::REQ-004
-// @verifies spec-ft-core-repository-badges-alignment::REQ-001
-// @verifies spec-ft-core-repository-badges-alignment::REQ-002
-// @verifies spec-ft-core-repository-badges-alignment::REQ-004
+// @verifies ft-git-dashboard-ui::TASK-GIT-003-2::REQ-004
+// @verifies ft-core-repository-badges-alignment::TASK-CORE-008-1::REQ-001
+// @verifies ft-core-repository-badges-alignment::TASK-CORE-008-1::REQ-002
+// @verifies ft-core-repository-badges-alignment::TASK-CORE-008-2::REQ-004
 describe('FeatureViewer Target Repositories', () => {
   it('displays target repository badge pills in the header under title with icon only', () => {
     const mockFeature: FeatureData = {
@@ -54,7 +54,7 @@ describe('FeatureViewer Target Repositories', () => {
     expect(screen.queryByTestId('feature-repositories-list')).toBeNull();
   });
 
-  // @verifies spec-ft-core-repository-badges-alignment::REQ-005
+  // @verifies ft-core-repository-badges-alignment::TASK-CORE-008-3::REQ-005
   it('preserves loaded repository badges across prop updates or re-renders even if subsequent prop payload omits repositories', () => {
     const initialWithRepos: FeatureData = {
       id: 'ft-git-backend-status',

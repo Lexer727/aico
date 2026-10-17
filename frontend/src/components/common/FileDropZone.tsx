@@ -11,11 +11,11 @@ export interface FileDropZoneProps {
   className?: string;
 }
 
-// @implements spec-ft-core-epic-hub::REQ-004
-// @implements spec-ft-core-epic-hub::REQ-007
-// @implements spec-ft-core-epic-hub::REQ-012
-// @implements spec-ft-core-assets-manager::REQ-001
-// @implements spec-ft-core-assets-manager::REQ-014
+// @implements ft-core-epic-hub::TASK-CORE-007-12::REQ-004
+// @implements ft-core-epic-hub::TASK-CORE-007-1::REQ-007
+// @implements ft-core-epic-hub::TASK-CORE-007-3::REQ-012
+// @implements ft-core-assets-manager::TASK-ASSET-003::REQ-001
+// @implements ft-core-assets-manager::TASK-ASSET-009::REQ-014
 export const FileDropZone: React.FC<FileDropZoneProps> = ({
   acceptedMime,
   allowedExtensions,

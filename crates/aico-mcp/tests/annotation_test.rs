@@ -1,10 +1,10 @@
 use aico_mcp::{AnnotationExtractor, AnnotationKind, EarsValidator, EarsValidationError};
 
-// @verifies spec-ft-core-mcp-tools::REQ-004
+// @verifies ft-core-mcp-tools::TASK-CORE-005-1::REQ-004
 #[test]
 fn test_extract_verifies_annotations() {
     let source = r#"
-// @verifies spec-ft-core-host-runtime::REQ-002
+// @verifies ft-core-host-runtime::TASK-CORE-001-2::REQ-002
 #[test]
 fn test_something() {
     // some test code
@@ -14,17 +14,18 @@ fn test_something() {
     let annotations = AnnotationExtractor::extract(source);
     assert_eq!(annotations.len(), 1);
     assert_eq!(annotations[0].kind, AnnotationKind::Verifies);
-    assert_eq!(annotations[0].spec_id, "spec-ft-core-host-runtime");
+    assert_eq!(annotations[0].spec_id, "ft-core-host-runtime");
+    assert_eq!(annotations[0].task_id.as_deref(), Some("TASK-CORE-001-2"));
     assert_eq!(annotations[0].req_id, "REQ-002");
     assert_eq!(annotations[0].line_number, 2);
 }
 
-// @verifies spec-ft-core-mcp-tools::REQ-005
+// @verifies ft-core-mcp-tools::TASK-CORE-005-1::REQ-005
 #[test]
 fn test_extract_implements_annotations() {
     let source = r#"
 // Some doc comment
-// @implements spec-ft-core-discovery::REQ-001
+// @implements ft-core-discovery::TASK-CORE-004-2::REQ-001
 pub fn scan_projects() {
     // implementation
 }
@@ -33,11 +34,12 @@ pub fn scan_projects() {
     let annotations = AnnotationExtractor::extract(source);
     assert_eq!(annotations.len(), 1);
     assert_eq!(annotations[0].kind, AnnotationKind::Implements);
-    assert_eq!(annotations[0].spec_id, "spec-ft-core-discovery");
+    assert_eq!(annotations[0].spec_id, "ft-core-discovery");
+    assert_eq!(annotations[0].task_id.as_deref(), Some("TASK-CORE-004-2"));
     assert_eq!(annotations[0].req_id, "REQ-001");
 }
 
-// @verifies spec-ft-core-mcp-tools::REQ-003
+// @verifies ft-core-mcp-tools::TASK-CORE-005-1::REQ-003
 #[test]
 fn test_validate_ears_syntax() {
     // Valid Ubiquitous pattern with modal "shall"

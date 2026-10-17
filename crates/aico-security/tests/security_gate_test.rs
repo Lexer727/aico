@@ -3,8 +3,8 @@ use aico_security::{
     ApprovalGateManager, ApprovalError, AutoModeState, CommandTier, PolicyEngine,
 };
 
-// @verifies spec-ft-core-security-auth::REQ-008
-// @verifies spec-ft-core-security-auth::REQ-009
+// @verifies ft-core-security-auth::TASK-CORE-002-1::REQ-008
+// @verifies ft-core-security-auth::TASK-CORE-002-1::REQ-009
 #[tokio::test]
 async fn test_interactive_approval_gate_approved() {
     let gate_mgr = ApprovalGateManager::new();
@@ -23,7 +23,7 @@ async fn test_interactive_approval_gate_approved() {
     assert_eq!(result, Ok(true));
 }
 
-// @verifies spec-ft-core-security-auth::REQ-010
+// @verifies ft-core-security-auth::TASK-CORE-002-5::REQ-010
 #[tokio::test]
 async fn test_interactive_approval_gate_denied() {
     let gate_mgr = ApprovalGateManager::new();
@@ -42,7 +42,7 @@ async fn test_interactive_approval_gate_denied() {
     assert_eq!(result, Ok(false));
 }
 
-// @verifies spec-ft-core-security-auth::REQ-012
+// @verifies ft-core-security-auth::TASK-CORE-002-5::REQ-012
 #[tokio::test]
 async fn test_interactive_approval_gate_timeout() {
     let gate_mgr = ApprovalGateManager::new();
@@ -64,7 +64,7 @@ async fn test_interactive_approval_gate_timeout() {
     assert!(!gate_mgr.has_gate(&gate_id));
 }
 
-// @verifies spec-ft-core-security-auth::REQ-011
+// @verifies ft-core-security-auth::TASK-CORE-002-5::REQ-011
 #[test]
 fn test_auto_mode_state_enforcement() {
     let engine = PolicyEngine::default();

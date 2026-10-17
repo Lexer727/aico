@@ -63,8 +63,8 @@ impl Default for QuotaDiscoveryService {
 }
 
 impl QuotaDiscoveryService {
-    // @implements spec-ft-terminal-ai-quota-monitor::REQ-002
-    // @implements spec-ft-terminal-ai-quota-monitor::REQ-009
+    // @implements ft-terminal-ai-quota-monitor::TASK-QUOTA-007::REQ-002
+    // @implements ft-terminal-ai-quota-monitor::TASK-QUOTA-007::REQ-009
     pub fn with_credential_paths(agy_path: PathBuf, claude_path: PathBuf) -> Self {
         Self {
             mode: DiscoveryMode::CredentialFiles {
@@ -75,10 +75,10 @@ impl QuotaDiscoveryService {
         }
     }
 
-    // @implements spec-ft-terminal-ai-quota-monitor::REQ-001
-    // @implements spec-ft-terminal-ai-quota-monitor::REQ-002
-    // @implements spec-ft-terminal-ai-quota-monitor::REQ-009
-    // @implements spec-ft-terminal-ai-quota-monitor::REQ-011
+    // @implements ft-terminal-ai-quota-monitor::TASK-QUOTA-005::REQ-001
+    // @implements ft-terminal-ai-quota-monitor::TASK-QUOTA-007::REQ-002
+    // @implements ft-terminal-ai-quota-monitor::TASK-QUOTA-007::REQ-009
+    // @implements ft-terminal-ai-quota-monitor::TASK-QUOTA-004::REQ-011
     pub async fn discover(&self) -> (Option<QuotaAccountInfo>, Vec<QuotaProviderStatus>) {
         match &self.mode {
             DiscoveryMode::CredentialFiles {
@@ -361,8 +361,8 @@ impl QuotaDiscoveryService {
         false
     }
 
-    // @implements spec-ft-terminal-ai-quota-monitor::REQ-005
-    // @implements spec-ft-terminal-ai-quota-monitor::REQ-006
+    // @implements ft-terminal-ai-quota-monitor::TASK-QUOTA-007::REQ-005
+    // @implements ft-terminal-ai-quota-monitor::TASK-QUOTA-007::REQ-006
     async fn discover_claude_live() -> Option<QuotaProviderStatus> {
         let home = std::env::var("USERPROFILE")
             .or_else(|_| std::env::var("HOME"))
@@ -482,7 +482,7 @@ impl QuotaDiscoveryService {
     }
 }
 
-// @implements spec-ft-terminal-ai-quota-monitor::REQ-005
+// @implements ft-terminal-ai-quota-monitor::TASK-QUOTA-007::REQ-005
 pub fn parse_claude_oauth_usage(json: &serde_json::Value) -> Option<QuotaProviderStatus> {
     let parse_window = |key: &str, default_reset: &str| -> (u8, String) {
         if let Some(w) = json.get(key) {
@@ -522,7 +522,7 @@ pub fn parse_claude_oauth_usage(json: &serde_json::Value) -> Option<QuotaProvide
     })
 }
 
-// @implements spec-ft-terminal-ai-quota-monitor::REQ-004
+// @implements ft-terminal-ai-quota-monitor::TASK-QUOTA-006::REQ-004
 pub fn parse_language_server_quota_summary(
     json: &serde_json::Value,
 ) -> Option<QuotaProviderStatus> {
@@ -603,8 +603,8 @@ pub fn parse_language_server_quota_summary(
     })
 }
 
-// @implements spec-ft-terminal-ai-quota-monitor::REQ-004
-// @implements spec-ft-terminal-ai-quota-monitor::REQ-011
+// @implements ft-terminal-ai-quota-monitor::TASK-QUOTA-006::REQ-004
+// @implements ft-terminal-ai-quota-monitor::TASK-QUOTA-004::REQ-011
 pub fn parse_language_server_user_status(
     json: &serde_json::Value,
 ) -> (Option<QuotaAccountInfo>, Vec<QuotaProviderStatus>) {
@@ -728,10 +728,10 @@ fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
     era * 146097 + doe - 719468
 }
 
-// @implements spec-ft-terminal-ai-quota-monitor::REQ-001
-// @implements spec-ft-terminal-ai-quota-monitor::REQ-006
-// @implements spec-ft-terminal-ai-quota-monitor::REQ-007
-// @implements spec-ft-terminal-ai-quota-monitor::REQ-008
+// @implements ft-terminal-ai-quota-monitor::TASK-QUOTA-005::REQ-001
+// @implements ft-terminal-ai-quota-monitor::TASK-QUOTA-007::REQ-006
+// @implements ft-terminal-ai-quota-monitor::TASK-QUOTA-002::REQ-007
+// @implements ft-terminal-ai-quota-monitor::TASK-QUOTA-005::REQ-008
 pub async fn get_ai_quotas_handler(State(state): State<AppState>) -> Json<AiQuotasResponse> {
     let sessions = state.terminal_sessions.list();
     let ai_sessions: Vec<_> = sessions.into_iter().filter(|s| s.is_ai).collect();

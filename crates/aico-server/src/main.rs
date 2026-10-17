@@ -35,9 +35,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("[*] Workspace root: {}", root_dir.display());
 
     // 2b. Synchronize workspace .agents/skills, .agents/rules, and GEMINI.md from codebase/aico/skills
-    // @implements spec-ft-core-skills-sync::REQ-002
-    // @implements spec-ft-core-skills-sync::REQ-005
-    // @implements spec-ft-core-skills-sync::REQ-007
+    // @implements ft-core-skills-sync::TASK-SYNC-002::REQ-002
+    // @implements ft-core-skills-sync::TASK-SYNC-003::REQ-005
+    // @implements ft-core-skills-sync::TASK-SYNC-003::REQ-007
     match SkillsSynchronizer::sync_workspace(&root_dir) {
         Ok(report) if report.skills_synced > 0 => {
             println!(

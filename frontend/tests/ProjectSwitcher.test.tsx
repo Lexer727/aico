@@ -3,8 +3,8 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { ProjectSwitcher } from '../src/components/navigation/ProjectSwitcher';
 import { useTabStore } from '../src/stores/useTabStore';
 
-// @verifies spec-ft-core-webui-shell::REQ-003
-// @verifies spec-ft-core-webui-shell::REQ-005
+// @verifies ft-core-webui-shell::TASK-CORE-006-7::REQ-003
+// @verifies ft-core-webui-shell::TASK-CORE-006-7::REQ-005
 describe('ProjectSwitcher', () => {
   const mockProjects = [
     { id: 'proj-1', name: 'Project Alpha' },

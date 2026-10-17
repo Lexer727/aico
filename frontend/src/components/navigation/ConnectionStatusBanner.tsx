@@ -8,9 +8,9 @@ interface ConnectionStatusBannerProps {
   iconOnly?: boolean;
 }
 
-// @implements spec-ft-core-webui-shell::REQ-009
-// @implements spec-ft-core-webui-shell::REQ-014
-// @implements spec-ft-core-webui-shell::REQ-022
+// @implements ft-core-webui-shell::TASK-CORE-006-5::REQ-009
+// @implements ft-core-webui-shell::TASK-CORE-006-5::REQ-014
+// @implements ft-core-webui-shell::TASK-CORE-006-26::REQ-022
 export const ConnectionStatusBanner: React.FC<ConnectionStatusBannerProps> = ({
   status,
   onReconnect,

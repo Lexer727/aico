@@ -4,15 +4,15 @@ use aico_server::assets::DiscoveredAssetInfo;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-// @verifies spec-ft-core-assets-manager::REQ-001
-// @verifies spec-ft-core-assets-manager::REQ-002
-// @verifies spec-ft-core-assets-manager::REQ-003
-// @verifies spec-ft-core-assets-manager::REQ-004
-// @verifies spec-ft-core-assets-manager::REQ-005
-// @verifies spec-ft-core-assets-manager::REQ-008
-// @verifies spec-ft-core-assets-manager::REQ-009
-// @verifies spec-ft-core-assets-manager::REQ-013
-// @verifies spec-ft-core-assets-manager::REQ-014
+// @verifies ft-core-assets-manager::TASK-ASSET-003::REQ-001
+// @verifies ft-core-assets-manager::TASK-ASSET-001::REQ-002
+// @verifies ft-core-assets-manager::TASK-ASSET-007::REQ-003
+// @verifies ft-core-assets-manager::TASK-ASSET-004::REQ-004
+// @verifies ft-core-assets-manager::TASK-ASSET-004::REQ-005
+// @verifies ft-core-assets-manager::TASK-ASSET-006::REQ-008
+// @verifies ft-core-assets-manager::TASK-ASSET-007::REQ-009
+// @verifies ft-core-assets-manager::TASK-ASSET-009::REQ-013
+// @verifies ft-core-assets-manager::TASK-ASSET-009::REQ-014
 #[tokio::test]
 async fn test_assets_management_service_and_endpoints() {
     let temp_root = std::env::temp_dir().join(format!("aico_test_assets_{}", rand::random::<u32>()));

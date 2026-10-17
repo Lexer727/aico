@@ -15,7 +15,7 @@ interface PairingData {
   pairing_url: string;
 }
 
-// @implements spec-ft-core-webui-shell::REQ-019
+// @implements ft-core-webui-shell::TASK-CORE-006-17::REQ-019
 export const MobilePairingModal: React.FC<MobilePairingModalProps> = ({
   isOpen,
   onClose,

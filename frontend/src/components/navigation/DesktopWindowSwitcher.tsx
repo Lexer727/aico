@@ -15,7 +15,7 @@ export interface DesktopWindowSwitcherProps {
   onSelectWindow: (windowId: string) => void;
 }
 
-// @implements spec-ft-core-webui-shell::REQ-020
+// @implements ft-core-webui-shell::TASK-CORE-006-26::REQ-020
 export const DesktopWindowSwitcher: React.FC<DesktopWindowSwitcherProps> = ({
   windows,
   targetWindowId,

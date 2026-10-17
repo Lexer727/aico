@@ -24,7 +24,7 @@ pub struct LanceVectorStore {
 
 impl LanceVectorStore {
     /// Initialize embedded vector store connection
-    // @implements spec-ft-core-local-storage::REQ-001
+    // @implements ft-core-local-storage::TASK-CORE-003-1::REQ-001
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StorageError> {
         let path = path.as_ref().to_path_buf();
         std::fs::create_dir_all(&path)?;
@@ -53,7 +53,7 @@ impl LanceVectorStore {
     }
 
     /// Perform nearest neighbor vector similarity search
-    // @implements spec-ft-core-local-storage::REQ-003
+    // @implements ft-core-local-storage::TASK-CORE-003-1::REQ-003
     pub fn query_nearest(&self, query_vector: &[f32], top_k: usize) -> Result<Vec<VectorQueryResult>, StorageError> {
         let mut scored: Vec<VectorQueryResult> = self
             .records

@@ -58,7 +58,7 @@ describe('searchEngine: In-Memory Full-Text Fuzzy Engine', () => {
     consequences: 'Guarantees memory safety and minimal resource overhead.',
   };
 
-  // @verifies spec-ft-core-omni-search-fulltext::REQ-001
+  // @verifies ft-core-omni-search-fulltext::TASK-CORE-009-10::REQ-001
   it('fuzzy matches entities despite typos (e.g. ft-cor-host-runtime matches ft-core-host-runtime)', () => {
     // Exact or typo distance <= 2
     const score1 = fuzzyScore('ft-core-host-runtime', 'ft-core-host-runtime');
@@ -81,7 +81,7 @@ describe('searchEngine: In-Memory Full-Text Fuzzy Engine', () => {
     expect(results[0].id).toBe('ft-core-host-runtime');
   });
 
-  // @verifies spec-ft-core-omni-search-fulltext::REQ-002
+  // @verifies ft-core-omni-search-fulltext::TASK-CORE-009-6::REQ-002
   it('finds parent entities when querying terms present only in associated document content', () => {
     const index = createSearchIndex({
       epics: [mockEpic],
@@ -115,8 +115,8 @@ describe('searchEngine: In-Memory Full-Text Fuzzy Engine', () => {
     expect(resGlossary.some((r) => r.id === 'ec-core')).toBe(true);
   });
 
-  // @verifies spec-ft-core-omni-search-fulltext::REQ-002
-  // @verifies spec-ft-core-omni-search-fulltext::REQ-009
+  // @verifies ft-core-omni-search-fulltext::TASK-CORE-009-6::REQ-002
+  // @verifies ft-core-omni-search-fulltext::TASK-CORE-009-6::REQ-009
   it('dual-matches both Specification (scope: specs) and Feature (scope: features) for terms within spec content', () => {
     const mockFeatureWithSpec: DiscoveredFeature = {
       ...mockFeature,
@@ -152,5 +152,66 @@ describe('searchEngine: In-Memory Full-Text Fuzzy Engine', () => {
     expect(specHit?.id).toBe('spec-ft-core-host-runtime');
     expect(featHit).toBeDefined();
     expect(featHit?.id).toBe('ft-core-host-runtime');
+  });
+
+  // @verifies ft-core-code-path-simplification-and-omnisearch::TASK-CORE-015-2::REQ-003
+  it('indexes code files with repository-relative path as title instead of basename', () => {
+    const index = createSearchIndex({
+      epics: [],
+      features: [],
+      adrs: [],
+      codeFiles: [
+        {
+          path: 'crates/aico-server/src/server.rs',
+          relative_path: 'crates/aico-server/src/server.rs',
+          name: 'server.rs',
+          extension: 'rs',
+          implements_count: 5,
+          verifies_count: 3,
+        },
+      ],
+    });
+
+    const results = searchWorkspace(index, 'server.rs');
+    expect(results.length).toBeGreaterThan(0);
+    const codeHit = results.find((r) => r.scope === 'code');
+    expect(codeHit).toBeDefined();
+    expect(codeHit?.title).toBe('crates/aico-server/src/server.rs');
+    expect(codeHit?.id).toBe('crates/aico-server/src/server.rs');
+  });
+
+  // @verifies ft-core-multirepo-code-path-normalization::TASK-CORE-016-2::REQ-003
+  it('indexes multi-repository code files preserving repository prefixes in title and id', () => {
+    const index = createSearchIndex({
+      epics: [],
+      features: [],
+      adrs: [],
+      codeFiles: [
+        {
+          path: 'aico/crates/aico-server/src/server.rs',
+          relative_path: 'aico/crates/aico-server/src/server.rs',
+          name: 'server.rs',
+          extension: 'rs',
+        },
+        {
+          path: 'aico-standalone/src/main.rs',
+          relative_path: 'aico-standalone/src/main.rs',
+          name: 'main.rs',
+          extension: 'rs',
+        },
+      ],
+    });
+
+    const resAico = searchWorkspace(index, 'server.rs');
+    expect(resAico.length).toBeGreaterThan(0);
+    const hitAico = resAico.find((r) => r.scope === 'code');
+    expect(hitAico?.title).toBe('aico/crates/aico-server/src/server.rs');
+    expect(hitAico?.id).toBe('aico/crates/aico-server/src/server.rs');
+
+    const resStandalone = searchWorkspace(index, 'aico-standalone');
+    expect(resStandalone.length).toBeGreaterThan(0);
+    const hitStandalone = resStandalone.find((r) => r.scope === 'code');
+    expect(hitStandalone?.title).toBe('aico-standalone/src/main.rs');
+    expect(hitStandalone?.id).toBe('aico-standalone/src/main.rs');
   });
 });

@@ -17,10 +17,10 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 
-// @implements spec-ft-core-webui-shell::REQ-004
-// @implements spec-ft-core-webui-shell::REQ-005
-// @implements spec-ft-core-epic-hub::REQ-007
-// @implements spec-ft-core-assets-manager::REQ-007
+// @implements ft-core-webui-shell::TASK-CORE-006-2::REQ-004
+// @implements ft-core-webui-shell::TASK-CORE-006-7::REQ-005
+// @implements ft-core-epic-hub::TASK-CORE-007-1::REQ-007
+// @implements ft-core-assets-manager::TASK-ASSET-005::REQ-007
 export const TabBar: React.FC = () => {
   const {
     activeProjectId,
@@ -53,7 +53,7 @@ export const TabBar: React.FC = () => {
     setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 2);
   }, []);
 
-  // @implements spec-ft-terminal-panel-ui::REQ-021
+  // @implements ft-terminal-panel-ui::TASK-TERM-002-17::REQ-021
   useEffect(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
@@ -83,9 +83,9 @@ export const TabBar: React.FC = () => {
     }
   };
 
-  // @implements spec-ft-core-ui-visual-consistency::REQ-003
-  // @implements spec-ft-core-ui-visual-consistency::REQ-005
-  // @implements spec-ft-core-assets-manager::REQ-007
+  // @implements ft-core-ui-visual-consistency::TASK-CORE-010-3::REQ-003
+  // @implements ft-core-ui-visual-consistency::TASK-CORE-010-5::REQ-005
+  // @implements ft-core-assets-manager::TASK-ASSET-005::REQ-007
   const getIcon = (type: string) => {
     const iconClass = 'w-3.5 h-3.5 shrink-0';
     switch (type) {

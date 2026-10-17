@@ -4,7 +4,7 @@ import React from 'react';
 import { ConnectionStatusBanner } from '../src/components/navigation/ConnectionStatusBanner';
 import { WebSocketStatus } from '../src/context/WebSocketContext';
 
-// @verifies spec-ft-core-webui-shell::REQ-014
+// @verifies ft-core-webui-shell::TASK-CORE-006-5::REQ-014
 describe('ConnectionStatusBanner Component', () => {
   it('renders status indicator for connected, reconnecting, and offline states', () => {
     const { rerender } = render(

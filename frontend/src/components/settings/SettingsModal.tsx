@@ -1,13 +1,13 @@
 import React from 'react';
-import { X, Settings, Shield, Server, Database, Sliders } from 'lucide-react';
+import { X, Settings, Shield, Server, Database, Sliders, FolderTree } from 'lucide-react';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-// @implements spec-ft-core-webui-shell::REQ-008
-// @implements spec-ft-core-webui-shell::REQ-012
+// @implements ft-core-webui-shell::TASK-CORE-006-1::REQ-008
+// @implements ft-core-webui-shell::TASK-CORE-006-8::REQ-012
 export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
@@ -107,6 +107,39 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               <div className="flex justify-between items-center">
                 <span className="text-zinc-400">Specs Root:</span>
                 <span className="font-mono text-zinc-300">d:/aico/aico-specs</span>
+              </div>
+            </div>
+          </section>
+
+          {/* Workspace Architecture & Topology Section */}
+          {/* @implements ft-core-workspace-path-normalization::TASK-CORE-014-3::REQ-006 */}
+          <section className="space-y-2.5" data-testid="section-workspace-topology">
+            <div className="flex items-center gap-2 font-semibold text-zinc-300">
+              <FolderTree className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Workspace Architecture & Topology</span>
+            </div>
+            <div className="space-y-2.5 bg-zinc-950/60 p-3 rounded-lg border border-zinc-800/80">
+              <div className="flex justify-between items-center">
+                <span className="text-zinc-400">Workspace Root:</span>
+                <span className="font-mono text-emerald-300 font-semibold bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">d:/aico</span>
+              </div>
+              <p className="text-[11px] text-zinc-400 leading-relaxed border-t border-zinc-800/60 pt-1.5 mt-1">
+                The platform root container hosting all decoupled project specifications and source codebases.
+              </p>
+              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-zinc-800/60">
+                <div className="bg-zinc-900/80 p-2 rounded border border-zinc-800">
+                  <span className="text-[10px] text-zinc-500 uppercase font-semibold block mb-0.5">Project Specifications</span>
+                  <span className="font-mono text-zinc-200 block text-[11px]">d:/aico/*-specs/</span>
+                  <span className="text-[10px] text-zinc-400 block mt-0.5">e.g. d:/aico/aico-specs</span>
+                </div>
+                <div className="bg-zinc-900/80 p-2 rounded border border-zinc-800">
+                  <span className="text-[10px] text-zinc-500 uppercase font-semibold block mb-0.5">Codebase Repositories</span>
+                  <span className="font-mono text-zinc-200 block text-[11px]">d:/aico/codebase/*/</span>
+                  <span className="text-[10px] text-zinc-400 block mt-0.5">e.g. d:/aico/codebase/aico</span>
+                </div>
+              </div>
+              <div className="text-[10px] text-zinc-500 italic pt-1">
+                All navigation and code viewer tabs resolve canonically relative to this root (e.g. codebase/aico/...).
               </div>
             </div>
           </section>

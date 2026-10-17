@@ -56,7 +56,7 @@ function levenshteinDistance(a: string, b: string): number {
   return dp[m][n];
 }
 
-// @implements spec-ft-core-omni-search-fulltext::REQ-001
+// @implements ft-core-omni-search-fulltext::TASK-CORE-009-10::REQ-001
 export function fuzzyScore(target: string, query: string): number {
   const t = target.toLowerCase().trim();
   const q = query.toLowerCase().trim();
@@ -106,12 +106,13 @@ export function fuzzyScore(target: string, query: string): number {
   return 0;
 }
 
-// @implements spec-ft-core-omni-search-fulltext::REQ-002
+// @implements ft-core-omni-search-fulltext::TASK-CORE-009-6::REQ-002
+// @implements ft-core-code-navigation-and-search::TASK-CORE-013-2::REQ-005
 export function createSearchIndex(options: {
   epics?: DiscoveredEpic[];
   features?: DiscoveredFeature[];
   adrs?: DiscoveredAdr[];
-  codeFiles?: string[];
+  codeFiles?: Array<string | any>;
   projectId?: string;
   projectName?: string;
 }): SearchableEntity[] {
@@ -213,8 +214,8 @@ export function createSearchIndex(options: {
   }
 
   // 3. Index Specs
-  // @implements spec-ft-core-omni-search-fulltext::REQ-002
-  // @implements spec-ft-core-omni-search-fulltext::REQ-009
+  // @implements ft-core-omni-search-fulltext::TASK-CORE-009-6::REQ-002
+  // @implements ft-core-omni-search-fulltext::TASK-CORE-009-6::REQ-009
   const indexedSpecIds = new Set<string>();
 
   for (const epic of epics) {
@@ -324,14 +325,32 @@ export function createSearchIndex(options: {
   }
 
   // 5. Index Code Files
+  // @implements ft-core-code-navigation-and-search::TASK-CORE-013-2::REQ-005
+  // @implements ft-core-code-path-simplification-and-omnisearch::TASK-CORE-015-2::REQ-003
+  // @implements ft-core-multirepo-code-path-normalization::TASK-CORE-016-2::REQ-003
   for (const code of codeFiles) {
+    const isString = typeof code === 'string';
+    const filePath = isString ? code : (code.path || code.relative_path || '');
+    const fileName = isString ? code.split('/').pop() || code : (code.name || filePath.split('/').pop() || '');
+    const texts: string[] = [filePath, fileName];
+    if (!isString) {
+      if (code.extension) texts.push(code.extension);
+      if (Array.isArray(code.annotations)) {
+        for (const ann of code.annotations) {
+          if (ann.target) texts.push(ann.target);
+          if (ann.kind) texts.push(ann.kind);
+          if (ann.task) texts.push(ann.task);
+          if (ann.req) texts.push(ann.req);
+        }
+      }
+    }
     index.push({
-      id: code,
-      title: code,
+      id: filePath,
+      title: filePath || fileName,
       scope: 'code',
       projectId,
       projectName,
-      searchableText: code,
+      searchableText: texts.filter(Boolean).join(' '),
       originalItem: code,
     });
   }
@@ -340,8 +359,8 @@ export function createSearchIndex(options: {
 }
 
 // Search across index with fuzzy matching and full-text scoring
-// @implements spec-ft-core-omni-search-fulltext::REQ-001
-// @implements spec-ft-core-omni-search-fulltext::REQ-002
+// @implements ft-core-omni-search-fulltext::TASK-CORE-009-10::REQ-001
+// @implements ft-core-omni-search-fulltext::TASK-CORE-009-6::REQ-002
 export function searchWorkspace(
   index: SearchableEntity[],
   query: string,

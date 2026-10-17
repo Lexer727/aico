@@ -44,8 +44,8 @@ vi.mock('../src/features/feature-task-data', () => ({
   }),
 }));
 
-// @verifies spec-ft-specs-blueprint-standards::REQ-004
-// @verifies spec-ft-specs-blueprint-standards::REQ-010
+// @verifies ft-specs-blueprint-standards::TASK-SPECS-001-3::REQ-004
+// @verifies ft-specs-blueprint-standards::TASK-SPECS-001-3::REQ-010
 describe('PlanViewer Component', () => {
   it('renders status in top right, aico_version below it, and no Back to Dashboard button', async () => {
     render(<PlanViewer planId="plan-ft-fast-trace" />);

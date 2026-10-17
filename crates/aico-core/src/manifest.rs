@@ -52,9 +52,9 @@ impl ProjectManifest {
     }
 
     /// Parse from a JSON string and validate required invariants
-    // @implements spec-ft-core-discovery::REQ-002
-    // @implements spec-ft-core-discovery::REQ-007
-    // @implements spec-ft-git-backend-status::REQ-001
+    // @implements ft-core-discovery::TASK-CORE-004-1::REQ-002
+    // @implements ft-core-discovery::TASK-CORE-004-1::REQ-007
+    // @implements ft-git-backend-status::TASK-GIT-001-6::REQ-001
     pub fn from_json_str(json: &str) -> Result<Self, ManifestError> {
         let manifest: ProjectManifest = serde_json::from_str(json)
             .map_err(|e| ManifestError::JsonParseError(e.to_string()))?;
@@ -91,7 +91,7 @@ impl ProjectManifest {
     }
 
     /// Resolve primary codebase path if declared or from first codebase repository
-    // @implements spec-ft-core-discovery::REQ-003
+    // @implements ft-core-discovery::TASK-CORE-004-1::REQ-003
     pub fn resolve_codebase_path<P: AsRef<Path>>(&self, specs_dir: P) -> Option<PathBuf> {
         if let Some(ref cb) = self.codebase_path {
             if !cb.trim().is_empty() {
@@ -109,8 +109,8 @@ impl ProjectManifest {
     }
 
     /// Returns declared repositories, or defaults to specs repository (and codebase if declared)
-    // @implements spec-ft-git-backend-status::REQ-001
-    // @implements spec-ft-git-backend-status::REQ-002
+    // @implements ft-git-backend-status::TASK-GIT-001-6::REQ-001
+    // @implements ft-git-backend-status::TASK-GIT-001-6::REQ-002
     pub fn get_effective_repositories<P: AsRef<Path>>(&self, specs_dir: P) -> Vec<ProjectRepository> {
         if let Some(ref repos) = self.repositories {
             if !repos.is_empty() {

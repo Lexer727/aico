@@ -214,8 +214,8 @@ describe('TerminalConsole Component (xterm.js + ConPTY)', () => {
     fireEvent.click(screen.getByTestId('add-default-terminal'));
   };
 
-  // @verifies spec-ft-terminal-panel-ui::REQ-001
-  // @verifies spec-ft-terminal-xterm-ui::REQ-002
+  // @verifies ft-terminal-panel-ui::TASK-TERM-002-7::REQ-001
+  // @verifies ft-terminal-xterm-ui::TASK-XTERM-006::REQ-002
   it('provides icon-only Antigravity (agy-terminal-btn) and Claude (claude-terminal-btn) buttons that open Antigravity and Claude tabs', () => {
     render(<TerminalConsole />);
 
@@ -233,17 +233,17 @@ describe('TerminalConsole Component (xterm.js + ConPTY)', () => {
     expect(screen.getByText('Claude')).toBeInTheDocument();
   });
 
-  // @verifies spec-ft-terminal-panel-ui::REQ-002
-  // @verifies spec-ft-terminal-xterm-ui::REQ-002
+  // @verifies ft-terminal-panel-ui::TASK-TERM-002-1::REQ-002
+  // @verifies ft-terminal-xterm-ui::TASK-XTERM-006::REQ-002
   it('provides a Plus button that creates a default PowerShell terminal tab', () => {
     render(<TerminalConsole />);
     openDefaultTerminal();
     expect(screen.getAllByText(/PowerShell/i).length).toBeGreaterThan(0);
   });
 
-  // @verifies spec-ft-terminal-panel-ui::REQ-003
-  // @verifies spec-ft-terminal-panel-ui::REQ-004
-  // @verifies spec-ft-terminal-xterm-ui::REQ-002
+  // @verifies ft-terminal-panel-ui::TASK-TERM-002-1::REQ-003
+  // @verifies ft-terminal-panel-ui::TASK-TERM-002-1::REQ-004
+  // @verifies ft-terminal-xterm-ui::TASK-XTERM-006::REQ-002
   it('renders dropdown next to Plus button to select PowerShell, Git Bash, or Command Prompt', () => {
     render(<TerminalConsole />);
 
@@ -257,9 +257,9 @@ describe('TerminalConsole Component (xterm.js + ConPTY)', () => {
     expect(screen.queryByTestId('shell-option-bash')).not.toBeInTheDocument();
   });
 
-  // @verifies spec-ft-terminal-xterm-ui::REQ-001
-  // @verifies spec-ft-terminal-xterm-ui::REQ-003
-  // @verifies spec-ft-terminal-xterm-ui::REQ-007
+  // @verifies ft-terminal-xterm-ui::TASK-XTERM-005::REQ-001
+  // @verifies ft-terminal-xterm-ui::TASK-XTERM-005::REQ-003
+  // @verifies ft-terminal-xterm-ui::TASK-XTERM-003::REQ-007
   it('mounts an @xterm/xterm viewport, forwards raw keystrokes via term.onData, and pipes PTY chunks into term.write()', async () => {
     render(<TerminalConsole />);
     openDefaultTerminal();
@@ -300,7 +300,7 @@ describe('TerminalConsole Component (xterm.js + ConPTY)', () => {
     expect(sentInput).toEqual({ type: 'input', data: '\u001b[B' });
   });
 
-  // @verifies spec-ft-terminal-xterm-ui::REQ-004
+  // @verifies ft-terminal-xterm-ui::TASK-XTERM-005::REQ-004
   it('invokes FitAddon.fit() and transmits a WebSocket resize message when dimensions change', async () => {
     render(<TerminalConsole />);
     openDefaultTerminal();
@@ -322,8 +322,8 @@ describe('TerminalConsole Component (xterm.js + ConPTY)', () => {
     expect(resizeMsg).toBeDefined();
   });
 
-  // @verifies spec-ft-terminal-xterm-ui::REQ-008
-  // @verifies spec-ft-terminal-xterm-ui::REQ-010
+  // @verifies ft-terminal-xterm-ui::TASK-XTERM-004::REQ-008
+  // @verifies ft-terminal-xterm-ui::TASK-XTERM-004::REQ-010
   it('does NOT render hardcoded user emails, static model footers, or the floating HTML slash menu in an AI tab', async () => {
     render(<TerminalConsole />);
     fireEvent.click(screen.getByTestId('agy-terminal-btn'));
@@ -339,7 +339,7 @@ describe('TerminalConsole Component (xterm.js + ConPTY)', () => {
     expect(screen.queryByTestId('terminal-inline-input')).not.toBeInTheDocument();
   });
 
-  // @verifies spec-ft-terminal-xterm-ui::REQ-009
+  // @verifies ft-terminal-xterm-ui::TASK-XTERM-003::REQ-009
   it('shows a disconnected banner and suppresses keystroke forwarding when the WebSocket closes unexpectedly', async () => {
     render(<TerminalConsole />);
     openDefaultTerminal();
@@ -364,9 +364,9 @@ describe('TerminalConsole Component (xterm.js + ConPTY)', () => {
     expect(socket.sentMessages.length).toBe(countBefore);
   });
 
-  // @verifies spec-ft-terminal-panel-ui::REQ-006
-  // @verifies spec-ft-terminal-panel-ui::REQ-008
-  // @verifies spec-ft-terminal-xterm-ui::REQ-005
+  // @verifies ft-terminal-panel-ui::TASK-TERM-002-2::REQ-006
+  // @verifies ft-terminal-panel-ui::TASK-TERM-002-6::REQ-008
+  // @verifies ft-terminal-xterm-ui::TASK-XTERM-005::REQ-005
   it('allows closing tab even when only one terminal is open, transitioning to empty state', () => {
     render(<TerminalConsole />);
     openDefaultTerminal();
@@ -376,8 +376,8 @@ describe('TerminalConsole Component (xterm.js + ConPTY)', () => {
     expect(screen.getByText(/No open terminals/i)).toBeInTheDocument();
   });
 
-  // @verifies spec-ft-terminal-panel-ui::REQ-009
-  // @verifies spec-ft-terminal-panel-ui::REQ-010
+  // @verifies ft-terminal-panel-ui::TASK-TERM-002-5::REQ-009
+  // @verifies ft-terminal-panel-ui::TASK-TERM-002-6::REQ-010
   it('renders TERMINALS in header row, plus button has no text, and tab has responsive shortName ps', () => {
     render(<TerminalConsole />);
     openDefaultTerminal();
@@ -387,8 +387,8 @@ describe('TerminalConsole Component (xterm.js + ConPTY)', () => {
     expect(screen.getByText('ps')).toBeInTheDocument();
   });
 
-  // @verifies spec-ft-terminal-panel-ui::REQ-015
-  // @verifies spec-ft-terminal-xterm-ui::REQ-005
+  // @verifies ft-terminal-panel-ui::TASK-TERM-002-11::REQ-015
+  // @verifies ft-terminal-xterm-ui::TASK-XTERM-005::REQ-005
   it('closes tab on middle mouse button click (button === 1)', () => {
     render(<TerminalConsole />);
     openDefaultTerminal();
@@ -398,8 +398,8 @@ describe('TerminalConsole Component (xterm.js + ConPTY)', () => {
     expect(screen.getByText(/No Active Terminals/i)).toBeInTheDocument();
   });
 
-  // @verifies spec-ft-terminal-panel-ui::REQ-015
-  // @verifies spec-ft-terminal-xterm-ui::REQ-006
+  // @verifies ft-terminal-panel-ui::TASK-TERM-002-11::REQ-015
+  // @verifies ft-terminal-xterm-ui::TASK-XTERM-002::REQ-006
   it('supports drag-and-drop tab reordering with preview shift', () => {
     render(<TerminalConsole />);
     openDefaultTerminal();
@@ -418,7 +418,7 @@ describe('TerminalConsole Component (xterm.js + ConPTY)', () => {
     expect(screen.getAllByTestId(/^tab-term-/).length).toBe(2);
   });
 
-  // @verifies spec-ft-terminal-panel-ui::REQ-017
+  // @verifies ft-terminal-panel-ui::TASK-TERM-002-13::REQ-017
   it('starts with zero open terminals on fresh boot, showing empty state and quick launch buttons', () => {
     render(<TerminalConsole />);
 
@@ -430,7 +430,7 @@ describe('TerminalConsole Component (xterm.js + ConPTY)', () => {
     expect(screen.queryByText(/No Active Terminals/i)).not.toBeInTheDocument();
   });
 
-  // @verifies spec-ft-terminal-panel-ui::REQ-017
+  // @verifies ft-terminal-panel-ui::TASK-TERM-002-13::REQ-017
   it('restores open tabs from sessionStorage on page reload', () => {
     sessionStorage.setItem('aico_terminal_session_initialized', 'true');
     sessionStorage.setItem(
@@ -448,7 +448,7 @@ describe('TerminalConsole Component (xterm.js + ConPTY)', () => {
     expect(screen.queryByText(/No Active Terminals/i)).not.toBeInTheDocument();
   });
 
-  // @verifies spec-ft-terminal-panel-ui::REQ-021
+  // @verifies ft-terminal-panel-ui::TASK-TERM-002-17::REQ-021
   it('translates mouse wheel events horizontally and prevents vertical scroll', () => {
     const { container } = render(<TerminalConsole />);
     openDefaultTerminal();
@@ -460,7 +460,7 @@ describe('TerminalConsole Component (xterm.js + ConPTY)', () => {
     expect(wheelEvent.defaultPrevented).toBe(true);
   });
 
-  // @verifies spec-ft-terminal-panel-ui::REQ-022
+  // @verifies ft-terminal-panel-ui::TASK-TERM-002-18::REQ-022
   it('provides a Kill Terminal button that sends kill message and forcefully closes tab', async () => {
     render(<TerminalConsole />);
     openDefaultTerminal();
@@ -477,7 +477,7 @@ describe('TerminalConsole Component (xterm.js + ConPTY)', () => {
     expect(screen.getByText(/No Active Terminals/i)).toBeInTheDocument();
   });
 
-  // @verifies spec-ft-terminal-xterm-ui::REQ-011
+  // @verifies ft-terminal-xterm-ui::TASK-XTERM-007::REQ-011
   it('renders per-tab 4-state circular AI status indicator with hover tooltip and ignores user typing echoes before Enter', async () => {
     render(<TerminalConsole />);
     fireEvent.click(screen.getByTestId('agy-terminal-btn'));
@@ -537,7 +537,7 @@ describe('TerminalConsole Component (xterm.js + ConPTY)', () => {
     expect(agyTab.getAttribute('title')).toMatch(/Not logged in/i);
   });
 
-  // @verifies spec-ft-terminal-xterm-ui::REQ-012
+  // @verifies ft-terminal-xterm-ui::TASK-XTERM-008::REQ-012
   it('enforces a singleton tab per AI CLI (agy and claude) and focuses the existing tab, while standard shells remain unlimited', () => {
     render(<TerminalConsole />);
 
@@ -568,7 +568,7 @@ describe('TerminalConsole Component (xterm.js + ConPTY)', () => {
     expect(agyTab.className).toContain('border-b-indigo-500');
   });
 
-  // @verifies spec-ft-terminal-xterm-ui::REQ-013
+  // @verifies ft-terminal-xterm-ui::TASK-XTERM-009::REQ-013
   it('supports selection-aware Ctrl+C copy and Ctrl+V clipboard paste across terminal tabs', async () => {
     const writeTextMock = vi.fn().mockResolvedValue(undefined);
     const readTextMock = vi.fn().mockResolvedValue('echo pasted_from_clipboard\r');
@@ -620,7 +620,7 @@ describe('TerminalConsole Component (xterm.js + ConPTY)', () => {
     expect(pastedMsg).toBeDefined();
   });
 
-  // @verifies spec-ft-terminal-xterm-ui::REQ-014
+  // @verifies ft-terminal-xterm-ui::TASK-XTERM-009::REQ-014
   it('passes tab_id in WebSocket init message and preserves backend session on unmount while sending close on explicit tab close', async () => {
     const { unmount } = render(<TerminalConsole />);
     openDefaultTerminal();

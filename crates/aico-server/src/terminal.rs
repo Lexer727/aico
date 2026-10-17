@@ -100,10 +100,10 @@ impl ShellType {
 /// Resolve the executable and arguments for a shell. AI CLIs are launched
 /// directly (no wrapper REPL) because they now run inside a real PTY and can
 /// drive their own interactive TUI.
-// @implements spec-ft-terminal-backend-stream-bridge::REQ-002
-// @implements spec-ft-terminal-backend-stream-bridge::REQ-006
-// @implements spec-ft-terminal-backend-stream-bridge::REQ-007
-// @implements spec-ft-terminal-conpty-bridge::REQ-003
+// @implements ft-terminal-backend-stream-bridge::TASK-TERM-001-1::REQ-002
+// @implements ft-terminal-backend-stream-bridge::TASK-TERM-001-1::REQ-006
+// @implements ft-terminal-backend-stream-bridge::TASK-TERM-001-3::REQ-007
+// @implements ft-terminal-conpty-bridge::TASK-PTY-006::REQ-003
 pub fn resolve_shell_command(shell: &ShellType) -> Result<(String, Vec<String>), String> {
     if cfg!(windows) {
         match shell {
@@ -179,8 +179,8 @@ struct SessionEntry {
 }
 
 /// Process-wide registry of live PTY sessions.
-// @implements spec-ft-terminal-conpty-bridge::REQ-008
-// @implements spec-ft-terminal-conpty-bridge::REQ-011
+// @implements ft-terminal-conpty-bridge::TASK-PTY-003::REQ-008
+// @implements ft-terminal-conpty-bridge::TASK-PTY-007::REQ-011
 #[derive(Default)]
 pub struct TerminalSessionRegistry {
     next_id: AtomicU64,
@@ -262,7 +262,7 @@ impl TerminalSessionRegistry {
     }
 }
 
-// @implements spec-ft-terminal-conpty-bridge::REQ-008
+// @implements ft-terminal-conpty-bridge::TASK-PTY-003::REQ-008
 pub async fn terminal_sessions_handler(State(state): State<AppState>) -> Json<Vec<TerminalSessionInfo>> {
     Json(state.terminal_sessions.list())
 }
@@ -272,8 +272,8 @@ pub async fn terminal_sessions_handler(State(state): State<AppState>) -> Json<Ve
 // ---------------------------------------------------------------------------
 
 /// Owns the PTY master, rolling scrollback buffer, and I/O threads of one terminal session.
-// @implements spec-ft-terminal-conpty-bridge::REQ-011
-// @implements spec-ft-terminal-conpty-bridge::REQ-012
+// @implements ft-terminal-conpty-bridge::TASK-PTY-007::REQ-011
+// @implements ft-terminal-conpty-bridge::TASK-PTY-008::REQ-012
 struct PtySession {
     master: Mutex<Option<Box<dyn MasterPty + Send>>>,
     input_tx: std::sync::mpsc::Sender<Vec<u8>>,
@@ -289,7 +289,7 @@ impl PtySession {
         let _ = self.input_tx.send(data.to_vec());
     }
 
-    // @implements spec-ft-terminal-conpty-bridge::REQ-005
+    // @implements ft-terminal-conpty-bridge::TASK-PTY-004::REQ-005
     fn resize(&self, cols: u16, rows: u16) {
         if let Some(ref master) = *self.master.lock().unwrap() {
             if let Err(e) = master.resize(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 }) {
@@ -303,8 +303,8 @@ impl PtySession {
     }
 
     /// Attach a WebSocket output channel and return a snapshot of the buffered scrollback.
-    // @implements spec-ft-terminal-conpty-bridge::REQ-011
-    // @implements spec-ft-terminal-conpty-bridge::REQ-012
+    // @implements ft-terminal-conpty-bridge::TASK-PTY-007::REQ-011
+    // @implements ft-terminal-conpty-bridge::TASK-PTY-008::REQ-012
     fn attach_client(&self, out_tx: mpsc::Sender<ServerTerminalMessage>) -> String {
         let history = self.scrollback.lock().unwrap().clone();
         let mut clients = self.client_txs.lock().unwrap();
@@ -316,7 +316,7 @@ impl PtySession {
     }
 
     /// Detach the given WebSocket output channel.
-    // @implements spec-ft-terminal-conpty-bridge::REQ-012
+    // @implements ft-terminal-conpty-bridge::TASK-PTY-008::REQ-012
     fn detach_client(&self, expected_tx: &mpsc::Sender<ServerTerminalMessage>) {
         let mut clients = self.client_txs.lock().unwrap();
         clients.retain(|tx| !tx.same_channel(expected_tx) && !tx.is_closed());
@@ -324,7 +324,7 @@ impl PtySession {
 
     /// Kill the whole process tree, then release PTY handles off the async runtime
     /// (closing a pseudo console can block while output is drained).
-    // @implements spec-ft-terminal-conpty-bridge::REQ-006
+    // @implements ft-terminal-conpty-bridge::TASK-PTY-007::REQ-006
     fn shutdown(&self) {
         self.client_txs.lock().unwrap().clear();
         #[cfg(windows)]
@@ -379,11 +379,11 @@ impl Utf8Stream {
     }
 }
 
-// @implements spec-ft-terminal-conpty-bridge::REQ-001
-// @implements spec-ft-terminal-conpty-bridge::REQ-003
-// @implements spec-ft-terminal-conpty-bridge::REQ-007
-// @implements spec-ft-terminal-conpty-bridge::REQ-010
-// @implements spec-ft-terminal-conpty-bridge::REQ-011
+// @implements ft-terminal-conpty-bridge::TASK-PTY-004::REQ-001
+// @implements ft-terminal-conpty-bridge::TASK-PTY-006::REQ-003
+// @implements ft-terminal-conpty-bridge::TASK-PTY-006::REQ-007
+// @implements ft-terminal-conpty-bridge::TASK-PTY-006::REQ-010
+// @implements ft-terminal-conpty-bridge::TASK-PTY-007::REQ-011
 fn spawn_pty_session(
     shell: &ShellType,
     working_dir: &Path,
@@ -431,7 +431,7 @@ fn spawn_pty_session(
     let exited = Arc::new(Mutex::new(None));
 
     // Reader thread: PTY -> Scrollback + active WebSocket clients.
-    // @implements spec-ft-terminal-conpty-bridge::REQ-012
+    // @implements ft-terminal-conpty-bridge::TASK-PTY-008::REQ-012
     let client_txs_reader = client_txs.clone();
     let scrollback_reader = scrollback.clone();
     let dsr_reply_tx = input_tx.clone();
@@ -504,14 +504,14 @@ fn spawn_pty_session(
 // WebSocket handler
 // ---------------------------------------------------------------------------
 
-// @implements spec-ft-terminal-backend-stream-bridge::REQ-001
-// @implements spec-ft-terminal-conpty-bridge::REQ-002
+// @implements ft-terminal-backend-stream-bridge::TASK-TERM-001-3::REQ-001
+// @implements ft-terminal-conpty-bridge::TASK-PTY-004::REQ-002
 pub async fn terminal_ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_terminal_socket(socket, state))
 }
 
-// @implements spec-ft-terminal-conpty-bridge::REQ-003
-// @implements spec-ft-terminal-panel-ui::REQ-011
+// @implements ft-terminal-conpty-bridge::TASK-PTY-006::REQ-003
+// @implements ft-terminal-panel-ui::TASK-TERM-002-7::REQ-011
 async fn resolve_working_dir(state: &AppState, cwd: Option<String>) -> PathBuf {
     match cwd {
         Some(dir) if !dir.trim().is_empty() => PathBuf::from(dir),
@@ -530,12 +530,12 @@ async fn resolve_working_dir(state: &AppState, cwd: Option<String>) -> PathBuf {
     }
 }
 
-// @implements spec-ft-terminal-conpty-bridge::REQ-002
-// @implements spec-ft-terminal-conpty-bridge::REQ-004
-// @implements spec-ft-terminal-conpty-bridge::REQ-005
-// @implements spec-ft-terminal-conpty-bridge::REQ-006
-// @implements spec-ft-terminal-conpty-bridge::REQ-009
-// @implements spec-ft-terminal-conpty-bridge::REQ-011
+// @implements ft-terminal-conpty-bridge::TASK-PTY-004::REQ-002
+// @implements ft-terminal-conpty-bridge::TASK-PTY-004::REQ-004
+// @implements ft-terminal-conpty-bridge::TASK-PTY-004::REQ-005
+// @implements ft-terminal-conpty-bridge::TASK-PTY-007::REQ-006
+// @implements ft-terminal-conpty-bridge::TASK-PTY-002::REQ-009
+// @implements ft-terminal-conpty-bridge::TASK-PTY-007::REQ-011
 async fn handle_terminal_socket(socket: WebSocket, state: AppState) {
     let (mut ws_sender, mut ws_receiver) = socket.split();
     let (out_tx, mut out_rx) = mpsc::channel::<ServerTerminalMessage>(256);

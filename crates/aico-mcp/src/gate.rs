@@ -40,8 +40,8 @@ pub struct ArtifactToolGate;
 
 impl ArtifactToolGate {
     /// Calculate deterministic destination file path for artifact
-    // @implements spec-ft-core-mcp-tools::REQ-002
-    // @implements spec-ft-core-mcp-tools::REQ-010
+    // @implements ft-core-mcp-tools::TASK-CORE-005-3::REQ-002
+    // @implements ft-core-mcp-tools::TASK-CORE-005-4::REQ-010
     pub fn determine_path(
         specs_root: &Path,
         artifact_type: &str,
@@ -161,9 +161,9 @@ impl ArtifactToolGate {
     }
 
     /// Inject YAML frontmatter and write artifact atomically to disk
-    // @implements spec-ft-core-mcp-tools::REQ-003
-    // @implements spec-ft-core-mcp-tools::REQ-005
-    // @implements spec-ft-core-mcp-tools::REQ-012
+    // @implements ft-core-mcp-tools::TASK-CORE-005-1::REQ-003
+    // @implements ft-core-mcp-tools::TASK-CORE-005-1::REQ-005
+    // @implements ft-core-mcp-tools::TASK-CORE-005-4::REQ-012
     pub fn create_artifact(params: CreateArtifactParams) -> Result<PathBuf, GateError> {
         if let Some(custom) = params.custom_path {
             return Err(GateError::CustomPathProhibited(custom));

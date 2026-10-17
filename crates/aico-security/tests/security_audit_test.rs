@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use aico_security::{AuditLogger, AuditEvent, CommandTier};
 
-// @verifies spec-ft-core-security-auth::REQ-004
+// @verifies ft-core-security-auth::TASK-CORE-002-4::REQ-004
 #[tokio::test]
 async fn test_audit_trail_logging_and_persistence() {
     let temp_dir = std::env::temp_dir().join("aico_audit_test_1");
@@ -36,7 +36,7 @@ async fn test_audit_trail_logging_and_persistence() {
     assert!(file_content.contains("agent-builder-1"));
 }
 
-// @verifies spec-ft-core-security-auth::REQ-007
+// @verifies ft-core-security-auth::TASK-CORE-002-2::REQ-007
 #[tokio::test]
 async fn test_audit_logger_enforces_synchronous_write_before_mutation() {
     let temp_dir = std::env::temp_dir().join("aico_audit_test_2");

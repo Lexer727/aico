@@ -63,7 +63,7 @@ impl AuditLogger {
     }
 
     /// Append a structured audit event synchronously to disk and memory
-    // @implements spec-ft-core-security-auth::REQ-004
+    // @implements ft-core-security-auth::TASK-CORE-002-4::REQ-004
     pub fn log_event(&self, event: &AuditEvent) -> Result<(), AuditError> {
         let serialized = serde_json::to_string(event)?;
 
@@ -88,7 +88,7 @@ impl AuditLogger {
     }
 
     /// Synchronously write audit event before executing workspace mutation
-    // @implements spec-ft-core-security-auth::REQ-007
+    // @implements ft-core-security-auth::TASK-CORE-002-2::REQ-007
     pub fn record_and_execute<F, R, E>(
         &self,
         agent_id: &str,

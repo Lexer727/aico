@@ -3,14 +3,14 @@ import { render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { AiStatusMonitor } from '../src/components/layout/AiStatusMonitor';
 
-// @verifies spec-ft-terminal-ai-quota-monitor::REQ-003
-// @verifies spec-ft-terminal-ai-quota-monitor::REQ-004
-// @verifies spec-ft-terminal-ai-quota-monitor::REQ-005
-// @verifies spec-ft-terminal-ai-quota-monitor::REQ-006
-// @verifies spec-ft-terminal-ai-quota-monitor::REQ-007
-// @verifies spec-ft-terminal-ai-quota-monitor::REQ-008
-// @verifies spec-ft-terminal-ai-quota-monitor::REQ-010
-// @verifies spec-ft-terminal-ai-quota-monitor::REQ-011
+// @verifies ft-terminal-ai-quota-monitor::TASK-QUOTA-007::REQ-003
+// @verifies ft-terminal-ai-quota-monitor::TASK-QUOTA-006::REQ-004
+// @verifies ft-terminal-ai-quota-monitor::TASK-QUOTA-007::REQ-005
+// @verifies ft-terminal-ai-quota-monitor::TASK-QUOTA-007::REQ-006
+// @verifies ft-terminal-ai-quota-monitor::TASK-QUOTA-002::REQ-007
+// @verifies ft-terminal-ai-quota-monitor::TASK-QUOTA-005::REQ-008
+// @verifies ft-terminal-ai-quota-monitor::TASK-QUOTA-007::REQ-010
+// @verifies ft-terminal-ai-quota-monitor::TASK-QUOTA-004::REQ-011
 describe('AiStatusMonitor Component', () => {
   const originalFetch = global.fetch;
 

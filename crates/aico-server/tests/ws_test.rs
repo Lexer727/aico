@@ -1,7 +1,7 @@
 use aico_server::{WebSocketHub, HubMessage};
 
-// @verifies spec-ft-core-host-runtime::REQ-003
-// @verifies spec-ft-core-host-runtime::REQ-007
+// @verifies ft-core-host-runtime::TASK-CORE-001-6::REQ-003
+// @verifies ft-core-host-runtime::TASK-CORE-001-6::REQ-007
 #[tokio::test]
 async fn test_websocket_connect_and_broadcast() {
     let hub = WebSocketHub::new(16);
@@ -15,8 +15,8 @@ async fn test_websocket_connect_and_broadcast() {
     assert!(received.payload.contains("cargo test"));
 }
 
-// @verifies spec-ft-core-host-runtime::REQ-003
-// @verifies spec-ft-core-host-runtime::REQ-007
+// @verifies ft-core-host-runtime::TASK-CORE-001-6::REQ-003
+// @verifies ft-core-host-runtime::TASK-CORE-001-6::REQ-007
 #[tokio::test]
 async fn test_real_websocket_handshake_and_stream() {
     use aico_server::{AppState, HostServer, ServerConfig};

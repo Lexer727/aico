@@ -93,9 +93,9 @@ const defaultEpics: DiscoveredEpic[] = [
   },
 ];
 
-// @implements spec-ft-core-epic-hub::REQ-001
-// @implements spec-ft-core-epic-hub::REQ-002
-// @implements spec-ft-core-epic-hub::REQ-007
+// @implements ft-core-epic-hub::TASK-CORE-007-12::REQ-001
+// @implements ft-core-epic-hub::TASK-CORE-007-10::REQ-002
+// @implements ft-core-epic-hub::TASK-CORE-007-1::REQ-007
 export const DashboardView: React.FC<DashboardViewProps> = ({
   epics = [],
   adrs: initialAdrs,
@@ -265,9 +265,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* Codebase Repositories Git Telemetry */}
-      {/* @implements spec-ft-git-dashboard-ui::REQ-001 */}
-      {/* @implements spec-ft-git-dashboard-ui::REQ-002 */}
-      {/* @implements spec-ft-git-dashboard-ui::REQ-005 */}
+      {/* @implements ft-git-dashboard-ui::TASK-GIT-003-1::REQ-001 */}
+      {/* @implements ft-git-dashboard-ui::TASK-GIT-003-1::REQ-002 */}
+      {/* @implements ft-git-dashboard-ui::TASK-GIT-003-1::REQ-005 */}
       <GitRepositoriesCard statuses={gitStatuses} />
 
       {/* Epics Progress Grid */}
@@ -323,7 +323,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         {epic.title}
                       </h3>
                     </div>
-                    {/* @implements spec-ft-core-ui-visual-consistency::REQ-002 */}
+                    {/* @implements ft-core-ui-visual-consistency::TASK-CORE-010-2::REQ-002 */}
                     <button
                       onClick={() => onOpenEpic(epic.id)}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors shrink-0 whitespace-nowrap"

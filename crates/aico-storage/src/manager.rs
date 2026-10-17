@@ -14,9 +14,9 @@ pub struct StorageManager {
 
 impl StorageManager {
     /// Initialize dual embedded storage directories and drivers
-    // @implements spec-ft-core-local-storage::REQ-001
-    // @implements spec-ft-core-local-storage::REQ-002
-    // @implements spec-ft-core-local-storage::REQ-009
+    // @implements ft-core-local-storage::TASK-CORE-003-1::REQ-001
+    // @implements ft-core-local-storage::TASK-CORE-003-1::REQ-002
+    // @implements ft-core-local-storage::TASK-CORE-003-1::REQ-009
     pub fn open(base_path: impl AsRef<Path>) -> Result<Self, StorageError> {
         let base_path = base_path.as_ref().to_path_buf();
         let storage_root = base_path.join(".aico").join("storage");
@@ -52,7 +52,7 @@ impl StorageManager {
     }
 
     /// Verify pure in-process operation (zero background daemons or socket dependencies)
-    // @implements spec-ft-core-local-storage::REQ-009
+    // @implements ft-core-local-storage::TASK-CORE-003-1::REQ-009
     pub fn is_in_process(&self) -> bool {
         true
     }

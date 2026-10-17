@@ -17,8 +17,8 @@ export interface DocumentViewerProps {
   onBack?: () => void;
 }
 
-// @implements spec-ft-core-epic-hub::REQ-001
-// @implements spec-ft-core-epic-hub::REQ-004
+// @implements ft-core-epic-hub::TASK-CORE-007-12::REQ-001
+// @implements ft-core-epic-hub::TASK-CORE-007-12::REQ-004
 export const DocumentViewer: React.FC<DocumentViewerProps> = ({
   docId,
   docType,

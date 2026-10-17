@@ -7,7 +7,7 @@ export interface GlossaryViewerProps {
   onBack?: () => void;
 }
 
-// @implements spec-ft-core-epic-hub::REQ-001
+// @implements ft-core-epic-hub::TASK-CORE-007-12::REQ-001
 export const GlossaryViewer: React.FC<GlossaryViewerProps> = ({ terms: initialTerms }) => {
   const [terms, setTerms] = useState<TermInfo[]>(initialTerms || []);
   const [search, setSearch] = useState('');

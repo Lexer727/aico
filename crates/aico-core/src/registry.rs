@@ -13,13 +13,13 @@ impl WorkspaceRegistry {
     }
 
     /// Register a discovered project into the in-memory registry
-    // @implements spec-ft-core-discovery::REQ-005
+    // @implements ft-core-discovery::TASK-CORE-004-2::REQ-005
     pub fn register(&mut self, project: DiscoveredProject) {
         self.projects.insert(project.id.clone(), project);
     }
 
     /// Set the currently active project by ID
-    // @implements spec-ft-core-discovery::REQ-005
+    // @implements ft-core-discovery::TASK-CORE-004-2::REQ-005
     pub fn set_active(&mut self, id: &str) -> bool {
         if self.projects.contains_key(id) {
             self.active_project_id = Some(id.to_string());
@@ -30,7 +30,7 @@ impl WorkspaceRegistry {
     }
 
     /// Get reference to the active project
-    // @implements spec-ft-core-discovery::REQ-005
+    // @implements ft-core-discovery::TASK-CORE-004-2::REQ-005
     pub fn get_active(&self) -> Option<&DiscoveredProject> {
         self.active_project_id
             .as_ref()

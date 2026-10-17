@@ -52,7 +52,7 @@ impl TraceabilityTracker {
     }
 
     /// Record a (Test)-[:VERIFIES]->(Requirement) edge with status
-    // @implements spec-ft-core-mcp-tools::REQ-006
+    // @implements ft-core-mcp-tools::TASK-CORE-005-4::REQ-006
     pub fn record_verifies_edge(&mut self, test_name: &str, req_id: &str, status: VerificationStatus) {
         self.requirements.insert(req_id.to_string());
         let list = self.verifies_edges.entry(req_id.to_string()).or_default();
@@ -64,7 +64,7 @@ impl TraceabilityTracker {
     }
 
     /// Record a (CodeSymbol)-[:IMPLEMENTS]->(Requirement) edge
-    // @implements spec-ft-core-mcp-tools::REQ-007
+    // @implements ft-core-mcp-tools::TASK-CORE-005-4::REQ-007
     pub fn record_implements_edge(&mut self, symbol_name: &str, req_id: &str) {
         self.requirements.insert(req_id.to_string());
         let list = self.implements_edges.entry(req_id.to_string()).or_default();
@@ -74,8 +74,8 @@ impl TraceabilityTracker {
     }
 
     /// Verify test-before-code gate before marking an implementation task complete
-    // @implements spec-ft-core-mcp-tools::REQ-006
-    // @implements spec-ft-core-mcp-tools::REQ-007
+    // @implements ft-core-mcp-tools::TASK-CORE-005-4::REQ-006
+    // @implements ft-core-mcp-tools::TASK-CORE-005-4::REQ-007
     pub fn verify_task(&self, task_id: &str, req_id: &str) -> Result<VerificationReport, TraceabilityError> {
         let tests = self.verifies_edges.get(req_id).ok_or_else(|| {
             TraceabilityError::NoVerifyingTest(req_id.to_string())
@@ -108,7 +108,7 @@ impl TraceabilityTracker {
     }
 
     /// Find dangling requirements (missing either tests or implementation)
-    // @implements spec-ft-core-mcp-tools::REQ-006
+    // @implements ft-core-mcp-tools::TASK-CORE-005-4::REQ-006
     pub fn find_dangling_requirements(&self) -> Vec<DanglingRequirement> {
         let mut results = Vec::new();
         for req in &self.requirements {

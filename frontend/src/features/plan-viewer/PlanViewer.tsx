@@ -22,9 +22,9 @@ export interface PlanViewerProps {
   onBack?: () => void;
 }
 
-// @implements spec-ft-core-epic-hub::REQ-004
-// @implements spec-ft-specs-blueprint-standards::REQ-004
-// @implements spec-ft-specs-blueprint-standards::REQ-010
+// @implements ft-core-epic-hub::TASK-CORE-007-12::REQ-004
+// @implements ft-specs-blueprint-standards::TASK-SPECS-001-3::REQ-004
+// @implements ft-specs-blueprint-standards::TASK-SPECS-001-3::REQ-010
 export const PlanViewer: React.FC<PlanViewerProps> = ({
   planId,
   title,

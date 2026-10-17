@@ -16,7 +16,7 @@ use crate::server::AppState;
 pub struct FrontendAssets;
 
 /// Serves embedded WebUI static assets with SPA wildcard fallback and disk search backup
-// @implements spec-ft-core-host-runtime::REQ-002
+// @implements ft-core-host-runtime::TASK-CORE-001-2::REQ-002
 pub async fn static_asset_handler(uri: Uri) -> impl IntoResponse {
     let raw_path = uri.path().trim_start_matches('/');
     let asset_path = if raw_path.is_empty() {
@@ -256,7 +256,7 @@ fn make_asset_info(
 }
 
 /// Scan assets for an epic: includes direct epic assets (`./assets`) and child feature assets (`./features/*/assets`)
-// @implements spec-ft-core-assets-manager::REQ-004
+// @implements ft-core-assets-manager::TASK-ASSET-004::REQ-004
 pub fn scan_assets_for_epic(specs_root: &StdPath, epic_id: &str) -> Vec<DiscoveredAssetInfo> {
     let mut results = Vec::new();
     let epics_dir = specs_root.join("epics");
@@ -396,7 +396,7 @@ pub fn find_feature_dir(specs_root: &StdPath, feat_id: &str) -> Option<PathBuf> 
 }
 
 /// Scan assets for a single feature: only includes files in <feature_dir>/assets
-// @implements spec-ft-core-assets-manager::REQ-005
+// @implements ft-core-assets-manager::TASK-ASSET-004::REQ-005
 pub fn scan_assets_for_feature(specs_root: &StdPath, feat_id: &str) -> Vec<DiscoveredAssetInfo> {
     let mut results = Vec::new();
     let Some(feat_dir) = find_feature_dir(specs_root, feat_id) else {
@@ -424,7 +424,7 @@ pub fn scan_assets_for_feature(specs_root: &StdPath, feat_id: &str) -> Vec<Disco
 // HTTP API Handlers
 // ---------------------------------------------------------------------------
 
-// @implements spec-ft-core-assets-manager::REQ-004
+// @implements ft-core-assets-manager::TASK-ASSET-004::REQ-004
 pub async fn list_epic_assets_handler(
     Path(id): Path<String>,
     State(state): State<AppState>,
@@ -433,7 +433,7 @@ pub async fn list_epic_assets_handler(
     Json(scan_assets_for_epic(&specs_root, &id))
 }
 
-// @implements spec-ft-core-assets-manager::REQ-005
+// @implements ft-core-assets-manager::TASK-ASSET-004::REQ-005
 pub async fn list_feature_assets_handler(
     Path(id): Path<String>,
     State(state): State<AppState>,
@@ -443,7 +443,7 @@ pub async fn list_feature_assets_handler(
 }
 
 /// Serves raw binary/text asset content with MIME type and path traversal protection
-// @implements spec-ft-core-assets-manager::REQ-003
+// @implements ft-core-assets-manager::TASK-ASSET-007::REQ-003
 pub async fn get_asset_raw_handler(
     Query(query): Query<RawAssetQuery>,
     State(state): State<AppState>,
@@ -482,9 +482,9 @@ pub async fn get_asset_raw_handler(
 }
 
 /// Handles multi-part file uploads and stores them under the appropriate assets directory
-// @implements spec-ft-core-assets-manager::REQ-001
-// @implements spec-ft-core-assets-manager::REQ-002
-// @implements spec-ft-core-assets-manager::REQ-003
+// @implements ft-core-assets-manager::TASK-ASSET-003::REQ-001
+// @implements ft-core-assets-manager::TASK-ASSET-001::REQ-002
+// @implements ft-core-assets-manager::TASK-ASSET-007::REQ-003
 pub async fn upload_asset_handler(
     State(state): State<AppState>,
     mut multipart: Multipart,
@@ -542,7 +542,7 @@ pub async fn upload_asset_handler(
     }
 
     // Validate file type against active AicoConfig
-    // @implements spec-ft-core-assets-manager::REQ-014
+    // @implements ft-core-assets-manager::TASK-ASSET-009::REQ-014
     let config = get_active_config(&state).await;
     if !config.assets.is_allowed_file(&clean_fname, &file_bytes) {
         return Err((
@@ -607,8 +607,8 @@ pub async fn upload_asset_handler(
 }
 
 /// Opens a file in the host operating system's registered application
-// @implements spec-ft-core-assets-manager::REQ-003
-// @implements spec-ft-core-assets-manager::REQ-008
+// @implements ft-core-assets-manager::TASK-ASSET-007::REQ-003
+// @implements ft-core-assets-manager::TASK-ASSET-006::REQ-008
 pub async fn open_system_handler(
     State(state): State<AppState>,
     Json(payload): Json<OpenSystemRequest>,
@@ -697,8 +697,8 @@ pub async fn open_system_handler(
 }
 
 /// Deletes an asset file from disk with strict path traversal validation
-// @implements spec-ft-core-assets-manager::REQ-003
-// @implements spec-ft-core-assets-manager::REQ-009
+// @implements ft-core-assets-manager::TASK-ASSET-007::REQ-003
+// @implements ft-core-assets-manager::TASK-ASSET-007::REQ-009
 pub async fn delete_asset_handler(
     State(state): State<AppState>,
     Json(payload): Json<DeleteAssetRequest>,

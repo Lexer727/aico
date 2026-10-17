@@ -4,9 +4,9 @@ import React from 'react';
 import { DashboardView } from '../src/features/dashboard/DashboardView';
 import type { GitRepoStatus } from '../src/features/feature-task-data';
 
-// @verifies spec-ft-git-dashboard-ui::REQ-001
-// @verifies spec-ft-git-dashboard-ui::REQ-002
-// @verifies spec-ft-git-dashboard-ui::REQ-005
+// @verifies ft-git-dashboard-ui::TASK-GIT-003-1::REQ-001
+// @verifies ft-git-dashboard-ui::TASK-GIT-003-1::REQ-002
+// @verifies ft-git-dashboard-ui::TASK-GIT-003-1::REQ-005
 describe('DashboardView Git Repositories Status', () => {
   const mockGitStatuses: GitRepoStatus[] = [
     {
@@ -104,7 +104,7 @@ describe('DashboardView Git Repositories Status', () => {
     expect(screen.getByText('Unavailable')).toBeInTheDocument();
   });
 
-  // @verifies spec-ft-core-ui-visual-consistency::REQ-004
+  // @verifies ft-core-ui-visual-consistency::TASK-CORE-010-4::REQ-004
   it('renders specs repository badge in canonical sky-blue styling matching specifications token', () => {
     render(
       <DashboardView
@@ -121,7 +121,7 @@ describe('DashboardView Git Repositories Status', () => {
     expect(typeBadge).toHaveClass('bg-sky-950/80');
   });
 
-  // @verifies spec-ft-git-backend-status::REQ-002
+  // @verifies ft-git-backend-status::TASK-GIT-001-6::REQ-002
   it('renders remote github/external link when repo url is configured', () => {
     render(
       <DashboardView

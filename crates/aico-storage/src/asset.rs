@@ -30,8 +30,8 @@ impl AssetIngestionService {
     }
 
     /// Ingest file bytes, deduplicate under `.aico/assets/<sha256>.<ext>`, and index into vector and graph stores
-    // @implements spec-ft-core-epic-hub::REQ-006
-    // @implements spec-ft-core-epic-hub::REQ-007
+    // @implements ft-core-epic-hub::TASK-CORE-007-1::REQ-006
+    // @implements ft-core-epic-hub::TASK-CORE-007-1::REQ-007
     pub async fn store_asset(
         &self,
         storage: &StorageManager,

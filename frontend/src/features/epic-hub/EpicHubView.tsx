@@ -5,11 +5,13 @@ import {
   ChevronRight,
   Layers,
   FileText,
+  FileCode,
   CheckSquare,
   GitFork,
   FolderArchive,
   Package,
   BookOpen,
+  ArrowRight,
   FolderGit2,
 } from 'lucide-react';
 import { MarkdownView, stripDocumentHeader } from '../../components/common/MarkdownView';
@@ -67,6 +69,8 @@ interface EpicHubViewProps {
   epic: EpicData;
   allFeatures?: DiscoveredFeature[];
   allAdrs?: DiscoveredAdr[];
+  codeFiles?: any[];
+  onSelectCode?: (path: string) => void;
   onOpenAdr?: (adrId: string) => void;
   onPopOut?: (epicId: string, section: string) => void;
   onOpenSpec?: (specId: string, title: string) => void;
@@ -76,20 +80,23 @@ interface EpicHubViewProps {
   onFileUpload?: (file: File) => void;
 }
 
-// @implements spec-ft-core-epic-hub::REQ-001
-// @implements spec-ft-core-epic-hub::REQ-002
-// @implements spec-ft-core-epic-hub::REQ-003
-// @implements spec-ft-core-epic-hub::REQ-005
-// @implements spec-ft-core-epic-hub::REQ-011
-// @implements spec-ft-core-assets-manager::REQ-004
-// @implements spec-ft-core-assets-manager::REQ-006
-// @implements spec-ft-core-assets-manager::REQ-007
-// @implements spec-ft-core-assets-manager::REQ-011
-// @implements spec-ft-core-assets-manager::REQ-012
+// @implements ft-core-epic-hub::TASK-CORE-007-12::REQ-001
+// @implements ft-core-epic-hub::TASK-CORE-007-10::REQ-002
+// @implements ft-core-epic-hub::TASK-CORE-007-11::REQ-003
+// @implements ft-core-epic-hub::TASK-CORE-007-11::REQ-005
+// @implements ft-core-epic-hub::TASK-CORE-007-4::REQ-011
+// @implements ft-core-assets-manager::TASK-ASSET-004::REQ-004
+// @implements ft-core-assets-manager::TASK-ASSET-006::REQ-006
+// @implements ft-core-assets-manager::TASK-ASSET-005::REQ-007
+// @implements ft-core-assets-manager::TASK-ASSET-008::REQ-011
+// @implements ft-core-assets-manager::TASK-ASSET-008::REQ-012
+// @implements ft-core-code-navigation-and-search::TASK-CORE-013-4::REQ-008
 export const EpicHubView: React.FC<EpicHubViewProps> = ({
   epic: initialEpic,
   allFeatures,
   allAdrs,
+  codeFiles,
+  onSelectCode,
   onOpenAdr,
   onPopOut,
   onOpenSpec: _onOpenSpec,
@@ -154,11 +161,44 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
     brainstorm: isCollapsed('brainstorm'),
     adrs: isCollapsed('adrs'),
     deepDive: isCollapsed('deepDive'),
+    codeFiles: isCollapsed('codeFiles'),
     assets: isCollapsed('assets'),
     taskPlan: isCollapsed('taskPlan'),
   };
 
   const currentFeaturesList: DiscoveredFeature[] = epic.features || [];
+
+  const epicFeatureIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const f of currentFeaturesList) {
+      ids.add(f.id.toLowerCase());
+      ids.add(f.id.replace(/^ft-/, '').toLowerCase());
+    }
+    for (const f of allFeatures || []) {
+      const epId = (f.epic_id || (f as any).epicId || '').toLowerCase();
+      if (epId === epic.id.toLowerCase() || epId === epic.id.replace(/^ec-/, '').toLowerCase()) {
+        ids.add(f.id.toLowerCase());
+        ids.add(f.id.replace(/^ft-/, '').toLowerCase());
+      }
+    }
+    return ids;
+  }, [currentFeaturesList, allFeatures, epic.id]);
+
+  const matchingCodeFiles = useMemo(() => {
+    if (!codeFiles || codeFiles.length === 0) return [];
+    return codeFiles.filter((f) => {
+      if (typeof f === 'string') return false;
+      return (f.annotations || []).some((a: any) => {
+        const target = (a.target || '').toLowerCase();
+        for (const featId of epicFeatureIds) {
+          if (target.startsWith(featId) || target.startsWith(`ft-${featId}`)) {
+            return true;
+          }
+        }
+        return false;
+      });
+    });
+  }, [codeFiles, epicFeatureIds]);
   const currentSpecsList =
     epic.specs ||
     currentFeaturesList.map((f) => ({
@@ -251,7 +291,7 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
     return map;
   }, [allAdrs]);
 
-  // @implements spec-ft-git-dashboard-ui::REQ-003
+  // @implements ft-git-dashboard-ui::TASK-GIT-003-2::REQ-003
   const relevantRepositories = useMemo(() => {
     if (epic.repositories && epic.repositories.length > 0) {
       return epic.repositories;
@@ -285,9 +325,9 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
           <h1 className="text-2xl font-bold tracking-tight text-white mt-2">{epic.title}</h1>
 
           {/* Repositories beneath title */}
-          {/* @implements spec-ft-git-dashboard-ui::REQ-003 */}
-          {/* @implements spec-ft-core-repository-badges-alignment::REQ-003 */}
-          {/* @implements spec-ft-core-repository-badges-alignment::REQ-004 */}
+          {/* @implements ft-git-dashboard-ui::TASK-GIT-003-2::REQ-003 */}
+          {/* @implements ft-core-repository-badges-alignment::TASK-CORE-008-2::REQ-003 */}
+          {/* @implements ft-core-repository-badges-alignment::TASK-CORE-008-2::REQ-004 */}
           {relevantRepositories.length > 0 && (
             <div
               data-testid="epic-repositories-list"
@@ -355,7 +395,7 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
                 ) : (
                   <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
                 )}
-                {/* @implements spec-ft-core-ui-visual-consistency::REQ-003 */}
+                {/* @implements ft-core-ui-visual-consistency::TASK-CORE-010-3::REQ-003 */}
                 <Package className="w-4 h-4 text-purple-400 flex-shrink-0" />
                 <span className="font-semibold text-sm text-zinc-200">
                   Features in this Epic ({currentFeaturesList.length})
@@ -589,6 +629,67 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
               </div>
             );
           })()}
+
+          {/* Code Files Accordion */}
+          <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50" data-testid="section-epic-code-files">
+            <div
+              onClick={() => toggleSection('codeFiles')}
+              className="flex items-center justify-between px-4 py-3 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors"
+            >
+              <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                {collapsedSections.codeFiles ? (
+                  <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                )}
+                <FileCode className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                <span className="font-semibold text-sm text-zinc-200">
+                  Code Files ({matchingCodeFiles.length} {matchingCodeFiles.length === 1 ? 'file' : 'files'})
+                </span>
+                {collapsedSections.codeFiles && (
+                  <span className="text-xs text-zinc-500 truncate ml-2 italic">
+                    — Codebase implementations across child features
+                  </span>
+                )}
+              </div>
+            </div>
+            {!collapsedSections.codeFiles && (
+              <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-2">
+                {matchingCodeFiles.length > 0 ? (
+                  <div className="grid grid-cols-1 gap-1.5">
+                    {matchingCodeFiles.map((f: any) => (
+                      <div
+                        key={f.path}
+                        // @implements ft-core-workspace-path-normalization::TASK-CORE-014-2::REQ-004
+                        onClick={() => onSelectCode?.(f.path)}
+                        className="p-2.5 rounded-lg bg-zinc-900 border border-zinc-800 hover:border-emerald-500/50 cursor-pointer transition-colors flex items-center justify-between group"
+                        data-testid={`epic-code-file-${f.path}`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <FileCode className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                          <span className="font-mono text-[11px] text-zinc-200 truncate group-hover:text-emerald-300">
+                            {f.path}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {f.annotations && f.annotations.length > 0 && (
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-800/80">
+                              {f.annotations.length} @impl
+                            </span>
+                          )}
+                          <ArrowRight className="w-3.5 h-3.5 text-zinc-600 group-hover:text-zinc-300" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-zinc-500 text-xs italic p-2">
+                    No matching codebase files found for this epic's features.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Assets Accordion */}
           <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">

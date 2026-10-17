@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-// @verifies spec-ft-core-discovery::REQ-008
+// @verifies ft-core-discovery::TASK-CORE-004-3::REQ-008
 #[tokio::test]
 async fn test_project_management_rest_api() {
     let mut config = ServerConfig::default();
@@ -72,7 +72,7 @@ async fn test_project_management_rest_api() {
     assert_eq!(not_found_res.status(), 404);
 
     // 4. GET /api/v1/stats
-    // @verifies spec-ft-core-webui-shell::REQ-012
+    // @verifies ft-core-webui-shell::TASK-CORE-006-8::REQ-012
     let stats_res = client
         .get(format!("http://{}/api/v1/stats", addr))
         .send()
@@ -81,7 +81,7 @@ async fn test_project_management_rest_api() {
     assert_eq!(stats_res.status(), 200);
 
     // 5. GET /api/v1/epics
-    // @verifies spec-ft-core-epic-hub::REQ-001
+    // @verifies ft-core-epic-hub::TASK-CORE-007-12::REQ-001
     let epics_res = client
         .get(format!("http://{}/api/v1/epics", addr))
         .send()

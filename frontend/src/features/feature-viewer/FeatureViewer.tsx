@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Layers,
   FileText,
+  FileCode,
   CheckSquare,
   GitFork,
   ShieldCheck,
@@ -69,6 +70,8 @@ export interface FeatureViewerProps {
   feature: FeatureData;
   allFeatures?: DiscoveredFeature[];
   allAdrs?: DiscoveredAdr[];
+  codeFiles?: any[];
+  onSelectCode?: (path: string) => void;
   onOpenEpic?: (epicId: string) => void;
   onPopOut?: (featureId: string, section: string) => void;
   onOpenSpec?: (specId: string, title: string) => void;
@@ -79,17 +82,21 @@ export interface FeatureViewerProps {
   onFileUpload?: (file: File) => void;
 }
 
-// @implements spec-ft-core-epic-hub::REQ-001
-// @implements spec-ft-core-epic-hub::REQ-004
-// @implements spec-ft-core-assets-manager::REQ-005
-// @implements spec-ft-core-assets-manager::REQ-006
-// @implements spec-ft-core-assets-manager::REQ-007
-// @implements spec-ft-core-assets-manager::REQ-011
-// @implements spec-ft-core-assets-manager::REQ-012
+// @implements ft-core-epic-hub::TASK-CORE-007-12::REQ-001
+// @implements ft-core-epic-hub::TASK-CORE-007-12::REQ-004
+// @implements ft-core-assets-manager::TASK-ASSET-004::REQ-005
+// @implements ft-core-assets-manager::TASK-ASSET-006::REQ-006
+// @implements ft-core-assets-manager::TASK-ASSET-005::REQ-007
+// @implements ft-core-assets-manager::TASK-ASSET-008::REQ-011
+// @implements ft-core-assets-manager::TASK-ASSET-008::REQ-012
+// @implements ft-core-code-navigation-and-search::TASK-CORE-013-3::REQ-006
+// @implements ft-core-code-navigation-and-search::TASK-CORE-013-3::REQ-007
 export const FeatureViewer: React.FC<FeatureViewerProps> = ({
   feature: initialFeature,
   allFeatures,
   allAdrs,
+  codeFiles,
+  onSelectCode,
   onOpenEpic,
   onPopOut,
   onOpenSpec,
@@ -103,7 +110,7 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
   const [assetCount, setAssetCount] = useState<number>(0);
 
   // Sync state if initialFeature prop changes
-  // @implements spec-ft-core-repository-badges-alignment::REQ-005
+  // @implements ft-core-repository-badges-alignment::TASK-CORE-008-3::REQ-005
   useEffect(() => {
     setFeature((prev) => ({
       ...prev,
@@ -178,6 +185,7 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
     adrs: isCollapsed('adrs'),
     deepDive: isCollapsed('deepDive'),
     specifications: isCollapsed('specifications'),
+    codeImplementations: isCollapsed('codeImplementations'),
     assets: isCollapsed('assets'),
     taskPlan: isCollapsed('taskPlan'),
   };
@@ -217,6 +225,35 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
     });
     return map;
   }, [allFeatures, tasksList]);
+
+  const featureSlug = (feature.id || '').toLowerCase().replace(/^ft-/, '');
+  const matchingCodeFiles = useMemo(() => {
+    if (!codeFiles || codeFiles.length === 0) return [];
+    return codeFiles.filter((f) => {
+      if (typeof f === 'string') return false;
+      return (f.annotations || []).some((a: any) => {
+        const target = (a.target || '').toLowerCase();
+        return (
+          target.startsWith(feature.id.toLowerCase()) ||
+          target.startsWith(`ft-${feature.id.toLowerCase()}`) ||
+          target.startsWith(`ft-${featureSlug}`) ||
+          target.startsWith(featureSlug)
+        );
+      });
+    });
+  }, [codeFiles, feature.id, featureSlug]);
+
+  const taskCodeFiles = useMemo(() => {
+    if (!codeFiles || codeFiles.length === 0) return {};
+    const map: Record<string, any[]> = {};
+    for (const t of tasksList) {
+      map[t.id] = codeFiles.filter((f) => {
+        if (typeof f === 'string') return false;
+        return (f.annotations || []).some((a: any) => a.target && a.target.includes(`::${t.id}::`));
+      });
+    }
+    return map;
+  }, [codeFiles, tasksList]);
 
   const requirementsList: FeatureRequirement[] = feature.requirements || [];
   const inScopeList = feature.in_scope || feature.inScope || [];
@@ -293,10 +330,10 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
           </h1>
 
           {/* Target Repositories */}
-          {/* @implements spec-ft-git-dashboard-ui::REQ-004 */}
-          {/* @implements spec-ft-core-repository-badges-alignment::REQ-001 */}
-          {/* @implements spec-ft-core-repository-badges-alignment::REQ-002 */}
-          {/* @implements spec-ft-core-repository-badges-alignment::REQ-004 */}
+          {/* @implements ft-git-dashboard-ui::TASK-GIT-003-2::REQ-004 */}
+          {/* @implements ft-core-repository-badges-alignment::TASK-CORE-008-1::REQ-001 */}
+          {/* @implements ft-core-repository-badges-alignment::TASK-CORE-008-1::REQ-002 */}
+          {/* @implements ft-core-repository-badges-alignment::TASK-CORE-008-2::REQ-004 */}
           {feature.repositories && feature.repositories.length > 0 && (
             <div
               data-testid="feature-repositories-list"
@@ -709,6 +746,68 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
             )}
           </div>
 
+          {/* Code Implementations Accordion */}
+          <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50" data-testid="section-code-implementations">
+            <div
+              onClick={() => toggleSection('codeImplementations')}
+              className="flex items-center justify-between px-4 py-3 bg-zinc-900 cursor-pointer select-none hover:bg-zinc-900/80 transition-colors"
+            >
+              <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                {collapsedSections.codeImplementations ? (
+                  <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                )}
+                <FileCode className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                <span className="font-semibold text-sm text-zinc-200">
+                  Code Implementations ({matchingCodeFiles.length} {matchingCodeFiles.length === 1 ? 'file' : 'files'})
+                </span>
+                {collapsedSections.codeImplementations && (
+                  <span className="text-xs text-zinc-500 truncate ml-2 italic">
+                    — In-band annotated implementation files
+                  </span>
+                )}
+              </div>
+            </div>
+            {!collapsedSections.codeImplementations && (
+              <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-2">
+                {matchingCodeFiles.length > 0 ? (
+                  <div className="grid grid-cols-1 gap-1.5">
+                    {matchingCodeFiles.map((f: any) => (
+                      <div
+                        key={f.path}
+                        // @implements ft-core-workspace-path-normalization::TASK-CORE-014-2::REQ-004
+                        // @implements ft-core-code-path-simplification-and-omnisearch::TASK-CORE-015-3::REQ-006
+                        onClick={() => onSelectCode?.(f.path)}
+                        className="p-2.5 rounded-lg bg-zinc-900 border border-zinc-800 hover:border-emerald-500/50 cursor-pointer transition-colors flex items-center justify-between group"
+                        data-testid={`code-impl-${f.path}`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <FileCode className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                          <span className="font-mono text-[11px] text-zinc-200 truncate group-hover:text-emerald-300">
+                            {f.path}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {f.annotations && f.annotations.length > 0 && (
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-800/80">
+                              {f.annotations.length} @impl
+                            </span>
+                          )}
+                          <ArrowRight className="w-3.5 h-3.5 text-zinc-600 group-hover:text-zinc-300" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-zinc-500 text-xs italic p-2">
+                    No matching codebase files found with in-band annotations for this feature.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* 4. Assets Accordion */}
           <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
             <div
@@ -923,6 +1022,29 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
                                       >
                                         {dep} {isResolved ? '(Done)' : blocker?.status ? `(${blocker.status})` : '(Pending)'}
                                       </span>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                              {taskCodeFiles[task.id] && taskCodeFiles[task.id].length > 0 && (
+                                <div className="text-zinc-500 flex items-center gap-1.5 flex-wrap pt-0.5" data-testid={`task-code-links-${task.id}`}>
+                                  <span className="flex items-center gap-1">
+                                    <FileCode className="w-3 h-3 text-emerald-400" />
+                                    <span>Code:</span>
+                                  </span>
+                                  {taskCodeFiles[task.id].map((f: any) => {
+                                    const fileName = f.name || f.path.split('/').pop() || f.path;
+                                    return (
+                                      <button
+                                        key={f.path}
+                                        type="button"
+                                        onClick={() => onSelectCode?.(f.path)}
+                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800/80 hover:bg-emerald-900/90 transition-colors cursor-pointer text-[10px]"
+                                        title={`Open ${f.path}`}
+                                        data-testid={`task-code-link-${task.id}-${f.path}`}
+                                      >
+                                        <span>{fileName}</span>
+                                      </button>
                                     );
                                   })}
                                 </div>

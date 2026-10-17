@@ -23,7 +23,7 @@ pub struct EarsValidator;
 
 impl EarsValidator {
     /// Validates an EARS requirement statement syntax
-    // @implements spec-ft-core-mcp-tools::REQ-003
+    // @implements ft-core-mcp-tools::TASK-CORE-005-1::REQ-003
     pub fn validate(req_id: &str, statement: &str) -> Result<EarsPattern, EarsValidationError> {
         // Validate requirement ID format (e.g. REQ-001)
         if !req_id.starts_with("REQ-") || req_id.len() < 5 || !req_id[4..].chars().all(|c| c.is_ascii_digit()) {

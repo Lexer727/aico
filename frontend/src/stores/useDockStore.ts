@@ -11,8 +11,8 @@ interface DockState {
 
 const STORAGE_KEY = 'aico_dock_position';
 
-// @implements spec-ft-core-webui-shell::REQ-010
-// @implements spec-ft-core-webui-shell::REQ-011
+// @implements ft-core-webui-shell::TASK-CORE-006-9::REQ-010
+// @implements ft-core-webui-shell::TASK-CORE-006-9::REQ-011
 export const useDockStore = create<DockState>((set) => ({
   position: (localStorage.getItem(STORAGE_KEY) as DockPosition) || 'bottom',
   setPosition: (position: DockPosition) => {

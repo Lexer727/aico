@@ -1,6 +1,6 @@
 use aico_server::{HostServer, ServerConfig, HealthResponse, GitRepoStatus};
 
-// @verifies spec-ft-core-host-runtime::REQ-001
+// @verifies ft-core-host-runtime::TASK-CORE-001-1::REQ-001
 #[tokio::test]
 async fn test_server_binds_to_available_port() {
     let mut config = ServerConfig::default();
@@ -13,7 +13,7 @@ async fn test_server_binds_to_available_port() {
     assert_eq!(server.bound_addr(), Some(addr));
 }
 
-// @verifies spec-ft-core-host-runtime::REQ-006
+// @verifies ft-core-host-runtime::TASK-CORE-001-1::REQ-006
 #[tokio::test]
 async fn test_health_check_endpoint() {
     let mut config = ServerConfig::default();
@@ -39,7 +39,7 @@ async fn test_health_check_endpoint() {
     server_task.abort();
 }
 
-// @verifies spec-ft-git-backend-status::REQ-005
+// @verifies ft-git-backend-status::TASK-GIT-001-3::REQ-005
 #[tokio::test]
 async fn test_git_status_endpoint() {
     let mut config = ServerConfig::default();

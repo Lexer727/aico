@@ -4,8 +4,8 @@ import React from 'react';
 import { OmniSearchModal } from '../src/components/search/OmniSearchModal';
 
 describe('OmniSearchModal Component', () => {
-  // @verifies spec-ft-core-webui-shell::REQ-007
-  // @verifies spec-ft-core-omni-search-fulltext::REQ-005
+  // @verifies ft-core-webui-shell::TASK-CORE-006-11::REQ-007
+  // @verifies ft-core-omni-search-fulltext::TASK-CORE-009-3::REQ-005
   it('opens and filters results by scope checkboxes and matches query', () => {
     const handleSelect = vi.fn();
 
@@ -52,8 +52,8 @@ describe('OmniSearchModal Component', () => {
     );
   });
 
-  // @verifies spec-ft-core-omni-search-fulltext::REQ-006
-  // @verifies spec-ft-core-omni-search-fulltext::REQ-007
+  // @verifies ft-core-omni-search-fulltext::TASK-CORE-009-3::REQ-006
+  // @verifies ft-core-omni-search-fulltext::TASK-CORE-009-3::REQ-007
   it('displays project badges for cross-project search results and passes project ID on selection', () => {
     const handleSelect = vi.fn();
     const handleClose = vi.fn();
@@ -97,8 +97,8 @@ describe('OmniSearchModal Component', () => {
     expect(handleClose).toHaveBeenCalled();
   });
 
-  // @verifies spec-ft-core-ui-visual-consistency::REQ-003
-  // @verifies spec-ft-core-ui-visual-consistency::REQ-005
+  // @verifies ft-core-ui-visual-consistency::TASK-CORE-010-3::REQ-003
+  // @verifies ft-core-ui-visual-consistency::TASK-CORE-010-5::REQ-005
   it('renders features with purple Package icon and ADRs with amber Scale icon', () => {
     render(
       <OmniSearchModal
@@ -121,5 +121,69 @@ describe('OmniSearchModal Component', () => {
     const adrSvg = adrResult.querySelector('svg');
     expect(adrSvg).toHaveClass('lucide-scale');
     expect(adrSvg).toHaveClass('text-amber-400');
+  });
+
+  // @verifies ft-core-code-path-simplification-and-omnisearch::TASK-CORE-015-2::REQ-004
+  it('renders code search hits with repository-relative path in font-mono style', () => {
+    render(
+      <OmniSearchModal
+        isOpen={true}
+        onClose={() => {}}
+        onSelect={() => {}}
+        mockResults={[
+          {
+            id: 'crates/aico-server/src/server.rs',
+            title: 'crates/aico-server/src/server.rs',
+            scope: 'code',
+            subtitle: 'Line 42: ...fn main()...',
+          },
+        ]}
+      />
+    );
+
+    const codeResult = screen.getByTestId('search-result-crates/aico-server/src/server.rs');
+    expect(codeResult).toBeInTheDocument();
+    const titleSpan = screen.getByText('crates/aico-server/src/server.rs');
+    expect(titleSpan).toBeInTheDocument();
+    expect(titleSpan).toHaveClass('font-mono');
+    expect(screen.getByText('Line 42: ...fn main()...')).toBeInTheDocument();
+  });
+
+  // @verifies ft-core-multirepo-code-path-normalization::TASK-CORE-016-2::REQ-003
+  // @verifies ft-core-multirepo-code-path-normalization::TASK-CORE-016-2::REQ-005
+  it('renders multi-repo code search hits with repository folder prefix in font-mono style', () => {
+    render(
+      <OmniSearchModal
+        isOpen={true}
+        onClose={() => {}}
+        onSelect={() => {}}
+        mockResults={[
+          {
+            id: 'aico/crates/aico-server/src/server.rs',
+            title: 'aico/crates/aico-server/src/server.rs',
+            scope: 'code',
+            subtitle: 'Line 42: ...fn main()...',
+          },
+          {
+            id: 'aico-standalone/src/main.rs',
+            title: 'aico-standalone/src/main.rs',
+            scope: 'code',
+            subtitle: 'Line 1: ...fn main()...',
+          },
+        ]}
+      />
+    );
+
+    const aicoResult = screen.getByTestId('search-result-aico/crates/aico-server/src/server.rs');
+    expect(aicoResult).toBeInTheDocument();
+    const aicoTitle = screen.getByText('aico/crates/aico-server/src/server.rs');
+    expect(aicoTitle).toBeInTheDocument();
+    expect(aicoTitle).toHaveClass('font-mono');
+
+    const standaloneResult = screen.getByTestId('search-result-aico-standalone/src/main.rs');
+    expect(standaloneResult).toBeInTheDocument();
+    const standaloneTitle = screen.getByText('aico-standalone/src/main.rs');
+    expect(standaloneTitle).toBeInTheDocument();
+    expect(standaloneTitle).toHaveClass('font-mono');
   });
 });

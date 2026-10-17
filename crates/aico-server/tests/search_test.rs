@@ -4,9 +4,11 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-// @verifies spec-ft-core-omni-search-fulltext::REQ-008
-// @verifies spec-ft-core-omni-search-fulltext::REQ-009
-// @verifies spec-ft-core-omni-search-fulltext::REQ-012
+// @verifies ft-core-omni-search-fulltext::TASK-CORE-009-5::REQ-008
+// @verifies ft-core-omni-search-fulltext::TASK-CORE-009-6::REQ-009
+// @verifies ft-core-omni-search-fulltext::TASK-CORE-009-10::REQ-012
+// @verifies ft-core-code-path-simplification-and-omnisearch::TASK-CORE-015-1::REQ-003
+// @verifies ft-core-multirepo-code-path-normalization::TASK-CORE-016-1::REQ-003
 #[tokio::test]
 async fn test_filesystem_search_rest_api() {
     let mut config = ServerConfig::default();
@@ -77,7 +79,18 @@ async fn test_filesystem_search_rest_api() {
         item.get("scope").and_then(|s| s.as_str()) == Some("code")
     });
     assert!(code_hit.is_some(), "Should return a result with scope: code");
-    let snippet = code_hit.unwrap().get("snippet").and_then(|s| s.as_str());
+    let hit = code_hit.unwrap();
+    assert_eq!(
+        hit.get("title").and_then(|s| s.as_str()),
+        Some("aico/crates/aico-server/src/server.rs"),
+        "Code search hit title must be multi-repo relative path"
+    );
+    assert_eq!(
+        hit.get("id").and_then(|s| s.as_str()),
+        Some("aico/crates/aico-server/src/server.rs"),
+        "Code search hit id must be multi-repo relative path"
+    );
+    let snippet = hit.get("snippet").and_then(|s| s.as_str());
     assert!(snippet.is_some() && snippet.unwrap().contains("Line "), "Code snippet should contain line number");
 
     // 3. Query spec full-text search: /api/v1/search?q=Remote+public+internet+hosting (REQ-009)

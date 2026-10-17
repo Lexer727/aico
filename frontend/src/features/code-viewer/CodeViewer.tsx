@@ -1,41 +1,45 @@
 import React, { useState, useEffect } from 'react';
-import { FileCode, CheckCircle2, Loader2 } from 'lucide-react';
+import { FileCode, CheckCircle2, Loader2, Tag } from 'lucide-react';
 
 interface CodeViewerProps {
   filePath: string;
+  onSelectFeature?: (featureId: string) => void;
 }
 
+const serverSnippet = {
+  lang: 'rust',
+  lines: [
+    '// @implements ft-core-host-runtime::TASK-CORE-001-1::REQ-001',
+    '// @implements ft-core-host-runtime::TASK-CORE-001-1::REQ-010',
+    'pub async fn bind(&mut self) -> Result<SocketAddr, ServerError> {',
+    '    for offset in 0..=self.config.max_port_attempts {',
+    '        let port = self.config.base_port + offset;',
+    '        let addr_str = format!("{}:{}", self.config.host, port);',
+    '        match TcpListener::bind(&addr_str).await {',
+    '            Ok(listener) => return Ok(listener.local_addr()?),',
+    '            Err(e) => tracing::warn!("Port {} in use, fallback...", port),',
+    '        }',
+    '    }',
+    '    Err(ServerError::BindError("All ports occupied".into()))',
+    '}',
+    '',
+    '// @implements ft-core-epic-hub::TASK-CORE-007-12::REQ-001',
+    'async fn list_epics_handler(State(state): State<AppState>) -> Json<Vec<DiscoveredEpic>> {',
+    '    let registry = state.registry.read().await;',
+    '    let active = registry.get_active();',
+    '    Json(scan_epics_for_project(&active.specs_path))',
+    '}',
+  ],
+};
+
 const mockCodeSnippets: Record<string, { lang: string; lines: string[] }> = {
-  'crates/aico-server/src/server.rs': {
-    lang: 'rust',
-    lines: [
-      '// @implements spec-ft-core-host-runtime::REQ-001',
-      '// @implements spec-ft-core-host-runtime::REQ-010',
-      'pub async fn bind(&mut self) -> Result<SocketAddr, ServerError> {',
-      '    for offset in 0..=self.config.max_port_attempts {',
-      '        let port = self.config.base_port + offset;',
-      '        let addr_str = format!("{}:{}", self.config.host, port);',
-      '        match TcpListener::bind(&addr_str).await {',
-      '            Ok(listener) => return Ok(listener.local_addr()?),',
-      '            Err(e) => tracing::warn!("Port {} in use, fallback...", port),',
-      '        }',
-      '    }',
-      '    Err(ServerError::BindError("All ports occupied".into()))',
-      '}',
-      '',
-      '// @implements spec-ft-core-epic-hub::REQ-001',
-      'async fn list_epics_handler(State(state): State<AppState>) -> Json<Vec<DiscoveredEpic>> {',
-      '    let registry = state.registry.read().await;',
-      '    let active = registry.get_active();',
-      '    Json(scan_epics_for_project(&active.specs_path))',
-      '}',
-    ],
-  },
+  'aico/crates/aico-server/src/server.rs': serverSnippet,
+  'crates/aico-server/src/server.rs': serverSnippet,
   'frontend/src/components/layout/ShellLayout.tsx': {
     lang: 'typescript',
     lines: [
-      '// @implements spec-ft-core-webui-shell::REQ-001',
-      '// @implements spec-ft-core-webui-shell::REQ-008',
+      '// @implements ft-core-webui-shell::TASK-CORE-006-6::REQ-001',
+      '// @implements ft-core-webui-shell::TASK-CORE-006-1::REQ-008',
       'export const ShellLayout: React.FC<ShellLayoutProps> = ({ children }) => {',
       '  const [searchQuery, setSearchQuery] = useState("");',
       '  const [scopeFilters, setScopeFilters] = useState({ epics: true, specs: true, code: true, adrs: true });',
@@ -67,9 +71,35 @@ function getLanguageFromPath(path: string): string {
   return 'code';
 }
 
-// @implements spec-ft-core-epic-hub::REQ-008
-// @implements spec-ft-core-omni-search-fulltext::REQ-011
-export const CodeViewer: React.FC<CodeViewerProps> = ({ filePath }) => {
+const ANNOTATION_REGEX = /^\s*(?:\/\/|#|\/\*|\{\/\*)\s*@(implements|verifies)\s+((?:spec-)?ft-[a-z0-9\-]+)::(TASK-[A-Za-z0-9\-]+)::(REQ-[0-9]{3,4})/;
+
+interface AnnotationMetadata {
+  kind: 'implements' | 'verifies';
+  feature: string;
+  task: string;
+  req: string;
+}
+
+function parseAnnotation(line: string): AnnotationMetadata | null {
+  if (line.includes('<') || line.includes('>') || line.includes('###')) return null;
+  const match = ANNOTATION_REGEX.exec(line);
+  if (!match) return null;
+  return {
+    kind: match[1] as 'implements' | 'verifies',
+    feature: match[2],
+    task: match[3],
+    req: match[4],
+  };
+}
+
+// @implements ft-core-epic-hub::TASK-CORE-007-3::REQ-008
+// @implements ft-core-omni-search-fulltext::TASK-CORE-009-8::REQ-011
+// @implements ft-specs-traceability-syntax-evolution::TASK-SPECS-006-5::REQ-008
+// @implements ft-core-code-navigation-and-search::TASK-CORE-013-1::REQ-001
+// @implements ft-core-code-navigation-and-search::TASK-CORE-013-1::REQ-002
+// @implements ft-core-code-navigation-and-search::TASK-CORE-013-1::REQ-003
+// @implements ft-core-multirepo-code-path-normalization::TASK-CORE-016-3::REQ-005
+export const CodeViewer: React.FC<CodeViewerProps> = ({ filePath, onSelectFeature }) => {
   const [lines, setLines] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const lang = getLanguageFromPath(filePath);
@@ -98,7 +128,7 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({ filePath }) => {
           lang,
           lines: [
             `// Source File: ${filePath}`,
-            '// @implements spec-ft-core-webui-shell::REQ-001',
+            '// @implements ft-core-webui-shell::TASK-CORE-006-6::REQ-001',
             '// Live file preview unavailable offline',
             '',
             'export default function SourceModule() {',
@@ -118,7 +148,8 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({ filePath }) => {
     };
   }, [filePath, lang]);
 
-  const hasAnnotations = lines.some((l) => l.includes('@implements'));
+  const hasImplements = lines.some((l) => parseAnnotation(l)?.kind === 'implements' || l.includes('@implements'));
+  const hasVerifies = lines.some((l) => parseAnnotation(l)?.kind === 'verifies' || l.includes('@verifies'));
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-4 text-zinc-100">
@@ -132,11 +163,17 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({ filePath }) => {
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
-          {hasAnnotations && (
+        <div className="flex items-center gap-3">
+          {hasImplements && (
             <span className="flex items-center gap-1 text-xs text-emerald-400 font-mono">
               <CheckCircle2 className="w-3.5 h-3.5" />
               <span>@implements Verified</span>
+            </span>
+          )}
+          {hasVerifies && (
+            <span className="flex items-center gap-1 text-xs text-blue-400 font-mono">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>@verifies Verified</span>
             </span>
           )}
         </div>
@@ -157,16 +194,38 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({ filePath }) => {
         ) : (
           <div className="p-4 overflow-x-auto space-y-0.5 leading-relaxed max-h-[75vh]">
             {lines.map((line, idx) => {
-              const isAnnotation = line.includes('@implements');
+              const meta = parseAnnotation(line);
+              const isAnnotation = !!meta || line.includes('@implements') || line.includes('@verifies');
+              const isVerifies = meta?.kind === 'verifies';
+
               return (
                 <div
                   key={idx}
-                  className={`flex gap-4 ${
-                    isAnnotation ? 'bg-indigo-950/40 text-indigo-300 font-semibold' : 'text-zinc-300'
+                  className={`flex items-center justify-between gap-4 py-0.5 px-2 rounded ${
+                    isAnnotation
+                      ? isVerifies
+                        ? 'bg-blue-950/30 text-blue-300 font-medium'
+                        : 'bg-indigo-950/40 text-indigo-300 font-semibold'
+                      : 'text-zinc-300'
                   }`}
                 >
-                  <span className="w-10 text-right text-zinc-600 select-none shrink-0">{idx + 1}</span>
-                  <span className="whitespace-pre">{line}</span>
+                  <div className="flex gap-4 items-center min-w-0">
+                    <span className="w-10 text-right text-zinc-600 select-none shrink-0">{idx + 1}</span>
+                    <span className="whitespace-pre truncate">{line}</span>
+                  </div>
+                  {meta && (
+                    <div className="flex items-center shrink-0 select-none" data-testid={`annotation-badge-${idx}`}>
+                      <button
+                        type="button"
+                        onClick={() => onSelectFeature?.(meta.feature)}
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-violet-950/80 text-violet-300 border border-violet-800 hover:bg-violet-900/90 hover:text-violet-200 transition-colors cursor-pointer"
+                        title={`Feature: ${meta.feature} | Task: ${meta.task} | Req: ${meta.req}`}
+                      >
+                        <Tag className="w-3 h-3 text-violet-400" />
+                        <span>{meta.feature}</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}

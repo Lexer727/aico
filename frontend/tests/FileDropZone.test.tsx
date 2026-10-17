@@ -3,9 +3,9 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { FileDropZone } from '../src/components/common/FileDropZone';
 
-// @verifies spec-ft-core-epic-hub::REQ-004
-// @verifies spec-ft-core-epic-hub::REQ-007
-// @verifies spec-ft-core-epic-hub::REQ-012
+// @verifies ft-core-epic-hub::TASK-CORE-007-12::REQ-004
+// @verifies ft-core-epic-hub::TASK-CORE-007-1::REQ-007
+// @verifies ft-core-epic-hub::TASK-CORE-007-3::REQ-012
 describe('FileDropZone Component', () => {
   it('accepts valid files via drop and triggers onFileUpload callback', () => {
     const handleUpload = vi.fn();
@@ -58,7 +58,7 @@ describe('FileDropZone Component', () => {
     expect(screen.getByText(/invalid file type/i)).toBeInTheDocument();
   });
 
-  // @verifies spec-ft-core-assets-manager::REQ-001
+  // @verifies ft-core-assets-manager::TASK-ASSET-003::REQ-001
   it('triggers file picker click on dropzone click and processes selected files', () => {
     const handleUpload = vi.fn();
 
@@ -81,7 +81,7 @@ describe('FileDropZone Component', () => {
     expect(handleUpload).toHaveBeenCalledWith(file);
   });
 
-  // @verifies spec-ft-core-assets-manager::REQ-014
+  // @verifies ft-core-assets-manager::TASK-ASSET-009::REQ-014
   it('validates files against allowedExtensions and rejects unsupported binary files', () => {
     const handleUpload = vi.fn();
 

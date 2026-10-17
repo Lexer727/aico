@@ -4,8 +4,8 @@ import React from 'react';
 import { FeatureViewer } from '../src/features/feature-viewer/FeatureViewer';
 import { useAccordionStore } from '../src/stores/useAccordionStore';
 
-// @verifies spec-ft-core-epic-hub::REQ-001
-// @verifies spec-ft-core-epic-hub::REQ-004
+// @verifies ft-core-epic-hub::TASK-CORE-007-12::REQ-001
+// @verifies ft-core-epic-hub::TASK-CORE-007-12::REQ-004
 describe('FeatureViewer Component', () => {
   beforeEach(() => {
     useAccordionStore.setState({ collapsedByEntity: {} });
@@ -22,7 +22,7 @@ describe('FeatureViewer Component', () => {
     status: 'Completed',
   };
 
-  // @verifies spec-ft-core-repository-badges-alignment::REQ-001
+  // @verifies ft-core-repository-badges-alignment::TASK-CORE-008-1::REQ-001
   it('omits spec and plan tags under title and provides popout actions for linked SPEC and PLAN', () => {
     const onOpenSpec = vi.fn();
     const onOpenPlan = vi.fn();
@@ -281,7 +281,7 @@ describe('FeatureViewer Component', () => {
     expect(depPill.className).toContain('text-rose-400');
   });
 
-  // @verifies spec-ft-core-assets-manager::REQ-012
+  // @verifies ft-core-assets-manager::TASK-ASSET-008::REQ-012
   it('preserves accordion expansion state per entity ID across switches', () => {
     const feature1 = {
       ...mockFeature,
@@ -322,5 +322,107 @@ describe('FeatureViewer Component', () => {
     expect(useAccordionStore.getState().isSectionCollapsed('ft-01-first', 'assets', true)).toBe(false);
     // And its Deep Dive was never opened
     expect(useAccordionStore.getState().isSectionCollapsed('ft-01-first', 'deepDive', true)).toBe(true);
+  });
+
+  // @verifies ft-core-code-navigation-and-search::TASK-CORE-013-3::REQ-006
+  // @verifies ft-core-code-navigation-and-search::TASK-CORE-013-3::REQ-007
+  it('renders Code Implementations section above Assets and direct code links on task cards', () => {
+    const handleSelectCode = vi.fn();
+    const mockCodeFiles = [
+      {
+        path: 'aico/crates/aico-server/src/server.rs',
+        name: 'server.rs',
+        annotations: [
+          {
+            kind: 'implements',
+            target: '01-host-runtime::TASK-CORE-001::REQ-001',
+            line: 14,
+            task: 'TASK-CORE-001',
+            req: 'REQ-001',
+          },
+        ],
+      },
+    ];
+
+    const featureWithTasks = {
+      ...mockFeature,
+      tasks: [
+        { id: 'TASK-CORE-001', title: 'Bind TCP listener', status: 'Done', blocked_by: [] },
+      ],
+    };
+
+    render(
+      <FeatureViewer
+        feature={featureWithTasks}
+        codeFiles={mockCodeFiles}
+        onSelectCode={handleSelectCode}
+      />
+    );
+
+    // Verify Code Implementations section header is present
+    const codeImplSection = screen.getByTestId('section-code-implementations');
+    expect(codeImplSection).toBeInTheDocument();
+    expect(screen.getByText(/Code Implementations \(1 file\)/)).toBeInTheDocument();
+
+    // Expand the Code Implementations section
+    fireEvent.click(screen.getByText(/Code Implementations \(1 file\)/));
+
+    // Verify matching code file link is rendered and clickable
+    const codeFileLink = screen.getByTestId('code-impl-aico/crates/aico-server/src/server.rs');
+    expect(codeFileLink).toBeInTheDocument();
+    fireEvent.click(codeFileLink);
+    expect(handleSelectCode).toHaveBeenCalledWith('aico/crates/aico-server/src/server.rs');
+
+    // Verify task card has in-band code link
+    const taskCodeLink = screen.getByTestId('task-code-link-TASK-CORE-001-aico/crates/aico-server/src/server.rs');
+    expect(taskCodeLink).toBeInTheDocument();
+    expect(taskCodeLink).toHaveTextContent('server.rs');
+
+    fireEvent.click(taskCodeLink);
+    expect(handleSelectCode).toHaveBeenCalledWith('aico/crates/aico-server/src/server.rs');
+  });
+
+  // @verifies ft-core-workspace-path-normalization::TASK-CORE-014-2::REQ-004
+  // @verifies ft-core-code-path-simplification-and-omnisearch::TASK-CORE-015-3::REQ-006
+  // @verifies ft-core-multirepo-code-path-normalization::TASK-CORE-016-3::REQ-005
+  it('renders repository-relative code paths and passes them to onSelectCode on click', () => {
+    const handleSelectCode = vi.fn();
+    const mockCodeFiles = [
+      {
+        path: 'aico/crates/aico-server/src/server.rs',
+        relative_path: 'aico/crates/aico-server/src/server.rs',
+        name: 'server.rs',
+        implements_count: 2,
+        annotations: [
+          { target: 'ft-core-host-runtime::TASK-CORE-001::REQ-001', tag: '@implements', line: 12 },
+        ],
+      },
+    ];
+
+    const feature = {
+      id: 'ft-core-host-runtime',
+      name: 'Host Runtime Daemon',
+      epic_id: 'ec-core',
+      status: 'Completed',
+      tasks: [
+        { id: 'TASK-CORE-001', title: 'Bind TCP listener', status: 'Done', blocked_by: [] },
+      ],
+    };
+
+    render(
+      <FeatureViewer
+        feature={feature}
+        codeFiles={mockCodeFiles}
+        onSelectCode={handleSelectCode}
+      />
+    );
+
+    // Expand Code Implementations section
+    fireEvent.click(screen.getByText(/Code Implementations \(1 file\)/));
+
+    const codeFileLink = screen.getByTestId('code-impl-aico/crates/aico-server/src/server.rs');
+    expect(codeFileLink).toBeInTheDocument();
+    fireEvent.click(codeFileLink);
+    expect(handleSelectCode).toHaveBeenCalledWith('aico/crates/aico-server/src/server.rs');
   });
 });

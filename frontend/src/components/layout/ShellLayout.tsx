@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import clsx from 'clsx';
 import {
   ChevronDown,
@@ -52,6 +52,7 @@ export interface DiscoveredCodeFileNav {
   name: string;
   extension: string;
   implements_count: number;
+  verifies_count?: number;
   annotations?: Array<{ line: number; tag: string; target: string }>;
 }
 
@@ -149,15 +150,15 @@ const defaultAdrs: DiscoveredAdrNav[] = [
   { id: 'ADR-0010', title: 'SDD Structural Grammar v0.1.2 & Standalone Features', status: 'Accepted' },
 ];
 
-// @implements spec-ft-core-webui-shell::REQ-001
-// @implements spec-ft-core-webui-shell::REQ-002
-// @implements spec-ft-core-webui-shell::REQ-008
-// @implements spec-ft-core-webui-shell::REQ-012
-// @implements spec-ft-core-webui-shell::REQ-013
-// @implements spec-ft-core-webui-shell::REQ-016
-// @implements spec-ft-core-epic-hub::REQ-001
-// @implements spec-ft-core-omni-search-fulltext::REQ-003
-// @implements spec-ft-core-omni-search-fulltext::REQ-004
+// @implements ft-core-webui-shell::TASK-CORE-006-6::REQ-001
+// @implements ft-core-webui-shell::TASK-CORE-006-11::REQ-002
+// @implements ft-core-webui-shell::TASK-CORE-006-1::REQ-008
+// @implements ft-core-webui-shell::TASK-CORE-006-8::REQ-012
+// @implements ft-core-webui-shell::TASK-CORE-006-22::REQ-013
+// @implements ft-core-webui-shell::TASK-CORE-006-29::REQ-016
+// @implements ft-core-epic-hub::TASK-CORE-007-12::REQ-001
+// @implements ft-core-omni-search-fulltext::TASK-CORE-009-2::REQ-003
+// @implements ft-core-omni-search-fulltext::TASK-CORE-009-2::REQ-004
 export const ShellLayout: React.FC<ShellLayoutProps> = ({
   children,
   isMobile = false,
@@ -293,7 +294,7 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
   }, [adrs, fullAdrs]);
 
   // Compile all specs across all epics and standalone features
-  // @implements spec-ft-core-omni-search-fulltext::REQ-009
+  // @implements ft-core-omni-search-fulltext::TASK-CORE-009-6::REQ-009
   const allSpecs = useMemo(() => {
     const epicSpecs = effectiveEpics.flatMap((e) =>
       (e.specs || []).map((s) => ({
@@ -330,11 +331,47 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
       epics: fullEpics || (effectiveEpics as any),
       features: fullFeatures || (effectiveFeatures as any),
       adrs: fullAdrs || (effectiveAdrs as any),
-      codeFiles: effectiveCode.map((c) => (typeof c === 'string' ? c : c.relative_path || c.path)),
+      codeFiles: effectiveCode,
     });
   }, [fullEpics, effectiveEpics, fullFeatures, effectiveFeatures, fullAdrs, effectiveAdrs, effectiveCode]);
 
   const q = searchQuery.trim();
+
+  // Query backend fulltext search for code content when query is active
+  // @implements ft-core-code-navigation-and-search::TASK-CORE-013-2::REQ-004
+  const [backendCodeHits, setBackendCodeHits] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!q || !scopeFilters.code) {
+      setBackendCodeHits([]);
+      return;
+    }
+
+    let isCurrent = true;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/v1/search?q=${encodeURIComponent(q)}`);
+        if (res.ok && isCurrent) {
+          const data = await res.json();
+          const items = Array.isArray(data) ? data : data.results || [];
+          const hits = items
+            .filter((item: any) => item.scope === 'code' || item.category === 'code')
+            .map((item: any) => (item.path || item.target || item.id || '').replace(/\\/g, '/'))
+            .filter(Boolean);
+          if (isCurrent) {
+            setBackendCodeHits(hits);
+          }
+        }
+      } catch {
+        // Fallback silently if offline or during unit tests without mock
+      }
+    }, 150);
+
+    return () => {
+      isCurrent = false;
+      clearTimeout(timer);
+    };
+  }, [q, scopeFilters.code]);
 
   const searchMatches = useMemo(() => {
     if (!q) return null;
@@ -366,18 +403,32 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
   const filteredCode = useMemo(() => {
     if (!scopeFilters.code) return [];
     if (!q) return effectiveCode;
-    if (!searchMatches) return [];
     return effectiveCode.filter((c) => {
-      const path = typeof c === 'string' ? c : c.relative_path || c.path;
-      return searchMatches.some(
+      // @implements ft-core-workspace-path-normalization::TASK-CORE-014-2::REQ-003
+      const path = (typeof c === 'string' ? c : c.path || c.relative_path || '').replace(/\\/g, '/');
+      const normalizedPath = path.toLowerCase();
+
+      // 1. In-memory fuzzy match
+      const matchesClient = searchMatches?.some(
         (m) =>
           m.scope === 'code' &&
-          (m.id.toLowerCase() === path.toLowerCase() ||
-            path.toLowerCase().includes(m.id.toLowerCase()) ||
-            (m.title && path.toLowerCase().includes(m.title.toLowerCase())))
+          (m.id.toLowerCase().replace(/\\/g, '/') === normalizedPath ||
+            normalizedPath.includes(m.id.toLowerCase().replace(/\\/g, '/')) ||
+            (m.title && normalizedPath.includes(m.title.toLowerCase())))
       );
+      if (matchesClient) return true;
+
+      // 2. Backend full-text search match
+      if (backendCodeHits.length > 0) {
+        return backendCodeHits.some((hit) => {
+          const h = hit.toLowerCase();
+          return normalizedPath === h || normalizedPath.endsWith(h) || h.endsWith(normalizedPath);
+        });
+      }
+
+      return false;
     });
-  }, [effectiveCode, q, searchMatches, scopeFilters.code]);
+  }, [effectiveCode, q, searchMatches, backendCodeHits, scopeFilters.code]);
 
   const filteredAdrs = useMemo(() => {
     if (!scopeFilters.adrs) return [];
@@ -400,8 +451,8 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
           <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-pulse" />
           <span>AICO WORKSPACE</span>
         </div>
-        {/* @implements spec-ft-core-ui-visual-consistency::REQ-001 */}
-        {/* @implements spec-ft-core-webui-shell::REQ-016 */}
+        {/* @implements ft-core-ui-visual-consistency::TASK-CORE-010-5::REQ-001 */}
+        {/* @implements ft-core-webui-shell::TASK-CORE-006-29::REQ-016 */}
         <div className="flex items-center gap-1.5">
           <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400" title="AICO Platform Version">
             v0.1.1
@@ -530,7 +581,7 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
               onClick={() => toggleSection('features')}
               className="w-full flex items-center justify-between p-2 rounded hover:bg-zinc-800/60 font-medium text-zinc-200 transition-colors"
             >
-              {/* @implements spec-ft-core-ui-visual-consistency::REQ-003 */}
+              {/* @implements ft-core-ui-visual-consistency::TASK-CORE-010-3::REQ-003 */}
               <div className="flex items-center gap-2">
                 <Package className="w-4 h-4 text-purple-400" />
                 <span>Features</span>
@@ -650,8 +701,11 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
                   <div className="text-[11px] text-zinc-500 italic px-2 py-1">No matches</div>
                 ) : (
                   filteredCode.map((c) => {
-                    const path = typeof c === 'string' ? c : c.relative_path || c.path;
+                    // @implements ft-core-workspace-path-normalization::TASK-CORE-014-2::REQ-003
+                    // @implements ft-core-code-path-simplification-and-omnisearch::TASK-CORE-015-3::REQ-006
+                    const path = typeof c === 'string' ? c : c.path || c.relative_path;
                     const implCount = typeof c === 'string' ? 0 : c.implements_count || 0;
+                    const verCount = typeof c === 'string' ? 0 : c.verifies_count || 0;
                     return (
                       <div
                         key={path}
@@ -664,14 +718,24 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
                           <FileCode className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
                           <span className="truncate font-mono text-[11px] text-zinc-300">{path}</span>
                         </div>
-                        {implCount > 0 && (
-                          <span
-                            className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-emerald-950/70 text-emerald-400 border border-emerald-800 shrink-0 ml-1.5"
-                            title={`${implCount} @implements annotations verified`}
-                          >
-                            {implCount} @impl
-                          </span>
-                        )}
+                        <div className="flex items-center gap-1 shrink-0 ml-1.5">
+                          {implCount > 0 && (
+                            <span
+                              className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-emerald-950/70 text-emerald-400 border border-emerald-800 shrink-0"
+                              title={`${implCount} @implements annotations verified`}
+                            >
+                              {implCount} @impl
+                            </span>
+                          )}
+                          {verCount > 0 && (
+                            <span
+                              className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-blue-950/70 text-blue-400 border border-blue-800 shrink-0"
+                              title={`${verCount} @verifies annotations verified`}
+                            >
+                              {verCount} @ver
+                            </span>
+                          )}
+                        </div>
                       </div>
                     );
                   })
@@ -689,7 +753,7 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
               onClick={() => toggleSection('adrs')}
               className="w-full flex items-center justify-between p-2 rounded hover:bg-zinc-800/60 font-medium text-zinc-200 transition-colors"
             >
-              {/* @implements spec-ft-core-ui-visual-consistency::REQ-005 */}
+              {/* @implements ft-core-ui-visual-consistency::TASK-CORE-010-5::REQ-005 */}
               <div className="flex items-center gap-2">
                 <Scale className="w-4 h-4 text-amber-400" />
                 <span>ADRs</span>
@@ -772,7 +836,7 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
       </main>
 
       {/* Mobile Bottom Navigation Bar */}
-      {/* @implements spec-ft-core-webui-shell::REQ-013 */}
+      {/* @implements ft-core-webui-shell::TASK-CORE-006-22::REQ-013 */}
       {isMobile && (
         <nav
           data-testid="mobile-bottom-navbar"

@@ -1,6 +1,6 @@
 use aico_mcp::{McpServerManager, ToolError};
 
-// @verifies spec-ft-core-mcp-tools::REQ-001
+// @verifies ft-core-mcp-tools::TASK-CORE-005-2::REQ-001
 #[test]
 fn test_list_tools_returns_sdd_core_tools() {
     let tools = McpServerManager::list_tools();
@@ -13,10 +13,10 @@ fn test_list_tools_returns_sdd_core_tools() {
     assert!(names.contains(&"validate_ears".to_string()));
 }
 
-// @verifies spec-ft-core-mcp-tools::REQ-008
+// @verifies ft-core-mcp-tools::TASK-CORE-005-2::REQ-008
 #[test]
 fn test_call_tool_dispatch_and_execution() {
-    let source_code = "// @verifies spec-ft-core-host-runtime::REQ-001\nfn test_port() {}";
+    let source_code = "// @verifies ft-core-host-runtime::TASK-CORE-001-1::REQ-001\nfn test_port() {}";
     let params = serde_json::json!({ "source": source_code });
 
     let result = McpServerManager::call_tool("extract_annotations", params)
@@ -26,7 +26,7 @@ fn test_call_tool_dispatch_and_execution() {
     assert_eq!(result.as_array().unwrap().len(), 1);
 }
 
-// @verifies spec-ft-core-mcp-tools::REQ-009
+// @verifies ft-core-mcp-tools::TASK-CORE-005-2::REQ-009
 #[test]
 fn test_call_tool_error_handling_and_guidance() {
     // 1. Unknown tool

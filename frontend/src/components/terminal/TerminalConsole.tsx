@@ -170,37 +170,37 @@ interface XtermSessionHandle {
   container: HTMLDivElement;
 }
 
-// @implements spec-ft-core-webui-shell::REQ-009
-// @implements spec-ft-core-webui-shell::REQ-010
-// @implements spec-ft-core-webui-shell::REQ-011
-// @implements spec-ft-terminal-panel-ui::REQ-001
-// @implements spec-ft-terminal-panel-ui::REQ-002
-// @implements spec-ft-terminal-panel-ui::REQ-003
-// @implements spec-ft-terminal-panel-ui::REQ-004
-// @implements spec-ft-terminal-panel-ui::REQ-005
-// @implements spec-ft-terminal-panel-ui::REQ-006
-// @implements spec-ft-terminal-panel-ui::REQ-008
-// @implements spec-ft-terminal-panel-ui::REQ-009
-// @implements spec-ft-terminal-panel-ui::REQ-010
-// @implements spec-ft-terminal-panel-ui::REQ-015
-// @implements spec-ft-terminal-panel-ui::REQ-017
-// @implements spec-ft-terminal-panel-ui::REQ-021
-// @implements spec-ft-terminal-panel-ui::REQ-022
-// @implements spec-ft-terminal-xterm-ui::REQ-001
-// @implements spec-ft-terminal-xterm-ui::REQ-002
-// @implements spec-ft-terminal-xterm-ui::REQ-003
-// @implements spec-ft-terminal-xterm-ui::REQ-004
-// @implements spec-ft-terminal-xterm-ui::REQ-005
-// @implements spec-ft-terminal-xterm-ui::REQ-006
-// @implements spec-ft-terminal-xterm-ui::REQ-007
-// @implements spec-ft-terminal-xterm-ui::REQ-008
-// @implements spec-ft-terminal-xterm-ui::REQ-009
-// @implements spec-ft-terminal-xterm-ui::REQ-010
-// @implements spec-ft-terminal-xterm-ui::REQ-011
-// @implements spec-ft-terminal-xterm-ui::REQ-012
-// @implements spec-ft-terminal-xterm-ui::REQ-013
-// @implements spec-ft-terminal-xterm-ui::REQ-014
-// @implements spec-ft-terminal-xterm-ui::REQ-015
+// @implements ft-core-webui-shell::TASK-CORE-006-5::REQ-009
+// @implements ft-core-webui-shell::TASK-CORE-006-9::REQ-010
+// @implements ft-core-webui-shell::TASK-CORE-006-9::REQ-011
+// @implements ft-terminal-panel-ui::TASK-TERM-002-7::REQ-001
+// @implements ft-terminal-panel-ui::TASK-TERM-002-1::REQ-002
+// @implements ft-terminal-panel-ui::TASK-TERM-002-1::REQ-003
+// @implements ft-terminal-panel-ui::TASK-TERM-002-1::REQ-004
+// @implements ft-terminal-panel-ui::TASK-TERM-002-2::REQ-005
+// @implements ft-terminal-panel-ui::TASK-TERM-002-2::REQ-006
+// @implements ft-terminal-panel-ui::TASK-TERM-002-6::REQ-008
+// @implements ft-terminal-panel-ui::TASK-TERM-002-5::REQ-009
+// @implements ft-terminal-panel-ui::TASK-TERM-002-6::REQ-010
+// @implements ft-terminal-panel-ui::TASK-TERM-002-11::REQ-015
+// @implements ft-terminal-panel-ui::TASK-TERM-002-13::REQ-017
+// @implements ft-terminal-panel-ui::TASK-TERM-002-17::REQ-021
+// @implements ft-terminal-panel-ui::TASK-TERM-002-18::REQ-022
+// @implements ft-terminal-xterm-ui::TASK-XTERM-005::REQ-001
+// @implements ft-terminal-xterm-ui::TASK-XTERM-006::REQ-002
+// @implements ft-terminal-xterm-ui::TASK-XTERM-005::REQ-003
+// @implements ft-terminal-xterm-ui::TASK-XTERM-005::REQ-004
+// @implements ft-terminal-xterm-ui::TASK-XTERM-005::REQ-005
+// @implements ft-terminal-xterm-ui::TASK-XTERM-002::REQ-006
+// @implements ft-terminal-xterm-ui::TASK-XTERM-003::REQ-007
+// @implements ft-terminal-xterm-ui::TASK-XTERM-004::REQ-008
+// @implements ft-terminal-xterm-ui::TASK-XTERM-003::REQ-009
+// @implements ft-terminal-xterm-ui::TASK-XTERM-004::REQ-010
+// @implements ft-terminal-xterm-ui::TASK-XTERM-007::REQ-011
+// @implements ft-terminal-xterm-ui::TASK-XTERM-008::REQ-012
+// @implements ft-terminal-xterm-ui::TASK-XTERM-009::REQ-013
+// @implements ft-terminal-xterm-ui::TASK-XTERM-009::REQ-014
+// @implements ft-terminal-xterm-ui::TASK-XTERM-012::REQ-015
 export const TerminalConsole: React.FC<TerminalConsoleProps> = ({
   cwd,
   onWorkspaceRefresh,
@@ -263,7 +263,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({
     }
   }, [tabs, activeTabId]);
 
-  // @implements spec-ft-terminal-xterm-ui::REQ-015
+  // @implements ft-terminal-xterm-ui::TASK-XTERM-012::REQ-015
   // Desktop: Broadcast terminal tabs and active tab to companion clients periodically and on tab change
   useEffect(() => {
     if (isMobile) return;
@@ -280,7 +280,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({
     return () => clearInterval(interval);
   }, [isMobile, tabs, activeTabId, sendMessage]);
 
-  // @implements spec-ft-terminal-xterm-ui::REQ-015
+  // @implements ft-terminal-xterm-ui::TASK-XTERM-012::REQ-015
   // Desktop: Respond to companion requests and remote active tab selections
   useEffect(() => {
     if (isMobile || !lastMessage || typeof lastMessage !== 'object') return;
@@ -322,14 +322,14 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({
     }
   }, [isMobile, lastMessage, tabs, activeTabId, sendMessage]);
 
-  // @implements spec-ft-terminal-xterm-ui::REQ-015
+  // @implements ft-terminal-xterm-ui::TASK-XTERM-012::REQ-015
   // Mobile Companion: Request terminal state from targeted desktop window on connect or window switch
   useEffect(() => {
     if (!isMobile || !targetWindowId || status !== 'connected') return;
     sendMessage('request_companion_terminals', { targetWindowId });
   }, [isMobile, targetWindowId, status, sendMessage]);
 
-  // @implements spec-ft-terminal-xterm-ui::REQ-015
+  // @implements ft-terminal-xterm-ui::TASK-XTERM-012::REQ-015
   // Mobile Companion: Mirror terminal tabs and active tab from target desktop window
   useEffect(() => {
     if (!isMobile || !lastMessage || typeof lastMessage !== 'object') return;
@@ -593,7 +593,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({
           // Container may have zero size in headless tests.
         }
 
-        // @implements spec-ft-terminal-xterm-ui::REQ-013
+        // @implements ft-terminal-xterm-ui::TASK-XTERM-009::REQ-013
         term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
           if (event.type !== 'keydown') return true;
           const isMod = event.ctrlKey || event.metaKey;
@@ -684,7 +684,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({
         const ws = new WebSocket(wsUrl);
         socketsRef.current[tabId] = ws;
 
-        // @implements spec-ft-terminal-xterm-ui::REQ-014
+        // @implements ft-terminal-xterm-ui::TASK-XTERM-009::REQ-014
         ws.onopen = () => {
           setDisconnectedTabs((prev) => ({ ...prev, [tabId]: false }));
           const currentHandle = xtermsRef.current[tabId];
@@ -812,7 +812,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({
   }, [activeTab, position]);
 
   // Cleanup all sockets and xterm instances on unmount (preserve backend PTY sessions across F5 reload).
-  // @implements spec-ft-terminal-xterm-ui::REQ-014
+  // @implements ft-terminal-xterm-ui::TASK-XTERM-009::REQ-014
   useEffect(() => {
     return () => {
       Object.values(workingTimerRef.current).forEach((t) => clearTimeout(t));

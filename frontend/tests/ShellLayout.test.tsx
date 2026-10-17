@@ -3,11 +3,11 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { ShellLayout } from '../src/components/layout/ShellLayout';
 
-// @verifies spec-ft-core-webui-shell::REQ-001
-// @verifies spec-ft-core-webui-shell::REQ-002
-// @verifies spec-ft-core-webui-shell::REQ-008
-// @verifies spec-ft-core-webui-shell::REQ-013
-// @verifies spec-ft-core-webui-shell::REQ-016
+// @verifies ft-core-webui-shell::TASK-CORE-006-6::REQ-001
+// @verifies ft-core-webui-shell::TASK-CORE-006-11::REQ-002
+// @verifies ft-core-webui-shell::TASK-CORE-006-1::REQ-008
+// @verifies ft-core-webui-shell::TASK-CORE-006-22::REQ-013
+// @verifies ft-core-webui-shell::TASK-CORE-006-29::REQ-016
 describe('ShellLayout Component', () => {
   it('renders full-height left sidebar and accordion navigation items', () => {
     render(
@@ -38,8 +38,8 @@ describe('ShellLayout Component', () => {
     expect(screen.getByText(/Main Canvas Content/i)).toBeInTheDocument();
   });
 
-  // @verifies spec-ft-core-webui-shell::REQ-013
-  // @verifies spec-ft-core-webui-shell::REQ-021
+  // @verifies ft-core-webui-shell::TASK-CORE-006-22::REQ-013
+  // @verifies ft-core-webui-shell::TASK-CORE-006-20::REQ-021
   it('renders fixed mobile bottom navbar and supports full-screen view swapping and tree auto-transition', () => {
     const onMobileViewChange = vi.fn();
     const onSelectEpic = vi.fn();

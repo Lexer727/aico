@@ -29,8 +29,8 @@ interface WebSocketProviderProps {
   url?: string;
 }
 
-// @implements spec-ft-core-webui-shell::REQ-009
-// @implements spec-ft-core-webui-shell::REQ-014
+// @implements ft-core-webui-shell::TASK-CORE-006-5::REQ-009
+// @implements ft-core-webui-shell::TASK-CORE-006-5::REQ-014
 export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({
   children,
   url,

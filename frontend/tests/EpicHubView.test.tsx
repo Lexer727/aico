@@ -4,10 +4,10 @@ import React from 'react';
 import { EpicHubView } from '../src/features/epic-hub/EpicHubView';
 import { useAccordionStore } from '../src/stores/useAccordionStore';
 
-// @verifies spec-ft-core-epic-hub::REQ-001
-// @verifies spec-ft-core-epic-hub::REQ-002
-// @verifies spec-ft-core-epic-hub::REQ-005
-// @verifies spec-ft-core-epic-hub::REQ-011
+// @verifies ft-core-epic-hub::TASK-CORE-007-12::REQ-001
+// @verifies ft-core-epic-hub::TASK-CORE-007-10::REQ-002
+// @verifies ft-core-epic-hub::TASK-CORE-007-11::REQ-005
+// @verifies ft-core-epic-hub::TASK-CORE-007-4::REQ-011
 describe('EpicHubView Component', () => {
   beforeEach(() => {
     useAccordionStore.setState({ collapsedByEntity: {} });
@@ -85,7 +85,7 @@ describe('EpicHubView Component', () => {
     expect(collapsedHandleProgress).toHaveTextContent('Done (50%)');
   });
 
-  // @verifies spec-ft-core-assets-manager::REQ-011
+  // @verifies ft-core-assets-manager::TASK-ASSET-008::REQ-011
   it('renders (x) count badge only when asset count is greater than zero and omits badge when zero', async () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
       if (url.includes('/assets')) {
@@ -145,5 +145,60 @@ describe('EpicHubView Component', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('asset-counter-badge')).toBeNull();
     });
+  });
+
+  // @verifies ft-core-code-navigation-and-search::TASK-CORE-013-4::REQ-008
+  it('renders aggregated Code Files section rolling up implementations across child features', () => {
+    const handleSelectCode = vi.fn();
+    const epicWithFeatures = {
+      ...mockEpic,
+      features: [
+        {
+          id: 'ft-core-host-runtime',
+          name: 'Host Runtime',
+          status: 'Done',
+          epic_id: '001-aico-core',
+          tasks: [],
+        },
+      ],
+    };
+
+    const mockCodeFiles = [
+      {
+        path: 'crates/aico-server/src/server.rs',
+        name: 'server.rs',
+        annotations: [
+          {
+            kind: 'implements',
+            target: 'ft-core-host-runtime::TASK-CORE-001::REQ-001',
+            line: 14,
+            task: 'TASK-CORE-001',
+            req: 'REQ-001',
+          },
+        ],
+      },
+    ];
+
+    render(
+      <EpicHubView
+        epic={epicWithFeatures}
+        codeFiles={mockCodeFiles}
+        onSelectCode={handleSelectCode}
+      />
+    );
+
+    // Verify Code Files section exists
+    const codeFilesSection = screen.getByTestId('section-epic-code-files');
+    expect(codeFilesSection).toBeInTheDocument();
+    expect(screen.getByText(/Code Files \(1 file\)/)).toBeInTheDocument();
+
+    // Expand the Code Files section
+    fireEvent.click(screen.getByText(/Code Files \(1 file\)/));
+
+    // Verify matching code file link is rendered and clickable
+    const fileLink = screen.getByTestId('epic-code-file-crates/aico-server/src/server.rs');
+    expect(fileLink).toBeInTheDocument();
+    fireEvent.click(fileLink);
+    expect(handleSelectCode).toHaveBeenCalledWith('crates/aico-server/src/server.rs');
   });
 });

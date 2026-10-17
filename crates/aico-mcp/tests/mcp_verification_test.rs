@@ -1,7 +1,7 @@
 use aico_mcp::{McpServerManager, TraceabilityTracker, VerificationStatus};
 
-// @verifies spec-ft-core-mcp-tools::REQ-006
-// @verifies spec-ft-core-mcp-tools::REQ-007
+// @verifies ft-core-mcp-tools::TASK-CORE-005-4::REQ-006
+// @verifies ft-core-mcp-tools::TASK-CORE-005-4::REQ-007
 #[test]
 fn test_traceability_and_test_before_code_gate() {
     let mut tracker = TraceabilityTracker::new();
@@ -43,7 +43,7 @@ fn test_traceability_and_test_before_code_gate() {
     assert_eq!(val["status"], "verified");
 }
 
-// @verifies spec-ft-core-mcp-tools::REQ-006
+// @verifies ft-core-mcp-tools::TASK-CORE-005-4::REQ-006
 #[test]
 fn test_find_dangling_requirements() {
     let mut tracker = TraceabilityTracker::new();

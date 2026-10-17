@@ -3,8 +3,8 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use aico_core::{DiscoveryWatcher, DiscoveryEvent, WorkspaceRegistry};
 
-// @verifies spec-ft-core-discovery::REQ-006
-// @verifies spec-ft-core-discovery::REQ-008
+// @verifies ft-core-discovery::TASK-CORE-004-4::REQ-006
+// @verifies ft-core-discovery::TASK-CORE-004-3::REQ-008
 #[tokio::test]
 async fn test_hot_discovery_watcher() {
     let temp_dir = std::env::temp_dir().join("aico_watcher_test_1");

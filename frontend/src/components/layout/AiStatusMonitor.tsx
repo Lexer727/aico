@@ -73,14 +73,14 @@ const QuotaRing: React.FC<QuotaRingProps> = ({ percentage }) => {
   );
 };
 
-// @implements spec-ft-terminal-ai-quota-monitor::REQ-003
-// @implements spec-ft-terminal-ai-quota-monitor::REQ-004
-// @implements spec-ft-terminal-ai-quota-monitor::REQ-005
-// @implements spec-ft-terminal-ai-quota-monitor::REQ-006
-// @implements spec-ft-terminal-ai-quota-monitor::REQ-007
-// @implements spec-ft-terminal-ai-quota-monitor::REQ-008
-// @implements spec-ft-terminal-ai-quota-monitor::REQ-010
-// @implements spec-ft-terminal-ai-quota-monitor::REQ-011
+// @implements ft-terminal-ai-quota-monitor::TASK-QUOTA-007::REQ-003
+// @implements ft-terminal-ai-quota-monitor::TASK-QUOTA-006::REQ-004
+// @implements ft-terminal-ai-quota-monitor::TASK-QUOTA-007::REQ-005
+// @implements ft-terminal-ai-quota-monitor::TASK-QUOTA-007::REQ-006
+// @implements ft-terminal-ai-quota-monitor::TASK-QUOTA-002::REQ-007
+// @implements ft-terminal-ai-quota-monitor::TASK-QUOTA-005::REQ-008
+// @implements ft-terminal-ai-quota-monitor::TASK-QUOTA-007::REQ-010
+// @implements ft-terminal-ai-quota-monitor::TASK-QUOTA-004::REQ-011
 export const AiStatusMonitor: React.FC = () => {
   const [data, setData] = useState<AiQuotasResponse>({
     ai_state: 'inactive',

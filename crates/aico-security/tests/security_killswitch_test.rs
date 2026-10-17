@@ -1,7 +1,7 @@
 use std::process::Command;
 use aico_security::EmergencyKillSwitch;
 
-// @verifies spec-ft-core-security-auth::REQ-010
+// @verifies ft-core-security-auth::TASK-CORE-002-5::REQ-010
 #[tokio::test]
 async fn test_emergency_kill_switch() {
     let kill_switch = EmergencyKillSwitch::new();

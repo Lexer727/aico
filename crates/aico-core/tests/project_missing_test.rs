@@ -1,8 +1,8 @@
 use std::fs;
 use aico_core::{RootScanner, ProjectStatus, CodebaseWizard};
 
-// @verifies spec-ft-core-discovery::REQ-004
-// @verifies spec-ft-core-discovery::REQ-011
+// @verifies ft-core-discovery::TASK-CORE-004-5::REQ-004
+// @verifies ft-core-discovery::TASK-CORE-004-5::REQ-011
 #[test]
 fn test_missing_codebase_handling() {
     let temp_dir = std::env::temp_dir().join("aico_missing_codebase_test_1");

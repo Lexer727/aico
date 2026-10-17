@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-// @implements spec-ft-core-assets-manager::REQ-013
-// @implements spec-ft-core-assets-manager::REQ-014
+// @implements ft-core-assets-manager::TASK-ASSET-009::REQ-013
+// @implements ft-core-assets-manager::TASK-ASSET-009::REQ-014
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AssetsConfig {
     #[serde(default = "default_allow_utf8_fallback")]
@@ -126,7 +126,7 @@ impl AssetsConfig {
     }
 }
 
-// @implements spec-ft-core-assets-manager::REQ-013
+// @implements ft-core-assets-manager::TASK-ASSET-009::REQ-013
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct AicoConfig {
     #[serde(default)]

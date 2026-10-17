@@ -1,7 +1,7 @@
 use std::fs;
 use aico_storage::{StorageManager, SchemaMigrator, GraphNodeType, GraphRelationType};
 
-// @verifies spec-ft-core-local-storage::REQ-006
+// @verifies ft-core-local-storage::TASK-CORE-003-2::REQ-006
 #[tokio::test]
 async fn test_kuzu_schema_migration_and_traceability() {
     let temp_dir = std::env::temp_dir().join("aico_schema_test_1");
@@ -37,7 +37,7 @@ async fn test_kuzu_schema_migration_and_traceability() {
     assert!(rel_tables.contains(&GraphRelationType::DefinesSymbol));
 }
 
-// @verifies spec-ft-core-local-storage::REQ-008
+// @verifies ft-core-local-storage::TASK-CORE-003-2::REQ-008
 #[tokio::test]
 async fn test_schema_version_compatibility_verification() {
     let migrator = SchemaMigrator::new();

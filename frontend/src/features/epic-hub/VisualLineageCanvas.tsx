@@ -21,8 +21,8 @@ interface VisualLineageCanvasProps {
   onSelectNode?: (nodeId: string) => void;
 }
 
-// @implements spec-ft-core-epic-hub::REQ-003
-// @implements spec-ft-core-epic-hub::REQ-010
+// @implements ft-core-epic-hub::TASK-CORE-007-11::REQ-003
+// @implements ft-core-epic-hub::TASK-CORE-007-4::REQ-010
 export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
   nodes,
   edges,

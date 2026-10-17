@@ -16,8 +16,8 @@ impl CodebaseWizard {
     }
 
     /// Initialize a new empty codebase directory with a Git repository
-    // @implements spec-ft-core-discovery::REQ-004
-    // @implements spec-ft-core-discovery::REQ-011
+    // @implements ft-core-discovery::TASK-CORE-004-5::REQ-004
+    // @implements ft-core-discovery::TASK-CORE-004-5::REQ-011
     pub fn initialize_codebase(&self, path: &Path) -> Result<(), std::io::Error> {
         fs::create_dir_all(path)?;
         let git_dir = path.join(".git");
@@ -35,7 +35,7 @@ impl CodebaseWizard {
     }
 
     /// Clone a remote Git repository to codebase path
-    // @implements spec-ft-core-discovery::REQ-011
+    // @implements ft-core-discovery::TASK-CORE-004-5::REQ-011
     pub fn clone_codebase(&self, path: &Path, remote_url: &str) -> Result<(), std::io::Error> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;

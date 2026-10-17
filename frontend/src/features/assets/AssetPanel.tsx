@@ -84,17 +84,17 @@ const DEFAULT_ALLOWED_EXTENSIONS = [
   'dockerfile', 'makefile', 'vue', 'svelte', 'astro', 'dart', 'zig', 'sol', 'tf'
 ];
 
-// @implements spec-ft-core-assets-manager::REQ-001
-// @implements spec-ft-core-assets-manager::REQ-004
-// @implements spec-ft-core-assets-manager::REQ-005
-// @implements spec-ft-core-assets-manager::REQ-006
-// @implements spec-ft-core-assets-manager::REQ-007
-// @implements spec-ft-core-assets-manager::REQ-008
-// @implements spec-ft-core-assets-manager::REQ-009
-// @implements spec-ft-core-assets-manager::REQ-010
-// @implements spec-ft-core-assets-manager::REQ-011
-// @implements spec-ft-core-assets-manager::REQ-013
-// @implements spec-ft-core-assets-manager::REQ-014
+// @implements ft-core-assets-manager::TASK-ASSET-003::REQ-001
+// @implements ft-core-assets-manager::TASK-ASSET-004::REQ-004
+// @implements ft-core-assets-manager::TASK-ASSET-004::REQ-005
+// @implements ft-core-assets-manager::TASK-ASSET-006::REQ-006
+// @implements ft-core-assets-manager::TASK-ASSET-005::REQ-007
+// @implements ft-core-assets-manager::TASK-ASSET-006::REQ-008
+// @implements ft-core-assets-manager::TASK-ASSET-007::REQ-009
+// @implements ft-core-assets-manager::TASK-ASSET-008::REQ-010
+// @implements ft-core-assets-manager::TASK-ASSET-008::REQ-011
+// @implements ft-core-assets-manager::TASK-ASSET-009::REQ-013
+// @implements ft-core-assets-manager::TASK-ASSET-009::REQ-014
 export const AssetPanel: React.FC<AssetPanelProps> = ({
   scopeType,
   scopeId,
@@ -111,7 +111,7 @@ export const AssetPanel: React.FC<AssetPanelProps> = ({
   const [allowedExtensions, setAllowedExtensions] = useState<string[]>(DEFAULT_ALLOWED_EXTENSIONS);
 
   // Load workspace upload policies from GET /api/v1/config
-  // @implements spec-ft-core-assets-manager::REQ-013
+  // @implements ft-core-assets-manager::TASK-ASSET-009::REQ-013
   useEffect(() => {
     fetch('/api/v1/config')
       .then((res) => (res.ok ? res.json() : null))
@@ -230,7 +230,7 @@ export const AssetPanel: React.FC<AssetPanelProps> = ({
     }
   };
 
-  // @implements spec-ft-core-assets-manager::REQ-009
+  // @implements ft-core-assets-manager::TASK-ASSET-007::REQ-009
   const handleDeleteConfirm = async () => {
     if (!assetToDelete) return;
     try {
@@ -257,7 +257,7 @@ export const AssetPanel: React.FC<AssetPanelProps> = ({
     }
   };
 
-  // @implements spec-ft-core-assets-manager::REQ-010
+  // @implements ft-core-assets-manager::TASK-ASSET-008::REQ-010
   const handleContextMenu = (e: React.MouseEvent, asset: DiscoveredAssetInfo) => {
     e.preventDefault();
     e.stopPropagation();

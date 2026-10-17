@@ -3,11 +3,11 @@ use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
 
-// @verifies spec-ft-terminal-backend-stream-bridge::REQ-001
-// @verifies spec-ft-terminal-backend-stream-bridge::REQ-002
-// @verifies spec-ft-terminal-backend-stream-bridge::REQ-003
-// @verifies spec-ft-terminal-backend-stream-bridge::REQ-004
-// @verifies spec-ft-terminal-backend-stream-bridge::REQ-005
+// @verifies ft-terminal-backend-stream-bridge::TASK-TERM-001-3::REQ-001
+// @verifies ft-terminal-backend-stream-bridge::TASK-TERM-001-1::REQ-002
+// @verifies ft-terminal-backend-stream-bridge::TASK-TERM-001-2::REQ-003
+// @verifies ft-terminal-backend-stream-bridge::TASK-TERM-001-2::REQ-004
+// @verifies ft-terminal-backend-stream-bridge::TASK-TERM-001-2::REQ-005
 #[tokio::test]
 async fn test_terminal_websocket_spawn_shell_and_loopback() {
     let config = ServerConfig {
@@ -81,8 +81,8 @@ async fn test_terminal_websocket_spawn_shell_and_loopback() {
     server_task.abort();
 }
 
-// @verifies spec-ft-terminal-backend-stream-bridge::REQ-006
-// @verifies spec-ft-terminal-backend-stream-bridge::REQ-007
+// @verifies ft-terminal-backend-stream-bridge::TASK-TERM-001-1::REQ-006
+// @verifies ft-terminal-backend-stream-bridge::TASK-TERM-001-3::REQ-007
 #[tokio::test]
 async fn test_terminal_websocket_shell_resolution_and_error_handling() {
     let config = ServerConfig {
@@ -141,7 +141,7 @@ async fn test_terminal_websocket_shell_resolution_and_error_handling() {
     server_task.abort();
 }
 
-// @verifies spec-ft-terminal-backend-stream-bridge::REQ-008
+// @verifies ft-terminal-backend-stream-bridge::TASK-TERM-001-4::REQ-008
 #[tokio::test]
 async fn test_terminal_powershell_clear_command_execution() {
     let config = ServerConfig {
@@ -213,7 +213,7 @@ async fn test_terminal_powershell_clear_command_execution() {
     server_task.abort();
 }
 
-// @verifies spec-ft-terminal-panel-ui::REQ-022
+// @verifies ft-terminal-panel-ui::TASK-TERM-002-18::REQ-022
 #[tokio::test]
 async fn test_terminal_kill_message_terminates_session() {
     let config = ServerConfig {

@@ -108,7 +108,7 @@ impl HumanGateManager {
     }
 
     /// Computes the active agent frontier: unblocked agent tasks ready for execution
-    // @implements spec-ft-core-epic-hub::REQ-008
+    // @implements ft-core-epic-hub::TASK-CORE-007-3::REQ-008
     pub fn active_agent_frontier(&self) -> Vec<String> {
         let mut frontier = Vec::new();
         for task in self.tasks.values() {
@@ -123,8 +123,8 @@ impl HumanGateManager {
     }
 
     /// Delivers an asset satisfying a human gate task, unblocking dependent frontier tasks
-    // @implements spec-ft-core-epic-hub::REQ-008
-    // @implements spec-ft-core-epic-hub::REQ-012
+    // @implements ft-core-epic-hub::TASK-CORE-007-3::REQ-008
+    // @implements ft-core-epic-hub::TASK-CORE-007-3::REQ-012
     pub async fn deliver_asset(
         &mut self,
         task_id: &str,

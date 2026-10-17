@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { DashboardView } from '../src/features/dashboard/DashboardView';
 
-// @verifies spec-ft-core-epic-hub::REQ-007
+// @verifies ft-core-epic-hub::TASK-CORE-007-1::REQ-007
 describe('DashboardView Component', () => {
   it('renders workspace overview with both ec-core and ec-specs epics', () => {
     const onOpenEpic = vi.fn();
@@ -87,7 +87,7 @@ describe('DashboardView Component', () => {
     expect(screen.queryByText('Codebase Root')).toBeNull();
   });
 
-  // @verifies spec-ft-core-ui-visual-consistency::REQ-002
+  // @verifies ft-core-ui-visual-consistency::TASK-CORE-010-2::REQ-002
   it('ensures Open Epic action buttons are non-shrinking and whitespace-nowrap with long titles', () => {
     const longTitleEpics = [
       {

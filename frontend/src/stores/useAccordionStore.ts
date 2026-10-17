@@ -9,7 +9,7 @@ interface AccordionStore {
   resetEntity: (entityId: string) => void;
 }
 
-// @implements spec-ft-core-assets-manager::REQ-012
+// @implements ft-core-assets-manager::TASK-ASSET-008::REQ-012
 export const useAccordionStore = create<AccordionStore>((set, get) => ({
   collapsedByEntity: {},
   isSectionCollapsed: (entityId: string, section: string, defaultCollapsed = true) => {

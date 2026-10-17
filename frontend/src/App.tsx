@@ -15,6 +15,7 @@ import { SettingsModal } from './components/settings/SettingsModal';
 import { TerminalConsole } from './components/terminal/TerminalConsole';
 import { OmniSearchModal, type SearchResultItem } from './components/search/OmniSearchModal';
 import { createSearchIndex } from './utils/searchEngine';
+import { normalizeWorkspacePath } from './utils/pathUtils';
 import { DashboardView } from './features/dashboard/DashboardView';
 import { EpicHubView, type EpicData } from './features/epic-hub/EpicHubView';
 import { FeatureViewer, type FeatureData } from './features/feature-viewer/FeatureViewer';
@@ -64,6 +65,11 @@ const mockEdges: GraphEdge[] = [
   { id: 'e6', source: 'spec-6', target: 'code-1' },
 ];
 
+// @implements ft-core-code-navigation-and-search::TASK-CORE-013-5::REQ-001
+// @implements ft-core-code-navigation-and-search::TASK-CORE-013-5::REQ-003
+// @implements ft-core-code-navigation-and-search::TASK-CORE-013-5::REQ-006
+// @implements ft-core-code-navigation-and-search::TASK-CORE-013-5::REQ-007
+// @implements ft-core-code-navigation-and-search::TASK-CORE-013-5::REQ-008
 export const MainWorkspace: React.FC = () => {
   const { status, reconnect, sendMessage, lastMessage } = useWebSocket();
   const [windowId] = useState<string>(() => getWindowId());
@@ -230,7 +236,7 @@ export const MainWorkspace: React.FC = () => {
     }
   }, []);
 
-  // @implements spec-ft-core-webui-shell::REQ-016
+  // @implements ft-core-webui-shell::TASK-CORE-006-29::REQ-016
   const handleRefreshWorkspace = useCallback(async () => {
     setIsRefreshing(true);
     try {
@@ -282,7 +288,7 @@ export const MainWorkspace: React.FC = () => {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // @implements spec-ft-core-webui-shell::REQ-018
+  // @implements ft-core-webui-shell::TASK-CORE-006-15::REQ-018
   // Desktop: Broadcast window presence and state periodically and on tab changes
   useEffect(() => {
     if (isMobileMode) return;
@@ -304,8 +310,8 @@ export const MainWorkspace: React.FC = () => {
     return () => clearInterval(interval);
   }, [isMobileMode, windowId, sendMessage, activeTabId, activeProjectId, tabsByProject]);
 
-  // @implements spec-ft-core-webui-shell::REQ-018
-  // @implements spec-ft-core-webui-shell::REQ-019
+  // @implements ft-core-webui-shell::TASK-CORE-006-15::REQ-018
+  // @implements ft-core-webui-shell::TASK-CORE-006-17::REQ-019
   // Desktop: Respond to companion requests, pairing notifications, and remote tab modifications
   useEffect(() => {
     if (isMobileMode || !lastMessage || typeof lastMessage !== 'object') return;
@@ -352,7 +358,7 @@ export const MainWorkspace: React.FC = () => {
     }
   }, [isMobileMode, lastMessage, windowId, activeProjectId, sendMessage]);
 
-  // @implements spec-ft-core-webui-shell::REQ-019
+  // @implements ft-core-webui-shell::TASK-CORE-006-17::REQ-019
   // Mobile Companion: Notify desktop upon WebSocket connection that pairing is complete
   useEffect(() => {
     if (isMobileMode && status === 'connected' && initialWinRef.current && !pairedNotifiedRef.current) {
@@ -361,14 +367,14 @@ export const MainWorkspace: React.FC = () => {
     }
   }, [isMobileMode, status, sendMessage]);
 
-  // @implements spec-ft-core-webui-shell::REQ-020
+  // @implements ft-core-webui-shell::TASK-CORE-006-26::REQ-020
   // Mobile Companion: Request active desktop windows on mount
   useEffect(() => {
     if (!isMobileMode) return;
     sendMessage('request_desktop_windows', { from: 'companion' });
   }, [isMobileMode, sendMessage]);
 
-  // @implements spec-ft-core-webui-shell::REQ-020
+  // @implements ft-core-webui-shell::TASK-CORE-006-26::REQ-020
   // Mobile Companion: Discover desktop windows and mirror target window tabs
   useEffect(() => {
     if (!isMobileMode || !lastMessage || typeof lastMessage !== 'object') return;
@@ -406,7 +412,7 @@ export const MainWorkspace: React.FC = () => {
     }
   }, [isMobileMode, lastMessage, targetWindowId]);
 
-  // @implements spec-ft-core-webui-shell::REQ-020
+  // @implements ft-core-webui-shell::TASK-CORE-006-26::REQ-020
   // Mobile Companion: Dispatch local tab modifications back to target desktop window
   useEffect(() => {
     if (!isMobileMode || !targetWindowId || !hasReceivedInitialSyncRef.current) return;
@@ -525,12 +531,15 @@ export const MainWorkspace: React.FC = () => {
     });
   };
 
+  // @implements ft-core-workspace-path-normalization::TASK-CORE-014-2::REQ-005
+  // @implements ft-core-code-path-simplification-and-omnisearch::TASK-CORE-015-3::REQ-005
   const handleOpenCode = (file: string) => {
+    const normalized = normalizeWorkspacePath(file);
     openTab(activeProjectId, {
-      id: file,
-      title: file.split('/').pop() || file,
+      id: normalized,
+      title: normalized.split('/').pop() || normalized,
       type: 'code',
-      path: file,
+      path: normalized,
     });
   };
 
@@ -550,7 +559,7 @@ export const MainWorkspace: React.FC = () => {
     });
   };
 
-  // @implements spec-ft-core-assets-manager::REQ-007
+  // @implements ft-core-assets-manager::TASK-ASSET-005::REQ-007
   const handleOpenAsset = (asset: DiscoveredAssetInfo) => {
     openTab(activeProjectId, {
       id: asset.path,
@@ -562,7 +571,7 @@ export const MainWorkspace: React.FC = () => {
 
   const [isOmniSearchOpen, setIsOmniSearchOpen] = useState(false);
 
-  // @implements spec-ft-core-omni-search-fulltext::REQ-005
+  // @implements ft-core-omni-search-fulltext::TASK-CORE-009-3::REQ-005
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
@@ -605,7 +614,7 @@ export const MainWorkspace: React.FC = () => {
     return activeIndex;
   }, [projects, activeProjectId, fullEpics, fullFeatures, fullAdrs, codeFiles]);
 
-  // @implements spec-ft-core-omni-search-fulltext::REQ-007
+  // @implements ft-core-omni-search-fulltext::TASK-CORE-009-3::REQ-007
   const handleOmniSelect = useCallback(async (item: SearchResultItem) => {
     if (item.projectId && item.projectId !== activeProjectId) {
       setActiveProject(item.projectId);
@@ -683,6 +692,8 @@ export const MainWorkspace: React.FC = () => {
             epic={currentEpicData}
             allFeatures={fullFeatures}
             allAdrs={fullAdrs}
+            codeFiles={codeFiles}
+            onSelectCode={handleOpenCode}
             onOpenAdr={handleOpenAdr}
             onPopOut={(epicId, section) => {
               if (section === 'terminology') {
@@ -763,6 +774,8 @@ export const MainWorkspace: React.FC = () => {
           feature={featData}
           allFeatures={fullFeatures}
           allAdrs={fullAdrs}
+          codeFiles={codeFiles}
+          onSelectCode={handleOpenCode}
           onOpenEpic={handleOpenEpic}
           onOpenSpec={handleOpenSpec}
           onOpenPlan={handleOpenPlan}
@@ -845,7 +858,12 @@ export const MainWorkspace: React.FC = () => {
     }
 
     if (activeTab.type === 'code') {
-      return <CodeViewer filePath={activeTab.path || activeTab.id} />;
+      return (
+        <CodeViewer
+          filePath={activeTab.path || activeTab.id}
+          onSelectFeature={handleOpenFeature}
+        />
+      );
     }
 
     if (activeTab.type === 'adr') {
@@ -859,9 +877,9 @@ export const MainWorkspace: React.FC = () => {
       );
     }
 
-    // @implements spec-ft-core-assets-manager::REQ-007
-    // @implements spec-ft-core-assets-manager::REQ-008
-    // @implements spec-ft-core-assets-manager::REQ-009
+    // @implements ft-core-assets-manager::TASK-ASSET-005::REQ-007
+    // @implements ft-core-assets-manager::TASK-ASSET-006::REQ-008
+    // @implements ft-core-assets-manager::TASK-ASSET-007::REQ-009
     if (activeTab.type === 'asset') {
       return (
         <AssetViewer
@@ -939,8 +957,8 @@ export const MainWorkspace: React.FC = () => {
       isRefreshing={isRefreshing}
     >
       {/* Top Application Bar */}
-      {/* @implements spec-ft-core-webui-shell::REQ-020 */}
-      {/* @implements spec-ft-core-webui-shell::REQ-022 */}
+      {/* @implements ft-core-webui-shell::TASK-CORE-006-26::REQ-020 */}
+      {/* @implements ft-core-webui-shell::TASK-CORE-006-26::REQ-022 */}
       <header
         className={`bg-zinc-900 border-b border-zinc-800 px-3 ${
           isMobileMode
@@ -986,7 +1004,7 @@ export const MainWorkspace: React.FC = () => {
             </div>
 
             {/* Desktop Global Viewport Centered OmniSearch Bar (50vw) */}
-            {/* @implements spec-ft-core-webui-shell::REQ-023 */}
+            {/* @implements ft-core-webui-shell::TASK-CORE-006-31::REQ-023 */}
             <div className="hidden md:flex fixed top-0 inset-x-0 h-12 items-center justify-center pointer-events-none z-20 px-4">
               <button
                 type="button"
@@ -1009,7 +1027,7 @@ export const MainWorkspace: React.FC = () => {
 
             <div className="flex items-center gap-2 shrink-0 relative z-20">
               {/* Desktop QR Pairing Button */}
-              {/* @implements spec-ft-core-webui-shell::REQ-019 */}
+              {/* @implements ft-core-webui-shell::TASK-CORE-006-17::REQ-019 */}
               <button
                 type="button"
                 data-testid="qr-pairing-btn"
@@ -1080,7 +1098,7 @@ export const MainWorkspace: React.FC = () => {
       />
 
       {/* Mobile Pairing Modal */}
-      {/* @implements spec-ft-core-webui-shell::REQ-019 */}
+      {/* @implements ft-core-webui-shell::TASK-CORE-006-17::REQ-019 */}
       <MobilePairingModal
         isOpen={isPairingOpen}
         onClose={() => setIsPairingOpen(false)}

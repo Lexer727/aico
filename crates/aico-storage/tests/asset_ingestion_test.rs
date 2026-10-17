@@ -1,8 +1,8 @@
 use std::fs;
 use aico_storage::{StorageManager, AssetIngestionService};
 
-// @verifies spec-ft-core-epic-hub::REQ-006
-// @verifies spec-ft-core-epic-hub::REQ-007
+// @verifies ft-core-epic-hub::TASK-CORE-007-1::REQ-006
+// @verifies ft-core-epic-hub::TASK-CORE-007-1::REQ-007
 #[tokio::test]
 async fn test_asset_storage_deduplication_and_indexing() {
     let temp_dir = std::env::temp_dir().join("aico_asset_test_1");

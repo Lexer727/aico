@@ -2,7 +2,7 @@ use aico_core::{RootScanner, WorkspaceRegistry, ProjectManifest, DiscoveredProje
 use std::fs;
 use std::path::PathBuf;
 
-// @verifies spec-ft-core-discovery::REQ-001
+// @verifies ft-core-discovery::TASK-CORE-004-2::REQ-001
 #[test]
 fn test_root_scanner_discovers_specs_and_codebases() {
     let temp_root = std::env::temp_dir().join(format!("aico_test_root_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
@@ -29,7 +29,7 @@ fn test_root_scanner_discovers_specs_and_codebases() {
     let _ = fs::remove_dir_all(temp_root);
 }
 
-// @verifies spec-ft-core-discovery::REQ-005
+// @verifies ft-core-discovery::TASK-CORE-004-2::REQ-005
 #[test]
 fn test_workspace_registry_tracks_active_project() {
     let mut registry = WorkspaceRegistry::new();
@@ -59,13 +59,13 @@ fn test_workspace_registry_tracks_active_project() {
     assert_eq!(active.id, "alpha");
 }
 
-// @verifies spec-ft-core-skills-sync::REQ-001
-// @verifies spec-ft-core-skills-sync::REQ-002
-// @verifies spec-ft-core-skills-sync::REQ-003
-// @verifies spec-ft-core-skills-sync::REQ-004
-// @verifies spec-ft-core-skills-sync::REQ-005
-// @verifies spec-ft-core-skills-sync::REQ-006
-// @verifies spec-ft-core-skills-sync::REQ-008
+// @verifies ft-core-skills-sync::TASK-SYNC-002::REQ-001
+// @verifies ft-core-skills-sync::TASK-SYNC-002::REQ-002
+// @verifies ft-core-skills-sync::TASK-SYNC-002::REQ-003
+// @verifies ft-core-skills-sync::TASK-SYNC-002::REQ-004
+// @verifies ft-core-skills-sync::TASK-SYNC-003::REQ-005
+// @verifies ft-core-skills-sync::TASK-SYNC-003::REQ-006
+// @verifies ft-core-skills-sync::TASK-SYNC-003::REQ-008
 #[test]
 fn test_skills_synchronizer_updates_skills_rules_and_prunes_stale_entries() {
     use aico_core::SkillsSynchronizer;
@@ -181,7 +181,7 @@ fn test_skills_synchronizer_updates_skills_rules_and_prunes_stale_entries() {
     let _ = fs::remove_dir_all(temp_root);
 }
 
-// @verifies spec-ft-core-skills-sync::REQ-007
+// @verifies ft-core-skills-sync::TASK-SYNC-003::REQ-007
 #[test]
 fn test_skills_synchronizer_graceful_when_submodule_missing() {
     use aico_core::SkillsSynchronizer;
@@ -208,10 +208,10 @@ fn test_skills_synchronizer_graceful_when_submodule_missing() {
     let _ = fs::remove_dir_all(temp_root);
 }
 
-// @verifies spec-ft-core-skills-sync::REQ-001
-// @verifies spec-ft-core-skills-sync::REQ-002
-// @verifies spec-ft-core-skills-sync::REQ-005
-// @verifies spec-ft-core-skills-sync::REQ-006
+// @verifies ft-core-skills-sync::TASK-SYNC-002::REQ-001
+// @verifies ft-core-skills-sync::TASK-SYNC-002::REQ-002
+// @verifies ft-core-skills-sync::TASK-SYNC-003::REQ-005
+// @verifies ft-core-skills-sync::TASK-SYNC-003::REQ-006
 #[test]
 fn test_real_aico_workspace_skills_and_rules_sync() {
     use aico_core::SkillsSynchronizer;

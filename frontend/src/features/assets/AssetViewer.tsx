@@ -47,9 +47,9 @@ function isTextFile(ext: string, filename?: string): boolean {
   return textExtensions.includes(ext) || (filename ? textExtensions.includes(filename.toLowerCase()) : false);
 }
 
-// @implements spec-ft-core-assets-manager::REQ-007
-// @implements spec-ft-core-assets-manager::REQ-008
-// @implements spec-ft-core-assets-manager::REQ-009
+// @implements ft-core-assets-manager::TASK-ASSET-005::REQ-007
+// @implements ft-core-assets-manager::TASK-ASSET-006::REQ-008
+// @implements ft-core-assets-manager::TASK-ASSET-007::REQ-009
 export const AssetViewer: React.FC<AssetViewerProps> = ({
   assetId,
   title,
@@ -109,7 +109,7 @@ export const AssetViewer: React.FC<AssetViewerProps> = ({
     }
   };
 
-  // @implements spec-ft-core-assets-manager::REQ-009
+  // @implements ft-core-assets-manager::TASK-ASSET-007::REQ-009
   const handleDeleteConfirm = async () => {
     try {
       setDeleting(true);

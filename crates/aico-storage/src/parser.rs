@@ -37,7 +37,7 @@ impl CodeSymbolParser {
     }
 
     /// Extract symbols and call sites from source code according to language grammar
-    // @implements spec-ft-core-local-storage::REQ-005
+    // @implements ft-core-local-storage::TASK-CORE-003-3::REQ-005
     pub fn parse_symbols(&self, code: &str, lang: LanguageKind) -> Vec<CodeSymbol> {
         let lines: Vec<&str> = code.lines().collect();
         let mut symbols = Vec::new();
@@ -164,7 +164,7 @@ impl CodeSymbolParser {
     }
 
     /// Batch ingest parsed symbols and call graph relationships into Kùzu property graph
-    // @implements spec-ft-core-local-storage::REQ-005
+    // @implements ft-core-local-storage::TASK-CORE-003-3::REQ-005
     pub async fn ingest_symbols_into_graph(
         &self,
         storage: &StorageManager,

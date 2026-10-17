@@ -20,7 +20,7 @@ impl DifferentialIndexer {
     }
 
     /// Incrementally re-index file if content hash has changed
-    // @implements spec-ft-core-local-storage::REQ-010
+    // @implements ft-core-local-storage::TASK-CORE-003-5::REQ-010
     pub async fn index_file(
         &mut self,
         storage: &StorageManager,

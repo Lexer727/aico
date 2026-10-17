@@ -1,9 +1,9 @@
 use std::fs;
 use aico_mcp::McpServerManager;
 
-// @verifies spec-ft-core-mcp-tools::REQ-002
-// @verifies spec-ft-core-mcp-tools::REQ-003
-// @verifies spec-ft-core-mcp-tools::REQ-005
+// @verifies ft-core-mcp-tools::TASK-CORE-005-3::REQ-002
+// @verifies ft-core-mcp-tools::TASK-CORE-005-1::REQ-003
+// @verifies ft-core-mcp-tools::TASK-CORE-005-1::REQ-005
 #[test]
 fn test_create_sdd_artifact_gate() {
     let temp_dir = std::env::temp_dir().join("aico_mcp_gate_test_1");
@@ -48,7 +48,7 @@ fn test_create_sdd_artifact_gate() {
     assert!(written.contains("# Storage Engine Spec\n\nContent details here."));
 }
 
-// @verifies spec-ft-core-mcp-tools::REQ-010
+// @verifies ft-core-mcp-tools::TASK-CORE-005-4::REQ-010
 #[test]
 fn test_create_sdd_artifact_rejects_custom_path() {
     let temp_dir = std::env::temp_dir().join("aico_mcp_gate_test_2");
@@ -71,7 +71,7 @@ fn test_create_sdd_artifact_rejects_custom_path() {
     assert!(format!("{:?}", err).contains("Custom file path is strictly prohibited"));
 }
 
-// @verifies spec-ft-core-mcp-tools::REQ-012
+// @verifies ft-core-mcp-tools::TASK-CORE-005-4::REQ-012
 #[test]
 fn test_create_sdd_artifact_rejects_duplicate_id() {
     let temp_dir = std::env::temp_dir().join("aico_mcp_gate_test_3");

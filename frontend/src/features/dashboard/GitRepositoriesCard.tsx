@@ -96,7 +96,7 @@ export const GitRepositoriesCard: React.FC<GitRepositoriesCardProps> = ({
     switch (type.toLowerCase()) {
       case 'codebase':
         return 'bg-blue-950/80 text-blue-400 border-blue-800/60';
-      // @implements spec-ft-core-ui-visual-consistency::REQ-004
+      // @implements ft-core-ui-visual-consistency::TASK-CORE-010-4::REQ-004
       case 'specs':
         return 'bg-sky-950/80 text-sky-400 border-sky-800/60';
       case 'skills':

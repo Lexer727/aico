@@ -30,8 +30,8 @@ vi.mock('../src/features/feature-task-data', () => ({
   }),
 }));
 
-// @verifies spec-ft-core-epic-hub::REQ-001
-// @verifies spec-ft-core-epic-hub::REQ-004
+// @verifies ft-core-epic-hub::TASK-CORE-007-12::REQ-001
+// @verifies ft-core-epic-hub::TASK-CORE-007-12::REQ-004
 describe('DocumentViewer Component', () => {
   it('renders status in top right, aico_version below it, and no Back to Dashboard button', async () => {
     render(

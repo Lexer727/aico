@@ -1,7 +1,7 @@
 use aico_server::{GitStatusScanner, GitRepoStatus};
 
-// @verifies spec-ft-git-backend-status::REQ-003
-// @verifies spec-ft-git-backend-status::REQ-004
+// @verifies ft-git-backend-status::TASK-GIT-001-2::REQ-003
+// @verifies ft-git-backend-status::TASK-GIT-001-2::REQ-004
 #[test]
 fn test_git_status_inspection() {
     let sample_output = r#"# branch.oid 93669ebe7886e78484f59449da3efe4d63f9595d
@@ -37,7 +37,7 @@ fn test_git_status_inspection() {
     assert!(clean_parsed.is_clean);
 }
 
-// @verifies spec-ft-git-backend-status::REQ-006
+// @verifies ft-git-backend-status::TASK-GIT-001-2::REQ-006
 #[tokio::test]
 async fn test_git_status_scanner_missing_path() {
     let status = GitStatusScanner::scan_repo(

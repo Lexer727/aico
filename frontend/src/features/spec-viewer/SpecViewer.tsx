@@ -15,9 +15,9 @@ export interface SpecViewerProps {
   onBack?: () => void;
 }
 
-// @implements spec-ft-core-epic-hub::REQ-008
-// @implements spec-ft-specs-blueprint-standards::REQ-001
-// @implements spec-ft-specs-blueprint-standards::REQ-008
+// @implements ft-core-epic-hub::TASK-CORE-007-3::REQ-008
+// @implements ft-specs-blueprint-standards::TASK-SPECS-001-1::REQ-001
+// @implements ft-specs-blueprint-standards::TASK-SPECS-001-1::REQ-008
 export const SpecViewer: React.FC<SpecViewerProps> = ({
   specId,
   title,

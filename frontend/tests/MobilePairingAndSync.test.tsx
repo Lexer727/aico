@@ -80,10 +80,10 @@ vi.mock('../src/context/WebSocketContext', async () => {
   };
 });
 
-// @verifies spec-ft-core-webui-shell::REQ-019
-// @verifies spec-ft-core-webui-shell::REQ-020
-// @verifies spec-ft-core-webui-shell::REQ-023
-// @verifies spec-ft-terminal-xterm-ui::REQ-015
+// @verifies ft-core-webui-shell::TASK-CORE-006-17::REQ-019
+// @verifies ft-core-webui-shell::TASK-CORE-006-26::REQ-020
+// @verifies ft-core-webui-shell::TASK-CORE-006-31::REQ-023
+// @verifies ft-terminal-xterm-ui::TASK-XTERM-012::REQ-015
 describe('Mobile Pairing and Window/Terminal Synchronization', () => {
   beforeEach(() => {
     sessionStorage.clear();
@@ -96,7 +96,7 @@ describe('Mobile Pairing and Window/Terminal Synchronization', () => {
     Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1200 });
   });
 
-  // @verifies spec-ft-core-webui-shell::REQ-019
+  // @verifies ft-core-webui-shell::TASK-CORE-006-17::REQ-019
   it('renders MobilePairingModal with SVG QR code and copyable pairing URL containing windowId', async () => {
     const mockPairingData = {
       lan_ip: '192.168.1.50',
@@ -146,7 +146,7 @@ describe('Mobile Pairing and Window/Terminal Synchronization', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  // @verifies spec-ft-core-webui-shell::REQ-019
+  // @verifies ft-core-webui-shell::TASK-CORE-006-17::REQ-019
   it('automatically dismisses desktop pairing modal when companion_paired message is received', async () => {
     const mockPairingData = {
       lan_ip: '192.168.1.50',
@@ -181,7 +181,7 @@ describe('Mobile Pairing and Window/Terminal Synchronization', () => {
     expect(screen.queryByTestId('mobile-pairing-modal')).not.toBeInTheDocument();
   });
 
-  // @verifies spec-ft-core-webui-shell::REQ-019
+  // @verifies ft-core-webui-shell::TASK-CORE-006-17::REQ-019
   it('notifies desktop with companion_paired on mobile connection when win query param is present', async () => {
     window.history.replaceState({}, '', '/?companion=true&win=win-desktop-99');
 
@@ -197,7 +197,7 @@ describe('Mobile Pairing and Window/Terminal Synchronization', () => {
     });
   });
 
-  // @verifies spec-ft-core-webui-shell::REQ-020
+  // @verifies ft-core-webui-shell::TASK-CORE-006-26::REQ-020
   it('synchronizes main view tabs bidirectionally between desktop and mobile with echo suppression', async () => {
     window.history.replaceState({}, '', '/?companion=true&win=win-desktop-99');
 
@@ -275,7 +275,7 @@ describe('Mobile Pairing and Window/Terminal Synchronization', () => {
     expect(mockSendMessage).not.toHaveBeenCalledWith('companion_tabs_update', expect.anything());
   });
 
-  // @verifies spec-ft-terminal-xterm-ui::REQ-015
+  // @verifies ft-terminal-xterm-ui::TASK-XTERM-012::REQ-015
   it('synchronizes terminal tabs from desktop to mobile companion and sends updates on click', async () => {
     // 1. Mount Desktop TerminalConsole
     const { unmount: unmountDesktop } = render(
@@ -338,9 +338,9 @@ describe('Mobile Pairing and Window/Terminal Synchronization', () => {
     });
   });
 
-  // @verifies spec-ft-core-webui-shell::REQ-013
-  // @verifies spec-ft-core-webui-shell::REQ-020
-  // @verifies spec-ft-core-webui-shell::REQ-022
+  // @verifies ft-core-webui-shell::TASK-CORE-006-22::REQ-013
+  // @verifies ft-core-webui-shell::TASK-CORE-006-26::REQ-020
+  // @verifies ft-core-webui-shell::TASK-CORE-006-26::REQ-022
   it('renders adaptive multi-line top header and supports swappable full-screen views on mobile companion', async () => {
     window.history.replaceState({}, '', '/?companion=true&win=win-desktop-mobile-1');
 
@@ -381,8 +381,8 @@ describe('Mobile Pairing and Window/Terminal Synchronization', () => {
     expect(screen.queryByTestId('mobile-terminal-fullscreen')).not.toBeInTheDocument();
   });
 
-  // @verifies spec-ft-core-webui-shell::REQ-020
-  // @verifies spec-ft-terminal-xterm-ui::REQ-015
+  // @verifies ft-core-webui-shell::TASK-CORE-006-26::REQ-020
+  // @verifies ft-terminal-xterm-ui::TASK-XTERM-012::REQ-015
   it('toggles custom desktop window switcher dropdown and propagates kill terminal to desktop window', async () => {
     window.history.replaceState({}, '', '/?companion=true&win=win-desktop-mobile-1');
 
@@ -448,7 +448,7 @@ describe('Mobile Pairing and Window/Terminal Synchronization', () => {
     }));
   });
 
-  // @verifies spec-ft-core-webui-shell::REQ-023
+  // @verifies ft-core-webui-shell::TASK-CORE-006-31::REQ-023
   it('renders centered omni-search bar trigger on desktop header with Ctrl+K shortcut indicator (REQ-023)', () => {
     window.history.replaceState({}, '', '/');
     render(<MainWorkspace />);

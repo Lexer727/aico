@@ -56,7 +56,7 @@ describe('AssetViewer Component', () => {
     vi.unstubAllGlobals();
   });
 
-  // @verifies spec-ft-core-assets-manager::REQ-007
+  // @verifies ft-core-assets-manager::TASK-ASSET-005::REQ-007
   it('renders image asset with preview image and zoom controls', () => {
     render(
       <AssetViewer
@@ -74,7 +74,7 @@ describe('AssetViewer Component', () => {
     expect(screen.getByText('100%')).toBeInTheDocument();
   });
 
-  // @verifies spec-ft-core-assets-manager::REQ-007
+  // @verifies ft-core-assets-manager::TASK-ASSET-005::REQ-007
   it('fetches and renders text document content for text/markdown asset', async () => {
     render(
       <AssetViewer
@@ -90,7 +90,7 @@ describe('AssetViewer Component', () => {
     });
   });
 
-  // @verifies spec-ft-core-assets-manager::REQ-008
+  // @verifies ft-core-assets-manager::TASK-ASSET-006::REQ-008
   it('dispatches open-system request when Open on system button is clicked', async () => {
     render(
       <AssetViewer
@@ -116,7 +116,7 @@ describe('AssetViewer Component', () => {
     );
   });
 
-  // @verifies spec-ft-core-assets-manager::REQ-009
+  // @verifies ft-core-assets-manager::TASK-ASSET-007::REQ-009
   it('opens confirmation modal when Delete toolbar button is clicked and cancels when cancel is clicked', () => {
     render(
       <AssetViewer
@@ -142,7 +142,7 @@ describe('AssetViewer Component', () => {
     );
   });
 
-  // @verifies spec-ft-core-assets-manager::REQ-009
+  // @verifies ft-core-assets-manager::TASK-ASSET-007::REQ-009
   it('dispatches delete request and triggers onDelete callback upon confirmation', async () => {
     const handleDelete = vi.fn();
     render(
@@ -175,7 +175,7 @@ describe('AssetViewer Component', () => {
     expect(handleDelete).toHaveBeenCalledWith('epics/ec-core/assets/mockup.png');
   });
 
-  // @verifies spec-ft-core-assets-manager::REQ-014
+  // @verifies ft-core-assets-manager::TASK-ASSET-009::REQ-014
   it('renders text viewport for .py and .ipynb files', async () => {
     const { rerender } = render(
       <AssetViewer

@@ -10,7 +10,7 @@ export interface AdrViewerProps {
   onOpenFeature?: (featureId: string, title?: string) => void;
 }
 
-// @implements spec-ft-core-epic-hub::REQ-008
+// @implements ft-core-epic-hub::TASK-CORE-007-3::REQ-008
 export const AdrViewer: React.FC<AdrViewerProps> = ({ adrId }) => {
   const [adr, setAdr] = useState<DiscoveredAdr | null>(null);
   const [viewRawMarkdown, setViewRawMarkdown] = useState<boolean>(false);

@@ -22,7 +22,7 @@ pub struct SkillsSynchronizer;
 impl SkillsSynchronizer {
     /// Synchronize workspace `.agents/skills/`, `.agents/rules/`, and `GEMINI.md`
     /// from `<root_dir>/codebase/aico/skills`.
-    // @implements spec-ft-core-skills-sync::REQ-001
+    // @implements ft-core-skills-sync::TASK-SYNC-002::REQ-001
     pub fn sync_workspace<P: AsRef<Path>>(root_dir: P) -> Result<SyncReport, SkillsSyncError> {
         let root = root_dir.as_ref();
         let source_skills_dir = root.join("codebase").join("aico").join("skills");
@@ -30,13 +30,13 @@ impl SkillsSynchronizer {
     }
 
     /// Synchronize workspace skills and rules from an explicit skills source directory.
-    // @implements spec-ft-core-skills-sync::REQ-002
-    // @implements spec-ft-core-skills-sync::REQ-003
-    // @implements spec-ft-core-skills-sync::REQ-004
-    // @implements spec-ft-core-skills-sync::REQ-005
-    // @implements spec-ft-core-skills-sync::REQ-006
-    // @implements spec-ft-core-skills-sync::REQ-007
-    // @implements spec-ft-core-skills-sync::REQ-008
+    // @implements ft-core-skills-sync::TASK-SYNC-002::REQ-002
+    // @implements ft-core-skills-sync::TASK-SYNC-002::REQ-003
+    // @implements ft-core-skills-sync::TASK-SYNC-002::REQ-004
+    // @implements ft-core-skills-sync::TASK-SYNC-003::REQ-005
+    // @implements ft-core-skills-sync::TASK-SYNC-003::REQ-006
+    // @implements ft-core-skills-sync::TASK-SYNC-003::REQ-007
+    // @implements ft-core-skills-sync::TASK-SYNC-003::REQ-008
     pub fn sync_from_source<P: AsRef<Path>, Q: AsRef<Path>>(
         source_skills_dir: P,
         root_dir: Q,
@@ -148,8 +148,8 @@ impl SkillsSynchronizer {
         Ok(report)
     }
 
-    // @implements spec-ft-core-skills-sync::REQ-002
-    // @implements spec-ft-core-skills-sync::REQ-004
+    // @implements ft-core-skills-sync::TASK-SYNC-002::REQ-002
+    // @implements ft-core-skills-sync::TASK-SYNC-002::REQ-004
     fn sync_dir_recursive(
         src_dir: &Path,
         dst_dir: &Path,
@@ -194,7 +194,7 @@ impl SkillsSynchronizer {
         Ok(())
     }
 
-    // @implements spec-ft-core-skills-sync::REQ-008
+    // @implements ft-core-skills-sync::TASK-SYNC-003::REQ-008
     fn sync_file_if_changed(
         src: &Path,
         dst: &Path,

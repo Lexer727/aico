@@ -1,6 +1,6 @@
 use aico_server::{HostServer, ServerConfig};
 
-// @verifies spec-ft-core-host-runtime::REQ-002
+// @verifies ft-core-host-runtime::TASK-CORE-001-2::REQ-002
 #[tokio::test]
 async fn test_embedded_spa_fallback() {
     let mut config = ServerConfig::default();

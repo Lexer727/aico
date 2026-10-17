@@ -115,8 +115,8 @@ impl HostServer {
     }
 
     /// Try binding the server to the configured port or next available fallback
-    // @implements spec-ft-core-host-runtime::REQ-001
-    // @implements spec-ft-core-host-runtime::REQ-010
+    // @implements ft-core-host-runtime::TASK-CORE-001-1::REQ-001
+    // @implements ft-core-host-runtime::TASK-CORE-001-1::REQ-010
     pub async fn bind(&mut self) -> Result<SocketAddr, ServerError> {
         let mut last_err = None;
 
@@ -153,19 +153,19 @@ impl HostServer {
         self.bound_addr
     }
 
-    // @implements spec-ft-core-host-runtime::REQ-002
-    // @implements spec-ft-core-host-runtime::REQ-003
-    // @implements spec-ft-core-host-runtime::REQ-006
-    // @implements spec-ft-core-host-runtime::REQ-007
-    // @implements spec-ft-core-discovery::REQ-008
-    // @implements spec-ft-core-epic-hub::REQ-001
-    // @implements spec-ft-core-webui-shell::REQ-012
+    // @implements ft-core-host-runtime::TASK-CORE-001-2::REQ-002
+    // @implements ft-core-host-runtime::TASK-CORE-001-6::REQ-003
+    // @implements ft-core-host-runtime::TASK-CORE-001-1::REQ-006
+    // @implements ft-core-host-runtime::TASK-CORE-001-6::REQ-007
+    // @implements ft-core-discovery::TASK-CORE-004-3::REQ-008
+    // @implements ft-core-epic-hub::TASK-CORE-007-12::REQ-001
+    // @implements ft-core-webui-shell::TASK-CORE-006-8::REQ-012
     pub fn build_router(state: AppState) -> Router {
         Router::new()
             .route("/api/v1/health", get(health_check_handler))
-            // @implements spec-ft-core-webui-shell::REQ-019
+            // @implements ft-core-webui-shell::TASK-CORE-006-17::REQ-019
             .route("/api/v1/auth/pairing", get(get_pairing_handler))
-            // @implements spec-ft-core-assets-manager::REQ-013
+            // @implements ft-core-assets-manager::TASK-ASSET-009::REQ-013
             .route("/api/v1/config", get(get_config_handler))
             .route("/api/v1/projects", get(list_projects_handler))
             .route("/api/v1/projects/active", post(set_active_project_handler))
@@ -178,29 +178,29 @@ impl HostServer {
             .route("/api/v1/glossary", get(get_glossary_handler))
             .route("/api/v1/stats", get(get_stats_handler))
             .route("/api/v1/git/status", get(get_git_status_handler))
-            // @implements spec-ft-core-omni-search-fulltext::REQ-010
+            // @implements ft-core-omni-search-fulltext::TASK-CORE-009-7::REQ-010
             .route("/api/v1/code/files", get(list_code_files_handler))
             .route("/api/v1/raw", get(get_raw_file_handler))
             .route("/api/v1/search", get(search_handler))
-            // @implements spec-ft-core-assets-manager::REQ-004
+            // @implements ft-core-assets-manager::TASK-ASSET-004::REQ-004
             .route("/api/v1/epics/:id/assets", get(crate::assets::list_epic_assets_handler))
-            // @implements spec-ft-core-assets-manager::REQ-005
+            // @implements ft-core-assets-manager::TASK-ASSET-004::REQ-005
             .route("/api/v1/features/:id/assets", get(crate::assets::list_feature_assets_handler))
-            // @implements spec-ft-core-assets-manager::REQ-001
-            // @implements spec-ft-core-assets-manager::REQ-002
+            // @implements ft-core-assets-manager::TASK-ASSET-003::REQ-001
+            // @implements ft-core-assets-manager::TASK-ASSET-001::REQ-002
             .route("/api/v1/assets/upload", post(crate::assets::upload_asset_handler))
-            // @implements spec-ft-core-assets-manager::REQ-003
+            // @implements ft-core-assets-manager::TASK-ASSET-007::REQ-003
             .route("/api/v1/assets/raw", get(crate::assets::get_asset_raw_handler))
-            // @implements spec-ft-core-assets-manager::REQ-008
+            // @implements ft-core-assets-manager::TASK-ASSET-006::REQ-008
             .route("/api/v1/assets/open-system", post(crate::assets::open_system_handler))
-            // @implements spec-ft-core-assets-manager::REQ-003
-            // @implements spec-ft-core-assets-manager::REQ-009
+            // @implements ft-core-assets-manager::TASK-ASSET-007::REQ-003
+            // @implements ft-core-assets-manager::TASK-ASSET-007::REQ-009
             .route("/api/v1/assets", delete(crate::assets::delete_asset_handler))
-            // @implements spec-ft-terminal-backend-stream-bridge::REQ-001
+            // @implements ft-terminal-backend-stream-bridge::TASK-TERM-001-3::REQ-001
             .route("/api/v1/terminal/ws", get(crate::terminal::terminal_ws_handler))
-            // @implements spec-ft-terminal-conpty-bridge::REQ-008
+            // @implements ft-terminal-conpty-bridge::TASK-PTY-003::REQ-008
             .route("/api/v1/terminal/sessions", get(crate::terminal::terminal_sessions_handler))
-            // @implements spec-ft-terminal-ai-quota-monitor::REQ-001
+            // @implements ft-terminal-ai-quota-monitor::TASK-QUOTA-005::REQ-001
             .route("/api/v1/ai/quotas", get(crate::quotas::get_ai_quotas_handler))
             .route("/ws", get(ws_handler))
             .fallback(crate::assets::static_asset_handler)
@@ -208,8 +208,8 @@ impl HostServer {
     }
 
     /// Run the server loop until shutdown
-    // @implements spec-ft-core-host-runtime::REQ-001
-    // @implements spec-ft-core-host-runtime::REQ-006
+    // @implements ft-core-host-runtime::TASK-CORE-001-1::REQ-001
+    // @implements ft-core-host-runtime::TASK-CORE-001-1::REQ-006
     pub async fn serve(mut self) -> Result<(), ServerError> {
         let listener = self
             .listener
@@ -223,7 +223,7 @@ impl HostServer {
     }
 
     /// Run server with graceful shutdown signal and drain
-    // @implements spec-ft-core-host-runtime::REQ-005
+    // @implements ft-core-host-runtime::TASK-CORE-001-5::REQ-005
     pub async fn serve_with_shutdown<F>(mut self, shutdown_signal: F) -> Result<(), ServerError>
     where
         F: std::future::Future<Output = ()> + Send + 'static,
@@ -269,7 +269,7 @@ pub fn get_lan_ip() -> String {
     "127.0.0.1".to_string()
 }
 
-// @implements spec-ft-core-webui-shell::REQ-019
+// @implements ft-core-webui-shell::TASK-CORE-006-17::REQ-019
 async fn get_pairing_handler(
     State(state): State<AppState>,
 ) -> Json<PairingResponse> {
@@ -294,7 +294,7 @@ async fn health_check_handler(
     })
 }
 
-// @implements spec-ft-core-assets-manager::REQ-013
+// @implements ft-core-assets-manager::TASK-ASSET-009::REQ-013
 async fn get_config_handler(
     State(state): State<AppState>,
 ) -> Json<AicoConfig> {
@@ -302,7 +302,7 @@ async fn get_config_handler(
     Json(config)
 }
 
-// @implements spec-ft-core-discovery::REQ-008
+// @implements ft-core-discovery::TASK-CORE-004-3::REQ-008
 async fn list_projects_handler(
     State(state): State<AppState>,
 ) -> Json<Vec<DiscoveredProject>> {
@@ -310,7 +310,7 @@ async fn list_projects_handler(
     Json(registry.list_cloned())
 }
 
-// @implements spec-ft-core-discovery::REQ-008
+// @implements ft-core-discovery::TASK-CORE-004-3::REQ-008
 async fn set_active_project_handler(
     State(state): State<AppState>,
     Json(payload): Json<SetActiveProjectRequest>,
@@ -477,6 +477,8 @@ pub struct CodeFileInfo {
     pub name: String,
     pub extension: String,
     pub implements_count: usize,
+    #[serde(default)]
+    pub verifies_count: usize,
     pub annotations: Vec<CodeAnnotationInfo>,
 }
 
@@ -487,8 +489,36 @@ pub struct CodeAnnotationInfo {
     pub target: String,
 }
 
-/// Recursively scan codebase directory for source files and parse @implements annotations
-// @implements spec-ft-core-omni-search-fulltext::REQ-010
+fn get_annotation_regex() -> &'static regex::Regex {
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    RE.get_or_init(|| {
+        regex::Regex::new(
+            r"^\s*(?://|#|/\*|\{/\*)\s*@(implements|verifies)\s+((?:spec-)?ft-[a-z0-9\-]+)::(TASK-[A-Za-z0-9\-]+)::(REQ-[0-9]{3,4})"
+        ).expect("Valid annotation regex")
+    })
+}
+
+pub fn resolve_workspace_root() -> std::path::PathBuf {
+    std::env::var("AICO_ROOT")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| {
+            if std::path::Path::new("d:/aico").exists() {
+                std::path::PathBuf::from("d:/aico")
+            } else if std::path::Path::new("../..").exists() {
+                std::path::PathBuf::from("../..")
+            } else {
+                std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+            }
+        })
+}
+
+/// Recursively scan codebase directory for source files and parse @implements and @verifies annotations
+// @implements ft-core-omni-search-fulltext::TASK-CORE-009-7::REQ-010
+// @implements ft-specs-traceability-syntax-evolution::TASK-SPECS-006-4::REQ-004
+// @implements ft-specs-traceability-syntax-evolution::TASK-SPECS-006-4::REQ-005
+// @implements ft-core-workspace-path-normalization::TASK-CORE-014-1::REQ-001
+// @implements ft-core-code-path-simplification-and-omnisearch::TASK-CORE-015-1::REQ-001
+// @implements ft-core-multirepo-code-path-normalization::TASK-CORE-016-1::REQ-001
 pub fn scan_codebase_files(codebase_path: &std::path::Path) -> Vec<CodeFileInfo> {
     let mut files = Vec::new();
     if !codebase_path.exists() || !codebase_path.is_dir() {
@@ -505,6 +535,8 @@ pub fn scan_codebase_files(codebase_path: &std::path::Path) -> Vec<CodeFileInfo>
         "rs", "ts", "tsx", "js", "jsx", "json", "toml", "md", "css", "html", "sql", "yaml", "yml", "sh", "ps1"
     ];
 
+    let re = get_annotation_regex();
+
     while let Some(dir) = stack.pop() {
         if let Ok(entries) = std::fs::read_dir(&dir) {
             for entry in entries.flatten() {
@@ -518,38 +550,69 @@ pub fn scan_codebase_files(codebase_path: &std::path::Path) -> Vec<CodeFileInfo>
                 } else if path.is_file() {
                     let ext = path.extension().unwrap_or_default().to_string_lossy().to_lowercase();
                     if ALLOWED_EXTS.contains(&ext.as_str()) {
-                        let relative_path = path
-                            .strip_prefix(codebase_path)
-                            .unwrap_or(&path)
-                            .to_string_lossy()
-                            .replace('\\', "/");
+                        let norm_path = path.to_string_lossy().replace('\\', "/");
+                        let relative_path = if let Some(pos) = norm_path.find("/codebase/") {
+                            norm_path[pos + "/codebase/".len()..].to_string()
+                        } else if norm_path.starts_with("codebase/") {
+                            norm_path["codebase/".len()..].to_string()
+                        } else {
+                            let repo_name = codebase_path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                            let sub = path
+                                .strip_prefix(codebase_path)
+                                .unwrap_or(&path)
+                                .to_string_lossy()
+                                .replace('\\', "/");
+                            if !repo_name.is_empty() && !sub.starts_with(&format!("{}/", repo_name)) {
+                                format!("{}/{}", repo_name, sub.trim_start_matches('/'))
+                            } else {
+                                sub
+                            }
+                        };
 
                         let mut implements_count = 0;
+                        let mut verifies_count = 0;
                         let mut annotations = Vec::new();
 
                         if let Ok(content) = std::fs::read_to_string(&path) {
                             for (idx, line) in content.lines().enumerate() {
-                                if let Some(pos) = line.find("@implements") {
-                                    implements_count += 1;
-                                    let rest = line[pos + "@implements".len()..].trim();
-                                    let target = rest.split_whitespace().next().unwrap_or_default().to_string();
+                                // Ignore placeholder lines containing <...> or ###
+                                if line.contains('<') || line.contains('>') || line.contains("###") {
+                                    continue;
+                                }
+
+                                if let Some(caps) = re.captures(line) {
+                                    let tag_name = caps.get(1).map(|m| m.as_str()).unwrap_or_default();
+                                    let feature = caps.get(2).map(|m| m.as_str()).unwrap_or_default();
+                                    let task = caps.get(3).map(|m| m.as_str()).unwrap_or_default();
+                                    let req = caps.get(4).map(|m| m.as_str()).unwrap_or_default();
+
+                                    if tag_name == "implements" {
+                                        implements_count += 1;
+                                    } else if tag_name == "verifies" {
+                                        verifies_count += 1;
+                                    }
+
                                     annotations.push(CodeAnnotationInfo {
                                         line: idx + 1,
-                                        tag: "@implements".to_string(),
-                                        target,
+                                        tag: format!("@{}", tag_name),
+                                        target: format!("{}::{}::{}", feature, task, req),
                                     });
                                 }
                             }
                         }
 
-                        files.push(CodeFileInfo {
-                            path: path.to_string_lossy().replace('\\', "/"),
-                            relative_path,
-                            name: file_name,
-                            extension: ext,
-                            implements_count,
-                            annotations,
-                        });
+                        // REQ-005: exclude files with zero valid annotations from the sidebar tree Code section
+                        if implements_count > 0 || verifies_count > 0 {
+                            files.push(CodeFileInfo {
+                                path: relative_path.clone(),
+                                relative_path,
+                                name: file_name,
+                                extension: ext,
+                                implements_count,
+                                verifies_count,
+                                annotations,
+                            });
+                        }
                     }
                 }
             }
@@ -557,8 +620,8 @@ pub fn scan_codebase_files(codebase_path: &std::path::Path) -> Vec<CodeFileInfo>
     }
 
     files.sort_by(|a, b| {
-        b.implements_count
-            .cmp(&a.implements_count)
+        (b.implements_count + b.verifies_count)
+            .cmp(&(a.implements_count + a.verifies_count))
             .then_with(|| a.relative_path.cmp(&b.relative_path))
     });
 
@@ -1426,7 +1489,7 @@ pub fn scan_adrs_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredAdrI
     adrs
 }
 
-// @implements spec-ft-core-epic-hub::REQ-001
+// @implements ft-core-epic-hub::TASK-CORE-007-12::REQ-001
 async fn list_epics_handler(
     State(state): State<AppState>,
 ) -> Json<Vec<DiscoveredEpic>> {
@@ -1446,7 +1509,7 @@ async fn list_epics_handler(
     Json(scan_epics_for_project(&target_path))
 }
 
-// @implements spec-ft-core-epic-hub::REQ-001
+// @implements ft-core-epic-hub::TASK-CORE-007-12::REQ-001
 async fn get_epic_handler(
     Path(id): Path<String>,
     State(state): State<AppState>,
@@ -1473,7 +1536,7 @@ async fn get_epic_handler(
     }
 }
 
-// @implements spec-ft-core-epic-hub::REQ-001
+// @implements ft-core-epic-hub::TASK-CORE-007-12::REQ-001
 async fn list_features_handler(
     State(state): State<AppState>,
 ) -> Json<Vec<DiscoveredFeatureInfo>> {
@@ -1493,7 +1556,7 @@ async fn list_features_handler(
     Json(scan_all_features_for_project(&target_path))
 }
 
-// @implements spec-ft-core-epic-hub::REQ-001
+// @implements ft-core-epic-hub::TASK-CORE-007-12::REQ-001
 async fn get_feature_handler(
     Path(id): Path<String>,
     State(state): State<AppState>,
@@ -1529,7 +1592,7 @@ async fn get_feature_handler(
     }
 }
 
-// @implements spec-ft-core-epic-hub::REQ-008
+// @implements ft-core-epic-hub::TASK-CORE-007-3::REQ-008
 async fn list_adrs_handler(
     State(state): State<AppState>,
 ) -> Json<Vec<DiscoveredAdrInfo>> {
@@ -1549,7 +1612,7 @@ async fn list_adrs_handler(
     Json(scan_adrs_for_project(&target_path))
 }
 
-// @implements spec-ft-core-epic-hub::REQ-008
+// @implements ft-core-epic-hub::TASK-CORE-007-3::REQ-008
 async fn get_adr_handler(
     Path(id): Path<String>,
     State(state): State<AppState>,
@@ -1576,7 +1639,7 @@ async fn get_adr_handler(
     }
 }
 
-// @implements spec-ft-core-epic-hub::REQ-001
+// @implements ft-core-epic-hub::TASK-CORE-007-12::REQ-001
 async fn get_glossary_handler(
     State(state): State<AppState>,
 ) -> Json<Vec<TermInfo>> {
@@ -1596,7 +1659,7 @@ async fn get_glossary_handler(
     Json(load_project_glossary(&target_path))
 }
 
-// @implements spec-ft-core-omni-search-fulltext::REQ-010
+// @implements ft-core-omni-search-fulltext::TASK-CORE-009-7::REQ-010
 async fn list_code_files_handler(
     State(state): State<AppState>,
 ) -> Json<Vec<CodeFileInfo>> {
@@ -1612,8 +1675,11 @@ async fn list_code_files_handler(
     Json(Vec::new())
 }
 
-// @implements spec-ft-core-epic-hub::REQ-001
-// @implements spec-ft-core-omni-search-fulltext::REQ-011
+// @implements ft-core-epic-hub::TASK-CORE-007-12::REQ-001
+// @implements ft-core-omni-search-fulltext::TASK-CORE-009-8::REQ-011
+// @implements ft-core-workspace-path-normalization::TASK-CORE-014-1::REQ-002
+// @implements ft-core-code-path-simplification-and-omnisearch::TASK-CORE-015-1::REQ-002
+// @implements ft-core-multirepo-code-path-normalization::TASK-CORE-016-1::REQ-002
 async fn get_raw_file_handler(
     Query(query): Query<RawFileQuery>,
     State(state): State<AppState>,
@@ -1626,16 +1692,35 @@ async fn get_raw_file_handler(
         };
     }
 
+    let root_dir = resolve_workspace_root();
+
+    // Check relative to codebase container under workspace root: <root>/codebase/<query.path>
+    let codebase_rel = root_dir.join("codebase").join(&query.path);
+    if codebase_rel.exists() && codebase_rel.is_file() {
+        return match std::fs::read_to_string(&codebase_rel) {
+            Ok(content) => Ok(content),
+            Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+        };
+    }
+
+    let root_rel = root_dir.join(&query.path);
+    if root_rel.exists() && root_rel.is_file() {
+        return match std::fs::read_to_string(&root_rel) {
+            Ok(content) => Ok(content),
+            Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+        };
+    }
+
     let registry = state.registry.read().await;
     let active_project = registry.get_active().or_else(|| registry.list().into_iter().next());
     let target_path = if let Some(proj) = active_project {
         if proj.specs_path.exists() {
             proj.specs_path.clone()
         } else {
-            std::path::PathBuf::from("d:/aico/aico-specs")
+            root_dir.join(format!("{}-specs", proj.name))
         }
     } else {
-        std::path::PathBuf::from("d:/aico/aico-specs")
+        root_dir.join("aico-specs")
     };
 
     let rel_path = target_path.join(&query.path);
@@ -1661,7 +1746,7 @@ async fn get_raw_file_handler(
     }
 }
 
-// @implements spec-ft-core-webui-shell::REQ-012
+// @implements ft-core-webui-shell::TASK-CORE-006-8::REQ-012
 async fn get_stats_handler(
     State(state): State<AppState>,
 ) -> Json<SystemStats> {
@@ -1673,7 +1758,7 @@ async fn get_stats_handler(
     })
 }
 
-// @implements spec-ft-git-backend-status::REQ-005
+// @implements ft-git-backend-status::TASK-GIT-001-3::REQ-005
 async fn get_git_status_handler(
     State(state): State<AppState>,
 ) -> Json<Vec<GitRepoStatus>> {
@@ -1700,8 +1785,8 @@ async fn get_git_status_handler(
 }
 
 
-// @implements spec-ft-core-host-runtime::REQ-003
-// @implements spec-ft-core-host-runtime::REQ-007
+// @implements ft-core-host-runtime::TASK-CORE-001-6::REQ-003
+// @implements ft-core-host-runtime::TASK-CORE-001-6::REQ-007
 async fn ws_handler(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,
@@ -1776,7 +1861,7 @@ pub struct SearchHit {
     pub path: Option<String>,
 }
 
-// @implements spec-ft-core-omni-search-fulltext::REQ-008
+// @implements ft-core-omni-search-fulltext::TASK-CORE-009-5::REQ-008
 async fn search_handler(
     State(state): State<AppState>,
     Query(params): Query<SearchQuery>,
@@ -1828,7 +1913,7 @@ async fn search_handler(
             }
 
             // Specs under epic
-            // @implements spec-ft-core-omni-search-fulltext::REQ-009
+            // @implements ft-core-omni-search-fulltext::TASK-CORE-009-6::REQ-009
             for spec in epic.specs {
                 let mut s_matched = false;
                 let mut s_snippet = None;
@@ -1959,7 +2044,9 @@ async fn search_handler(
         }
 
         // Codebase search across project codebase_path
-        // @implements spec-ft-core-omni-search-fulltext::REQ-012
+        // @implements ft-core-omni-search-fulltext::TASK-CORE-009-10::REQ-012
+        // @implements ft-core-code-path-simplification-and-omnisearch::TASK-CORE-015-1::REQ-003
+        // @implements ft-core-multirepo-code-path-normalization::TASK-CORE-016-1::REQ-003
         if let Some(code_path) = &project.codebase_path {
             if code_path.exists() {
                 let code_files = scan_codebase_files(code_path);
@@ -1971,7 +2058,18 @@ async fn search_handler(
                         matched = true;
                     }
 
-                    if let Ok(content) = std::fs::read_to_string(&file.path) {
+                    let full_file_path = if let Some(codebase_root) = code_path.parent() {
+                        let p = codebase_root.join(&file.relative_path);
+                        if p.exists() {
+                            p
+                        } else {
+                            code_path.join(&file.relative_path)
+                        }
+                    } else {
+                        code_path.join(&file.relative_path)
+                    };
+
+                    if let Ok(content) = std::fs::read_to_string(&full_file_path) {
                         if let Some(pos) = content.to_lowercase().find(&q) {
                             matched = true;
                             let line_num = content[..pos].lines().count().max(1);
@@ -1984,12 +2082,12 @@ async fn search_handler(
                     if matched {
                         hits.push(SearchHit {
                             id: file.relative_path.clone(),
-                            title: file.name.clone(),
+                            title: file.relative_path.clone(),
                             scope: "code".to_string(),
                             project_id: project.id.clone(),
                             project_name: project.name.clone(),
                             snippet,
-                            path: Some(file.path),
+                            path: Some(file.relative_path),
                         });
                     }
                 }

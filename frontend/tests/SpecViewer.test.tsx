@@ -37,8 +37,8 @@ vi.mock('../src/features/feature-task-data', () => ({
   ),
 }));
 
-// @verifies spec-ft-specs-blueprint-standards::REQ-001
-// @verifies spec-ft-specs-blueprint-standards::REQ-008
+// @verifies ft-specs-blueprint-standards::TASK-SPECS-001-1::REQ-001
+// @verifies ft-specs-blueprint-standards::TASK-SPECS-001-1::REQ-008
 describe('SpecViewer Component', () => {
   it('renders status in top right with aico_skills_version below it, and no Back to Dashboard button', async () => {
     render(<SpecViewer specId="spec-ft-fast-trace" />);
