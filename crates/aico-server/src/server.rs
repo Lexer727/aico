@@ -178,6 +178,8 @@ impl HostServer {
             .route("/api/v1/glossary", get(get_glossary_handler))
             .route("/api/v1/stats", get(get_stats_handler))
             .route("/api/v1/git/status", get(get_git_status_handler))
+            // @implements spec-ft-core-omni-search-fulltext::REQ-010
+            .route("/api/v1/code/files", get(list_code_files_handler))
             .route("/api/v1/raw", get(get_raw_file_handler))
             .route("/api/v1/search", get(search_handler))
             // @implements spec-ft-core-assets-manager::REQ-004
@@ -466,6 +468,101 @@ pub struct SystemStats {
 #[derive(Debug, Deserialize)]
 pub struct RawFileQuery {
     pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CodeFileInfo {
+    pub path: String,
+    pub relative_path: String,
+    pub name: String,
+    pub extension: String,
+    pub implements_count: usize,
+    pub annotations: Vec<CodeAnnotationInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CodeAnnotationInfo {
+    pub line: usize,
+    pub tag: String,
+    pub target: String,
+}
+
+/// Recursively scan codebase directory for source files and parse @implements annotations
+// @implements spec-ft-core-omni-search-fulltext::REQ-010
+pub fn scan_codebase_files(codebase_path: &std::path::Path) -> Vec<CodeFileInfo> {
+    let mut files = Vec::new();
+    if !codebase_path.exists() || !codebase_path.is_dir() {
+        return files;
+    }
+
+    let mut stack = vec![codebase_path.to_path_buf()];
+
+    const IGNORED_DIRS: &[&str] = &[
+        ".git", "target", "node_modules", "dist", ".gemini", "coverage", "tmp", ".vscode", ".idea", "vendor"
+    ];
+
+    const ALLOWED_EXTS: &[&str] = &[
+        "rs", "ts", "tsx", "js", "jsx", "json", "toml", "md", "css", "html", "sql", "yaml", "yml", "sh", "ps1"
+    ];
+
+    while let Some(dir) = stack.pop() {
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let file_name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+
+                if path.is_dir() {
+                    if !IGNORED_DIRS.contains(&file_name.as_str()) && !file_name.starts_with('.') {
+                        stack.push(path);
+                    }
+                } else if path.is_file() {
+                    let ext = path.extension().unwrap_or_default().to_string_lossy().to_lowercase();
+                    if ALLOWED_EXTS.contains(&ext.as_str()) {
+                        let relative_path = path
+                            .strip_prefix(codebase_path)
+                            .unwrap_or(&path)
+                            .to_string_lossy()
+                            .replace('\\', "/");
+
+                        let mut implements_count = 0;
+                        let mut annotations = Vec::new();
+
+                        if let Ok(content) = std::fs::read_to_string(&path) {
+                            for (idx, line) in content.lines().enumerate() {
+                                if let Some(pos) = line.find("@implements") {
+                                    implements_count += 1;
+                                    let rest = line[pos + "@implements".len()..].trim();
+                                    let target = rest.split_whitespace().next().unwrap_or_default().to_string();
+                                    annotations.push(CodeAnnotationInfo {
+                                        line: idx + 1,
+                                        tag: "@implements".to_string(),
+                                        target,
+                                    });
+                                }
+                            }
+                        }
+
+                        files.push(CodeFileInfo {
+                            path: path.to_string_lossy().replace('\\', "/"),
+                            relative_path,
+                            name: file_name,
+                            extension: ext,
+                            implements_count,
+                            annotations,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    files.sort_by(|a, b| {
+        b.implements_count
+            .cmp(&a.implements_count)
+            .then_with(|| a.relative_path.cmp(&b.relative_path))
+    });
+
+    files
 }
 
 /// Helper function to parse YAML frontmatter strictly between `---` markers
@@ -1499,7 +1596,24 @@ async fn get_glossary_handler(
     Json(load_project_glossary(&target_path))
 }
 
+// @implements spec-ft-core-omni-search-fulltext::REQ-010
+async fn list_code_files_handler(
+    State(state): State<AppState>,
+) -> Json<Vec<CodeFileInfo>> {
+    let registry = state.registry.read().await;
+    let active = registry.get_active().or_else(|| registry.list().into_iter().next());
+    if let Some(proj) = active {
+        if let Some(code_path) = &proj.codebase_path {
+            if code_path.exists() {
+                return Json(scan_codebase_files(code_path));
+            }
+        }
+    }
+    Json(Vec::new())
+}
+
 // @implements spec-ft-core-epic-hub::REQ-001
+// @implements spec-ft-core-omni-search-fulltext::REQ-011
 async fn get_raw_file_handler(
     Query(query): Query<RawFileQuery>,
     State(state): State<AppState>,
@@ -1513,7 +1627,7 @@ async fn get_raw_file_handler(
     }
 
     let registry = state.registry.read().await;
-    let active_project = registry.get_active();
+    let active_project = registry.get_active().or_else(|| registry.list().into_iter().next());
     let target_path = if let Some(proj) = active_project {
         if proj.specs_path.exists() {
             proj.specs_path.clone()
@@ -1531,6 +1645,18 @@ async fn get_raw_file_handler(
             Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
         }
     } else {
+        // Also resolve relative to project codebase_path if available
+        if let Some(proj) = active_project {
+            if let Some(code_path) = &proj.codebase_path {
+                let code_rel = code_path.join(&query.path);
+                if code_rel.exists() && code_rel.is_file() {
+                    return match std::fs::read_to_string(&code_rel) {
+                        Ok(content) => Ok(content),
+                        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+                    };
+                }
+            }
+        }
         Err(StatusCode::NOT_FOUND)
     }
 }
@@ -1702,15 +1828,28 @@ async fn search_handler(
             }
 
             // Specs under epic
+            // @implements spec-ft-core-omni-search-fulltext::REQ-009
             for spec in epic.specs {
+                let mut s_matched = false;
+                let mut s_snippet = None;
                 if spec.id.to_lowercase().contains(&q) || spec.title.to_lowercase().contains(&q) {
+                    s_matched = true;
+                } else if let Ok(content) = std::fs::read_to_string(&spec.path) {
+                    if let Some(pos) = content.to_lowercase().find(&q) {
+                        s_matched = true;
+                        let start = pos.saturating_sub(40);
+                        let end = (pos + q.len() + 40).min(content.len());
+                        s_snippet = Some(format!("...{}...", &content[start..end].replace('\n', " ").trim()));
+                    }
+                }
+                if s_matched {
                     hits.push(SearchHit {
                         id: spec.id.clone(),
                         title: spec.title.clone(),
                         scope: "specs".to_string(),
                         project_id: project.id.clone(),
                         project_name: project.name.clone(),
-                        snippet: None,
+                        snippet: s_snippet,
                         path: Some(spec.path),
                     });
                 }
@@ -1726,6 +1865,13 @@ async fn search_handler(
                     if desc.to_lowercase().contains(&q) {
                         f_matched = true;
                         f_snippet = Some(desc.clone());
+                    }
+                } else if let Some(scontent) = &feat.raw_spec_content {
+                    if let Some(pos) = scontent.to_lowercase().find(&q) {
+                        f_matched = true;
+                        let start = pos.saturating_sub(40);
+                        let end = (pos + q.len() + 40).min(scontent.len());
+                        f_snippet = Some(format!("...{}...", &scontent[start..end].replace('\n', " ").trim()));
                     }
                 }
                 if f_matched {
@@ -1759,6 +1905,13 @@ async fn search_handler(
                                     f_matched = true;
                                     f_snippet = Some(desc.clone());
                                 }
+                            } else if let Some(scontent) = &feat.raw_spec_content {
+                                if let Some(pos) = scontent.to_lowercase().find(&q) {
+                                    f_matched = true;
+                                    let start = pos.saturating_sub(40);
+                                    let end = (pos + q.len() + 40).min(scontent.len());
+                                    f_snippet = Some(format!("...{}...", &scontent[start..end].replace('\n', " ").trim()));
+                                }
                             }
                             if f_matched {
                                 hits.push(SearchHit {
@@ -1771,7 +1924,73 @@ async fn search_handler(
                                     path: None,
                                 });
                             }
+
+                            // Also index standalone spec if present
+                            if let Some(ref sid) = feat.spec_id {
+                                let mut s_matched = false;
+                                let mut s_snippet = None;
+                                let spec_title = feat.spec_title.clone().unwrap_or_else(|| sid.clone());
+                                if sid.to_lowercase().contains(&q) || spec_title.to_lowercase().contains(&q) {
+                                    s_matched = true;
+                                } else if let Some(scontent) = &feat.raw_spec_content {
+                                    if let Some(pos) = scontent.to_lowercase().find(&q) {
+                                        s_matched = true;
+                                        let start = pos.saturating_sub(40);
+                                        let end = (pos + q.len() + 40).min(scontent.len());
+                                        s_snippet = Some(format!("...{}...", &scontent[start..end].replace('\n', " ").trim()));
+                                    }
+                                }
+                                if s_matched {
+                                    hits.push(SearchHit {
+                                        id: sid.clone(),
+                                        title: spec_title,
+                                        scope: "specs".to_string(),
+                                        project_id: project.id.clone(),
+                                        project_name: project.name.clone(),
+                                        snippet: s_snippet,
+                                        path: Some(path.join(format!("{}.md", sid)).to_string_lossy().to_string()),
+                                    });
+                                }
+                            }
                         }
+                    }
+                }
+            }
+        }
+
+        // Codebase search across project codebase_path
+        // @implements spec-ft-core-omni-search-fulltext::REQ-012
+        if let Some(code_path) = &project.codebase_path {
+            if code_path.exists() {
+                let code_files = scan_codebase_files(code_path);
+                for file in code_files {
+                    let mut matched = false;
+                    let mut snippet = None;
+
+                    if file.name.to_lowercase().contains(&q) || file.relative_path.to_lowercase().contains(&q) {
+                        matched = true;
+                    }
+
+                    if let Ok(content) = std::fs::read_to_string(&file.path) {
+                        if let Some(pos) = content.to_lowercase().find(&q) {
+                            matched = true;
+                            let line_num = content[..pos].lines().count().max(1);
+                            let start = pos.saturating_sub(40);
+                            let end = (pos + q.len() + 40).min(content.len());
+                            snippet = Some(format!("Line {}: ...{}...", line_num, &content[start..end].replace('\n', " ").trim()));
+                        }
+                    }
+
+                    if matched {
+                        hits.push(SearchHit {
+                            id: file.relative_path.clone(),
+                            title: file.name.clone(),
+                            scope: "code".to_string(),
+                            project_id: project.id.clone(),
+                            project_name: project.name.clone(),
+                            snippet,
+                            path: Some(file.path),
+                        });
                     }
                 }
             }

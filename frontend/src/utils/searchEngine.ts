@@ -188,9 +188,67 @@ export function createSearchIndex(options: {
     });
   }
 
+  // Pre-index features by feature ID and spec ID for rapid spec-content lookup
+  const featureBySpecId = new Map<string, DiscoveredFeature>();
+  const featureById = new Map<string, DiscoveredFeature>();
+
+  const registerFeatureForLookup = (f: DiscoveredFeature) => {
+    if (f.id) {
+      featureById.set(f.id.toLowerCase(), f);
+      featureBySpecId.set(`spec-${f.id.toLowerCase()}`, f);
+    }
+    const specId = (f as any).spec_id || (f as any).specId;
+    if (specId) {
+      featureBySpecId.set(specId.toLowerCase(), f);
+    }
+  };
+
+  for (const feat of features) {
+    registerFeatureForLookup(feat);
+  }
+  for (const epic of epics) {
+    for (const feat of epic.features || []) {
+      registerFeatureForLookup(feat as any);
+    }
+  }
+
   // 3. Index Specs
+  // @implements spec-ft-core-omni-search-fulltext::REQ-002
+  // @implements spec-ft-core-omni-search-fulltext::REQ-009
+  const indexedSpecIds = new Set<string>();
+
   for (const epic of epics) {
     for (const spec of epic.specs || []) {
+      indexedSpecIds.add(spec.id.toLowerCase());
+      const linkedFeat = featureBySpecId.get(spec.id.toLowerCase());
+      const specTexts: string[] = [
+        spec.id,
+        spec.title,
+        spec.path || '',
+      ];
+
+      if (linkedFeat) {
+        if (linkedFeat.raw_spec_content || (linkedFeat as any).rawSpecContent) {
+          specTexts.push(linkedFeat.raw_spec_content || (linkedFeat as any).rawSpecContent);
+        }
+        if (linkedFeat.description) {
+          specTexts.push(linkedFeat.description);
+        }
+        if (linkedFeat.in_scope) {
+          specTexts.push(...linkedFeat.in_scope);
+        }
+        if (linkedFeat.out_of_scope) {
+          specTexts.push(...linkedFeat.out_of_scope);
+        }
+        if (linkedFeat.requirements) {
+          for (const r of linkedFeat.requirements) {
+            specTexts.push(r.id);
+            specTexts.push(r.statement);
+            specTexts.push(r.pattern);
+          }
+        }
+      }
+
       index.push({
         id: spec.id,
         title: spec.title,
@@ -198,8 +256,48 @@ export function createSearchIndex(options: {
         epicId: epic.id,
         projectId,
         projectName,
-        searchableText: `${spec.id} ${spec.title} ${spec.path || ''}`,
+        searchableText: specTexts.filter(Boolean).join(' '),
         originalItem: spec,
+      });
+    }
+  }
+
+  // Also index specs from features (e.g. standalone features or features with spec_id not in epic.specs)
+  for (const feat of features) {
+    const specId = (feat as any).spec_id || (feat as any).specId || `spec-${feat.id}`;
+    if (!indexedSpecIds.has(specId.toLowerCase())) {
+      indexedSpecIds.add(specId.toLowerCase());
+      const specTitle = (feat as any).spec_title || (feat as any).specTitle || feat.name || specId;
+      const specTexts: string[] = [
+        specId,
+        specTitle,
+        feat.raw_spec_content || (feat as any).rawSpecContent || '',
+        feat.description || '',
+        ...(feat.in_scope || []),
+        ...(feat.out_of_scope || []),
+      ];
+      if (feat.requirements) {
+        for (const r of feat.requirements) {
+          specTexts.push(r.id);
+          specTexts.push(r.statement);
+          specTexts.push(r.pattern);
+        }
+      }
+
+      index.push({
+        id: specId,
+        title: specTitle,
+        scope: 'specs',
+        epicId: feat.epic_id || (feat as any).epicId,
+        projectId,
+        projectName,
+        searchableText: specTexts.filter(Boolean).join(' '),
+        originalItem: {
+          id: specId,
+          title: specTitle,
+          status: feat.status,
+          path: `features/${feat.id}/${specId}.md`,
+        },
       });
     }
   }

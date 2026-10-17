@@ -52,6 +52,47 @@ export const OmniSearchModal: React.FC<OmniSearchModalProps> = ({
     }));
   };
 
+  const [backendHits, setBackendHits] = useState<SearchResultItem[]>([]);
+
+  useEffect(() => {
+    const q = query.trim();
+    if (!q || !isOpen) {
+      setBackendHits([]);
+      return;
+    }
+
+    let isMounted = true;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/v1/search?q=${encodeURIComponent(q)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && isMounted) {
+            setBackendHits(
+              data.map((item: any) => ({
+                id: item.id,
+                title: item.title,
+                scope: item.scope as SearchScope,
+                subtitle: item.snippet,
+                projectId: item.project_id,
+                projectName: item.project_name,
+                matchedSnippet: item.snippet,
+                score: 0.85,
+              }))
+            );
+          }
+        }
+      } catch {
+        // Offline
+      }
+    }, 150);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [query, isOpen]);
+
   const filteredResults: SearchResultItem[] = useMemo(() => {
     if (searchIndex && searchIndex.length > 0) {
       if (!query.trim()) {
@@ -69,8 +110,7 @@ export const OmniSearchModal: React.FC<OmniSearchModalProps> = ({
           }));
       }
 
-      const matches = searchWorkspace(searchIndex, query, { scopes });
-      return matches.map((m) => ({
+      const matches: SearchResultItem[] = searchWorkspace(searchIndex, query, { scopes }).map((m) => ({
         id: m.id,
         title: m.title,
         scope: m.scope,
@@ -82,6 +122,25 @@ export const OmniSearchModal: React.FC<OmniSearchModalProps> = ({
         matchedField: m.matchedField,
         matchedSnippet: m.matchedSnippet,
       }));
+
+      // Merge backend hits (e.g. codebase search line hits with snippets)
+      const existingKey = new Set(matches.map((m) => `${m.scope}-${m.id.toLowerCase()}`));
+      for (const b of backendHits) {
+        if (!scopes[b.scope]) continue;
+        const key = `${b.scope}-${b.id.toLowerCase()}`;
+        if (!existingKey.has(key)) {
+          matches.push(b);
+          existingKey.add(key);
+        } else {
+          const existing = matches.find((m) => `${m.scope}-${m.id.toLowerCase()}` === key);
+          if (existing && !existing.subtitle && b.subtitle) {
+            existing.subtitle = b.subtitle;
+            existing.matchedSnippet = b.matchedSnippet;
+          }
+        }
+      }
+
+      return matches;
     }
 
     return mockResults.filter((item) => {
@@ -95,7 +154,7 @@ export const OmniSearchModal: React.FC<OmniSearchModalProps> = ({
         (item.subtitle && item.subtitle.toLowerCase().includes(query.toLowerCase()))
       );
     });
-  }, [searchIndex, mockResults, scopes, query]);
+  }, [searchIndex, mockResults, scopes, query, backendHits]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

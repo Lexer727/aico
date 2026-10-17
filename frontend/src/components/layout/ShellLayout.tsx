@@ -47,6 +47,15 @@ export interface DiscoveredAdrNav {
   status?: string;
 }
 
+export interface DiscoveredCodeFileNav {
+  path: string;
+  relative_path: string;
+  name: string;
+  extension: string;
+  implements_count: number;
+  annotations?: Array<{ line: number; tag: string; target: string }>;
+}
+
 export interface ShellLayoutProps {
   children: React.ReactNode;
   isMobile?: boolean;
@@ -55,6 +64,7 @@ export interface ShellLayoutProps {
   epics?: DiscoveredEpicNav[];
   features?: DiscoveredFeatureNav[];
   adrs?: DiscoveredAdrNav[];
+  codeFiles?: Array<DiscoveredCodeFileNav | string>;
   fullEpics?: DiscoveredEpic[];
   fullFeatures?: DiscoveredFeature[];
   fullAdrs?: DiscoveredAdr[];
@@ -157,6 +167,7 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
   epics = defaultEpics,
   features = defaultFeatures,
   adrs = defaultAdrs,
+  codeFiles = defaultCodeFiles,
   fullEpics,
   fullFeatures,
   fullAdrs,
@@ -282,15 +293,37 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
     return adrs || defaultAdrs;
   }, [adrs, fullAdrs]);
 
-  // Compile all specs across all epics
+  // Compile all specs across all epics and standalone features
+  // @implements spec-ft-core-omni-search-fulltext::REQ-009
   const allSpecs = useMemo(() => {
-    return effectiveEpics.flatMap((e) =>
+    const epicSpecs = effectiveEpics.flatMap((e) =>
       (e.specs || []).map((s) => ({
         ...s,
         epicId: e.id,
       }))
     );
-  }, [effectiveEpics]);
+    const existingIds = new Set(epicSpecs.map((s) => s.id.toLowerCase()));
+    const standaloneSpecs = effectiveFeatures
+      .filter((f) => f.isStandalone && f.id)
+      .map((f) => {
+        const specId = (f as any).spec_id || (f as any).specId || `spec-${f.id}`;
+        return {
+          id: specId,
+          title: (f as any).spec_title || (f as any).specTitle || f.name || specId,
+          status: f.status,
+          epicId: '',
+          path: `features/${f.id}/${specId}.md`,
+        };
+      })
+      .filter((s) => !existingIds.has(s.id.toLowerCase()));
+
+    return [...epicSpecs, ...standaloneSpecs];
+  }, [effectiveEpics, effectiveFeatures]);
+
+  const effectiveCode = useMemo(() => {
+    if (codeFiles && codeFiles.length > 0) return codeFiles;
+    return defaultCodeFiles;
+  }, [codeFiles]);
 
   // Build in-memory full-text fuzzy search index
   const searchIndex = useMemo(() => {
@@ -298,9 +331,9 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
       epics: fullEpics || (effectiveEpics as any),
       features: fullFeatures || (effectiveFeatures as any),
       adrs: fullAdrs || (effectiveAdrs as any),
-      codeFiles: defaultCodeFiles,
+      codeFiles: effectiveCode.map((c) => (typeof c === 'string' ? c : c.relative_path || c.path)),
     });
-  }, [fullEpics, effectiveEpics, fullFeatures, effectiveFeatures, fullAdrs, effectiveAdrs]);
+  }, [fullEpics, effectiveEpics, fullFeatures, effectiveFeatures, fullAdrs, effectiveAdrs, effectiveCode]);
 
   const q = searchQuery.trim();
 
@@ -333,10 +366,19 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
 
   const filteredCode = useMemo(() => {
     if (!scopeFilters.code) return [];
-    if (!q) return defaultCodeFiles;
+    if (!q) return effectiveCode;
     if (!searchMatches) return [];
-    return defaultCodeFiles.filter((c) => searchMatches.some((m) => m.scope === 'code' && m.id.toLowerCase() === c.toLowerCase()));
-  }, [q, searchMatches, scopeFilters.code]);
+    return effectiveCode.filter((c) => {
+      const path = typeof c === 'string' ? c : c.relative_path || c.path;
+      return searchMatches.some(
+        (m) =>
+          m.scope === 'code' &&
+          (m.id.toLowerCase() === path.toLowerCase() ||
+            path.toLowerCase().includes(m.id.toLowerCase()) ||
+            (m.title && path.toLowerCase().includes(m.title.toLowerCase())))
+      );
+    });
+  }, [effectiveCode, q, searchMatches, scopeFilters.code]);
 
   const filteredAdrs = useMemo(() => {
     if (!scopeFilters.adrs) return [];
@@ -608,17 +650,32 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
                 {filteredCode.length === 0 ? (
                   <div className="text-[11px] text-zinc-500 italic px-2 py-1">No matches</div>
                 ) : (
-                  filteredCode.map((file) => (
-                    <div
-                      key={file}
-                      onClick={() => handleSelectCode(file)}
-                      className="flex items-center gap-1.5 py-1 px-2 hover:bg-zinc-800/60 rounded cursor-pointer text-zinc-400 hover:text-zinc-200 transition-colors truncate"
-                      title={file}
-                    >
-                      <Folder className="w-3 h-3 text-zinc-500 flex-shrink-0" />
-                      <span className="truncate">{file}</span>
-                    </div>
-                  ))
+                  filteredCode.map((c) => {
+                    const path = typeof c === 'string' ? c : c.relative_path || c.path;
+                    const implCount = typeof c === 'string' ? 0 : c.implements_count || 0;
+                    return (
+                      <div
+                        key={path}
+                        data-testid={`nav-code-${path}`}
+                        onClick={() => handleSelectCode(path)}
+                        className="flex items-center justify-between py-1 px-2 hover:bg-zinc-800/60 rounded cursor-pointer text-zinc-400 hover:text-zinc-200 transition-colors group"
+                        title={path}
+                      >
+                        <div className="flex items-center gap-1.5 truncate min-w-0">
+                          <FileCode className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                          <span className="truncate font-mono text-[11px] text-zinc-300">{path}</span>
+                        </div>
+                        {implCount > 0 && (
+                          <span
+                            className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-emerald-950/70 text-emerald-400 border border-emerald-800 shrink-0 ml-1.5"
+                            title={`${implCount} @implements annotations verified`}
+                          >
+                            {implCount} @impl
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })
                 )}
               </div>
             )}

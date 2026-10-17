@@ -104,6 +104,7 @@ export const MainWorkspace: React.FC = () => {
   const [fullFeatures, setFullFeatures] = useState<DiscoveredFeature[]>([]);
   const [discoveredAdrs, setDiscoveredAdrs] = useState<DiscoveredAdrNav[]>([]);
   const [fullAdrs, setFullAdrs] = useState<DiscoveredAdr[]>([]);
+  const [codeFiles, setCodeFiles] = useState<DiscoveredCodeFileNav[]>([]);
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
   const [workspaceRefreshKey, setWorkspaceRefreshKey] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -209,23 +210,38 @@ export const MainWorkspace: React.FC = () => {
     }
   }, [activeProjectId, setActiveProject]);
 
+  const fetchCodeFiles = useCallback(async () => {
+    try {
+      const res = await fetch('/api/v1/code/files');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setCodeFiles(data);
+        }
+      }
+    } catch {
+      // Offline fallback
+    }
+  }, []);
+
   // @implements spec-ft-core-webui-shell::REQ-016
   const handleRefreshWorkspace = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      await Promise.all([fetchProjects(), fetchEpics(), fetchFeatures(), fetchAdrs()]);
+      await Promise.all([fetchProjects(), fetchEpics(), fetchFeatures(), fetchAdrs(), fetchCodeFiles()]);
       setWorkspaceRefreshKey((prev) => prev + 1);
     } finally {
       setTimeout(() => setIsRefreshing(false), 300);
     }
-  }, [fetchProjects, fetchEpics, fetchFeatures, fetchAdrs]);
+  }, [fetchProjects, fetchEpics, fetchFeatures, fetchAdrs, fetchCodeFiles]);
 
   useEffect(() => {
     fetchProjects();
     fetchEpics();
     fetchFeatures();
     fetchAdrs();
-  }, [fetchProjects, fetchEpics, fetchFeatures, fetchAdrs]);
+    fetchCodeFiles();
+  }, [fetchProjects, fetchEpics, fetchFeatures, fetchAdrs, fetchCodeFiles]);
 
   useEffect(() => {
     if (lastMessage && typeof lastMessage === 'object') {
@@ -235,14 +251,16 @@ export const MainWorkspace: React.FC = () => {
         fetchEpics();
         fetchFeatures();
         fetchAdrs();
+        fetchCodeFiles();
       } else if (msg.topic === 'projects_updated') {
         fetchProjects();
         fetchEpics();
         fetchFeatures();
         fetchAdrs();
+        fetchCodeFiles();
       }
     }
-  }, [lastMessage, setActiveProject, fetchProjects, fetchEpics, fetchFeatures, fetchAdrs]);
+  }, [lastMessage, setActiveProject, fetchProjects, fetchEpics, fetchFeatures, fetchAdrs, fetchCodeFiles]);
 
   // Dynamic mobile mode detection on viewport resize or URL query
   useEffect(() => {
@@ -559,6 +577,7 @@ export const MainWorkspace: React.FC = () => {
       epics: fullEpics,
       features: fullFeatures,
       adrs: fullAdrs,
+      codeFiles: codeFiles.map((c) => c.relative_path || c.path),
       projectId: activeProjectId,
       projectName,
     });
@@ -578,7 +597,7 @@ export const MainWorkspace: React.FC = () => {
     }
 
     return activeIndex;
-  }, [projects, activeProjectId, fullEpics, fullFeatures, fullAdrs]);
+  }, [projects, activeProjectId, fullEpics, fullFeatures, fullAdrs, codeFiles]);
 
   // @implements spec-ft-core-omni-search-fulltext::REQ-007
   const handleOmniSelect = useCallback(async (item: SearchResultItem) => {
@@ -899,6 +918,7 @@ export const MainWorkspace: React.FC = () => {
       epics={discoveredEpics.length > 0 ? discoveredEpics : undefined}
       features={discoveredFeatures.length > 0 ? discoveredFeatures : undefined}
       adrs={discoveredAdrs.length > 0 ? discoveredAdrs : undefined}
+      codeFiles={codeFiles.length > 0 ? codeFiles : undefined}
       fullEpics={fullEpics}
       fullFeatures={fullFeatures}
       fullAdrs={fullAdrs}

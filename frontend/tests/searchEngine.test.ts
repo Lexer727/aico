@@ -114,4 +114,43 @@ describe('searchEngine: In-Memory Full-Text Fuzzy Engine', () => {
     const resGlossary = searchWorkspace(index, 'background daemon');
     expect(resGlossary.some((r) => r.id === 'ec-core')).toBe(true);
   });
+
+  // @verifies spec-ft-core-omni-search-fulltext::REQ-002
+  // @verifies spec-ft-core-omni-search-fulltext::REQ-009
+  it('dual-matches both Specification (scope: specs) and Feature (scope: features) for terms within spec content', () => {
+    const mockFeatureWithSpec: DiscoveredFeature = {
+      ...mockFeature,
+      raw_spec_content: '# Feature Specification\nRemote public internet hosting requires reverse proxy binding.',
+    };
+
+    const index = createSearchIndex({
+      epics: [
+        {
+          ...mockEpic,
+          specs: [
+            {
+              id: 'spec-ft-core-host-runtime',
+              title: 'Host Runtime & Local HTTP/WS Server',
+              status: 'Completed',
+              path: 'epics/ec-core/features/ft-core-host-runtime/spec-ft-core-host-runtime.md',
+              requirements_count: 1,
+            },
+          ],
+        },
+      ],
+      features: [mockFeatureWithSpec],
+      adrs: [mockAdr],
+    });
+
+    const results = searchWorkspace(index, 'Remote public internet hosting');
+    expect(results.length).toBeGreaterThanOrEqual(2);
+
+    const specHit = results.find((r) => r.scope === 'specs');
+    const featHit = results.find((r) => r.scope === 'features');
+
+    expect(specHit).toBeDefined();
+    expect(specHit?.id).toBe('spec-ft-core-host-runtime');
+    expect(featHit).toBeDefined();
+    expect(featHit?.id).toBe('ft-core-host-runtime');
+  });
 });

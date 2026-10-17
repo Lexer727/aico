@@ -120,4 +120,37 @@ describe('ShellLayoutSearch: Sidebar Tree Fuzzy Filtering & Section Auto-Expansi
     expect(adrSvg).toHaveClass('lucide-scale');
     expect(adrSvg).toHaveClass('text-amber-400');
   });
+
+  // @verifies spec-ft-core-omni-search-fulltext::REQ-010
+  it('renders discovered codebase files with implements count badge in tree view', () => {
+    const handleSelectCode = vi.fn();
+    const mockCodeFiles = [
+      {
+        path: 'crates/aico-server/src/server.rs',
+        relative_path: 'crates/aico-server/src/server.rs',
+        name: 'server.rs',
+        extension: 'rs',
+        implements_count: 5,
+      },
+    ];
+
+    render(
+      <ShellLayout
+        fullEpics={mockEpics}
+        fullFeatures={mockFeatures}
+        codeFiles={mockCodeFiles}
+        onSelectCode={handleSelectCode}
+      >
+        <div>Content</div>
+      </ShellLayout>
+    );
+
+    const codeItem = screen.getByTestId('nav-code-crates/aico-server/src/server.rs');
+    expect(codeItem).toBeInTheDocument();
+    expect(screen.getByText('5 @impl')).toBeInTheDocument();
+
+    fireEvent.click(codeItem);
+    expect(handleSelectCode).toHaveBeenCalledWith('crates/aico-server/src/server.rs');
+  });
 });
+

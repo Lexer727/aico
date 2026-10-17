@@ -7,8 +7,8 @@ pub mod terminal;
 pub mod quotas;
 
 pub use server::{
-    AppState, DiscoveredEpic, DiscoveredSpecInfo, HealthResponse, HostServer, ServerConfig,
-    SetActiveProjectRequest, SystemStats,
+    AppState, CodeAnnotationInfo, CodeFileInfo, DiscoveredEpic, DiscoveredSpecInfo, HealthResponse,
+    HostServer, ServerConfig, SetActiveProjectRequest, SystemStats, scan_codebase_files,
 };
 pub use ws::{WebSocketHub, HubMessage};
 pub use auth::LanAuthenticator;

@@ -5,6 +5,8 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 // @verifies spec-ft-core-omni-search-fulltext::REQ-008
+// @verifies spec-ft-core-omni-search-fulltext::REQ-009
+// @verifies spec-ft-core-omni-search-fulltext::REQ-012
 #[tokio::test]
 async fn test_filesystem_search_rest_api() {
     let mut config = ServerConfig::default();
@@ -58,4 +60,39 @@ async fn test_filesystem_search_rest_api() {
         item.get("id").and_then(|v| v.as_str()).map(|s| s.contains("runtime")).unwrap_or(false)
             || item.get("title").and_then(|v| v.as_str()).map(|s| s.to_lowercase().contains("runtime")).unwrap_or(false)
     }));
+
+    // 2. Query code full-text search: /api/v1/search?q=SocketAddr (REQ-012)
+    let code_search_res = client
+        .get(format!("http://{}/api/v1/search?q=SocketAddr", addr))
+        .send()
+        .await
+        .expect("Code search request should succeed");
+
+    assert_eq!(code_search_res.status(), 200);
+    let code_results: serde_json::Value = code_search_res.json().await.expect("Should parse JSON");
+    assert!(code_results.is_array());
+    let code_list = code_results.as_array().unwrap();
+    assert!(!code_list.is_empty(), "Should find code hits for 'SocketAddr'");
+    let code_hit = code_list.iter().find(|item| {
+        item.get("scope").and_then(|s| s.as_str()) == Some("code")
+    });
+    assert!(code_hit.is_some(), "Should return a result with scope: code");
+    let snippet = code_hit.unwrap().get("snippet").and_then(|s| s.as_str());
+    assert!(snippet.is_some() && snippet.unwrap().contains("Line "), "Code snippet should contain line number");
+
+    // 3. Query spec full-text search: /api/v1/search?q=Remote+public+internet+hosting (REQ-009)
+    let spec_search_res = client
+        .get(format!("http://{}/api/v1/search?q=Remote+public+internet+hosting", addr))
+        .send()
+        .await
+        .expect("Spec search request should succeed");
+
+    assert_eq!(spec_search_res.status(), 200);
+    let spec_results: serde_json::Value = spec_search_res.json().await.expect("Should parse JSON");
+    assert!(spec_results.is_array());
+    let spec_list = spec_results.as_array().unwrap();
+    assert!(!spec_list.is_empty(), "Should find spec hits for full-text spec content");
+    assert!(spec_list.iter().any(|item| {
+        item.get("scope").and_then(|s| s.as_str()) == Some("specs")
+    }), "Should return specification hit under scope: specs");
 }
