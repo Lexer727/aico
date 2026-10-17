@@ -1,5 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { ShellLayout, type DiscoveredEpicNav, type DiscoveredFeatureNav, type DiscoveredAdrNav } from './components/layout/ShellLayout';
+import {
+  ShellLayout,
+  type DiscoveredEpicNav,
+  type DiscoveredFeatureNav,
+  type DiscoveredAdrNav,
+  type DiscoveredCodeFileNav,
+} from './components/layout/ShellLayout';
 import { DockablePanel } from './components/layout/DockablePanel';
 import { TabBar } from './components/navigation/TabBar';
 import { ProjectSwitcher } from './components/navigation/ProjectSwitcher';

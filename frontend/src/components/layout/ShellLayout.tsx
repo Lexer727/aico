@@ -3,7 +3,6 @@ import clsx from 'clsx';
 import {
   ChevronDown,
   ChevronRight,
-  Folder,
   FileCode,
   BookOpen,
   Layers,
