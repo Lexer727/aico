@@ -212,6 +212,7 @@ fn test_skills_synchronizer_graceful_when_submodule_missing() {
 // @verifies ft-core-skills-sync::TASK-SYNC-002::REQ-002
 // @verifies ft-core-skills-sync::TASK-SYNC-003::REQ-005
 // @verifies ft-core-skills-sync::TASK-SYNC-003::REQ-006
+// @verifies spec-ft-tooling-skills-integration::TASK-TOOL-003-1::REQ-004
 #[test]
 fn test_real_aico_workspace_skills_and_rules_sync() {
     use aico_core::SkillsSynchronizer;
@@ -225,6 +226,7 @@ fn test_real_aico_workspace_skills_and_rules_sync() {
         assert!(root.join(".agents/skills/aico-start/SKILL.md").is_file());
         assert!(root.join(".agents/skills/aico-feature/SKILL.md").is_file());
         assert!(root.join(".agents/skills/aico-verify/SKILL.md").is_file());
+        assert!(root.join(".agents/skills/scripts/aico-cli.mjs").is_file());
         assert!(root.join(".agents/skills/plugin.json").is_file() || root.join(".agents/skills/VERSION").is_file());
         assert!(!root.join(".agents/skills/SKILL.md").exists());
         assert!(root.join("GEMINI.md").is_file());

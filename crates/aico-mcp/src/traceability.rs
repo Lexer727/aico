@@ -109,6 +109,7 @@ impl TraceabilityTracker {
 
     /// Find dangling requirements (missing either tests or implementation)
     // @implements ft-core-mcp-tools::TASK-CORE-005-4::REQ-006
+    // @implements spec-ft-tooling-mcp-repurpose::TASK-TOOL-002-1::REQ-006
     pub fn find_dangling_requirements(&self) -> Vec<DanglingRequirement> {
         let mut results = Vec::new();
         for req in &self.requirements {

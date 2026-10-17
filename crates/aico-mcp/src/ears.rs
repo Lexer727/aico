@@ -1,10 +1,11 @@
+use regex::Regex;
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum EarsValidationError {
     #[error("Missing modal keyword 'shall'")]
     MissingShall,
-    #[error("Invalid requirement ID format '{0}': expected REQ-### format")]
+    #[error("Invalid requirement ID format '{0}': expected REQ-### or REQ-<DOMAIN>-### format")]
     InvalidRequirementId(String),
     #[error("Empty requirement text")]
     EmptyRequirement,
@@ -24,9 +25,10 @@ pub struct EarsValidator;
 impl EarsValidator {
     /// Validates an EARS requirement statement syntax
     // @implements ft-core-mcp-tools::TASK-CORE-005-1::REQ-003
+    // @implements spec-ft-tooling-mcp-repurpose::TASK-TOOL-002-1::REQ-003
     pub fn validate(req_id: &str, statement: &str) -> Result<EarsPattern, EarsValidationError> {
-        // Validate requirement ID format (e.g. REQ-001)
-        if !req_id.starts_with("REQ-") || req_id.len() < 5 || !req_id[4..].chars().all(|c| c.is_ascii_digit()) {
+        let req_id_re = Regex::new(r"^REQ(?:-[A-Za-z0-9]+)?-\d{3,4}$").unwrap();
+        if !req_id_re.is_match(req_id) {
             return Err(EarsValidationError::InvalidRequirementId(req_id.to_string()));
         }
 
@@ -35,7 +37,6 @@ impl EarsValidator {
             return Err(EarsValidationError::EmptyRequirement);
         }
 
-        // Modal "shall" is mandatory in all EARS clauses
         let contains_shall = trimmed
             .split_whitespace()
             .any(|w| w.eq_ignore_ascii_case("shall"));
@@ -44,7 +45,6 @@ impl EarsValidator {
             return Err(EarsValidationError::MissingShall);
         }
 
-        // Classify the pattern
         let lower = trimmed.to_lowercase();
         let pattern = if lower.starts_with("when ") {
             EarsPattern::EventDriven

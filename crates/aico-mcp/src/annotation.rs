@@ -20,15 +20,40 @@ pub struct Annotation {
 pub struct AnnotationExtractor;
 
 impl AnnotationExtractor {
+    fn normalize_spec_id(raw: &str) -> String {
+        let lower = raw.trim().to_lowercase();
+        if lower.starts_with("ft-") {
+            format!("spec-{}", lower)
+        } else {
+            lower
+        }
+    }
+
     /// Extracts all `// @verifies` and `// @implements` tags from source code content
     // @implements ft-core-mcp-tools::TASK-CORE-005-1::REQ-004
     // @implements ft-core-mcp-tools::TASK-CORE-005-1::REQ-005
+    // @implements ft-core-mcp-tools::TASK-CORE-005-1::REQ-007
+    // @implements ft-core-mcp-tools::TASK-CORE-005-1::REQ-008
+    // @implements ft-core-mcp-tools::TASK-CORE-005-1::REQ-014
+    // @implements spec-ft-tooling-mcp-repurpose::TASK-TOOL-002-1::REQ-002
     pub fn extract(source: &str) -> Vec<Annotation> {
-        let verifies_3_re = Regex::new(r"(?://|#|/\*|\{/\*)\s*@verifies\s+([A-Za-z0-9\-_]+)::(TASK-[A-Za-z0-9\-_]+)::(REQ-[0-9]{3,4})").unwrap();
-        let implements_3_re = Regex::new(r"(?://|#|/\*|\{/\*)\s*@implements\s+([A-Za-z0-9\-_]+)::(TASK-[A-Za-z0-9\-_]+)::(REQ-[0-9]{3,4})").unwrap();
+        let verifies_3_re = Regex::new(
+            r"(?://|#|/\*|\{/\*)\s*@verifies\s+([A-Za-z0-9\-_]+)::(TASK-[A-Za-z0-9\-_]+)::(REQ(?:-[A-Za-z0-9]+)?-[0-9]{3,4})",
+        )
+        .unwrap();
+        let implements_3_re = Regex::new(
+            r"(?://|#|/\*|\{/\*)\s*@implements\s+([A-Za-z0-9\-_]+)::(TASK-[A-Za-z0-9\-_]+)::(REQ(?:-[A-Za-z0-9]+)?-[0-9]{3,4})",
+        )
+        .unwrap();
 
-        let verifies_2_re = Regex::new(r"(?://|#|/\*|\{/\*)\s*@verifies\s+([A-Za-z0-9\-_]+)::(REQ-[0-9]{3,4})").unwrap();
-        let implements_2_re = Regex::new(r"(?://|#|/\*|\{/\*)\s*@implements\s+([A-Za-z0-9\-_]+)::(REQ-[0-9]{3,4})").unwrap();
+        let verifies_2_re = Regex::new(
+            r"(?://|#|/\*|\{/\*)\s*@verifies\s+([A-Za-z0-9\-_]+)::(REQ(?:-[A-Za-z0-9]+)?-[0-9]{3,4})",
+        )
+        .unwrap();
+        let implements_2_re = Regex::new(
+            r"(?://|#|/\*|\{/\*)\s*@implements\s+([A-Za-z0-9\-_]+)::(REQ(?:-[A-Za-z0-9]+)?-[0-9]{3,4})",
+        )
+        .unwrap();
 
         let mut annotations = Vec::new();
 
@@ -42,7 +67,7 @@ impl AnnotationExtractor {
             if let Some(caps) = verifies_3_re.captures(line) {
                 annotations.push(Annotation {
                     kind: AnnotationKind::Verifies,
-                    spec_id: caps[1].to_string(),
+                    spec_id: Self::normalize_spec_id(&caps[1]),
                     task_id: Some(caps[2].to_string()),
                     req_id: caps[3].to_string(),
                     line_number: line_num,
@@ -50,7 +75,7 @@ impl AnnotationExtractor {
             } else if let Some(caps) = implements_3_re.captures(line) {
                 annotations.push(Annotation {
                     kind: AnnotationKind::Implements,
-                    spec_id: caps[1].to_string(),
+                    spec_id: Self::normalize_spec_id(&caps[1]),
                     task_id: Some(caps[2].to_string()),
                     req_id: caps[3].to_string(),
                     line_number: line_num,
@@ -58,7 +83,7 @@ impl AnnotationExtractor {
             } else if let Some(caps) = verifies_2_re.captures(line) {
                 annotations.push(Annotation {
                     kind: AnnotationKind::Verifies,
-                    spec_id: caps[1].to_string(),
+                    spec_id: Self::normalize_spec_id(&caps[1]),
                     task_id: None,
                     req_id: caps[2].to_string(),
                     line_number: line_num,
@@ -66,7 +91,7 @@ impl AnnotationExtractor {
             } else if let Some(caps) = implements_2_re.captures(line) {
                 annotations.push(Annotation {
                     kind: AnnotationKind::Implements,
-                    spec_id: caps[1].to_string(),
+                    spec_id: Self::normalize_spec_id(&caps[1]),
                     task_id: None,
                     req_id: caps[2].to_string(),
                     line_number: line_num,

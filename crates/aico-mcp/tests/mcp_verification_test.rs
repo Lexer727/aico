@@ -6,7 +6,7 @@ use aico_mcp::{McpServerManager, TraceabilityTracker, VerificationStatus};
 fn test_traceability_and_test_before_code_gate() {
     let mut tracker = TraceabilityTracker::new();
 
-    let req_id = "SPEC-AUTH-001::REQ-001";
+    let req_id = "spec-ft-core-security-auth::REQ-001";
     let task_id = "TASK-AUTH-001-1";
 
     // 1. Attempting to verify task before any test exists should fail the test-before-code gate
@@ -44,6 +44,7 @@ fn test_traceability_and_test_before_code_gate() {
 }
 
 // @verifies ft-core-mcp-tools::TASK-CORE-005-4::REQ-006
+// @verifies spec-ft-tooling-mcp-repurpose::TASK-TOOL-002-1::REQ-006
 #[test]
 fn test_find_dangling_requirements() {
     let mut tracker = TraceabilityTracker::new();
@@ -61,4 +62,18 @@ fn test_find_dangling_requirements() {
     assert_eq!(dangling[0].requirement_id, "spec-ft-core-host-runtime::REQ-002");
     assert!(!dangling[0].has_test);
     assert!(!dangling[0].has_implementation);
+
+    // Also verify via MCP tool dispatch
+    let mcp_res = McpServerManager::call_tool(
+        "find_dangling_requirements",
+        serde_json::json!({
+            "requirements": ["spec-ft-core-host-runtime::REQ-001", "spec-ft-core-host-runtime::REQ-002"],
+            "source": "// @verifies ft-core-host-runtime::TASK-CORE-001-1::REQ-001\n// @implements ft-core-host-runtime::TASK-CORE-001-1::REQ-001\n"
+        }),
+    )
+    .expect("find_dangling_requirements tool call must succeed");
+
+    let arr = mcp_res.as_array().unwrap();
+    assert_eq!(arr.len(), 1);
+    assert_eq!(arr[0]["requirement_id"], "spec-ft-core-host-runtime::REQ-002");
 }

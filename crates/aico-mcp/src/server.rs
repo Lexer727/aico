@@ -1,12 +1,14 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::annotation::AnnotationExtractor;
+use crate::annotation::{AnnotationExtractor, AnnotationKind};
 use crate::ears::EarsValidator;
+use crate::graph_tools::{GraphToolHandler, HybridToolHandler};
+use crate::traceability::{TraceabilityTracker, VerificationStatus};
 
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum ToolError {
-    #[error("Unknown tool: '{0}'. Available tools: create_sdd_artifact, verify_task, extract_annotations, validate_ears")]
+    #[error("Unknown tool: '{0}'. Available tools: query_lineage_graph, search_hybrid, find_dangling_requirements, verify_task, extract_annotations, validate_ears")]
     UnknownTool(String),
     #[error("Invalid parameters for tool '{0}': {1}")]
     InvalidParameters(String, String),
@@ -24,21 +26,46 @@ pub struct ToolDefinition {
 pub struct McpServerManager;
 
 impl McpServerManager {
-    /// List all registered SDD deterministic MCP tools
+    /// List all registered SDD & Stateful Graph/Vector MCP tools
     // @implements ft-core-mcp-tools::TASK-CORE-005-2::REQ-001
+    // @implements spec-ft-tooling-mcp-repurpose::TASK-TOOL-002-1::REQ-001
+    // @implements spec-ft-tooling-mcp-repurpose::TASK-TOOL-002-2::REQ-001
     pub fn list_tools() -> Vec<ToolDefinition> {
         vec![
             ToolDefinition {
-                name: "create_sdd_artifact".to_string(),
-                description: "Deterministic gate to create SDD artifacts with immutable IDs and graph registration".to_string(),
+                name: "query_lineage_graph".to_string(),
+                description: "Execute a 1-to-4 hop Kùzu property graph lineage and caller query".to_string(),
                 input_schema: serde_json::json!({
                     "type": "object",
                     "properties": {
-                        "artifact_type": { "type": "string" },
-                        "slug": { "type": "string" },
-                        "title": { "type": "string" }
+                        "symbol": { "type": "string" },
+                        "hops": { "type": "integer", "minimum": 1, "maximum": 4 }
                     },
-                    "required": ["artifact_type", "slug", "title"]
+                    "required": ["symbol"]
+                }),
+            },
+            ToolDefinition {
+                name: "search_hybrid".to_string(),
+                description: "Execute hybrid semantic vector (LanceDB) and graph (Kùzu) context search".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "query": { "type": "string" },
+                        "top_k": { "type": "integer", "minimum": 1 }
+                    },
+                    "required": ["query"]
+                }),
+            },
+            ToolDefinition {
+                name: "find_dangling_requirements".to_string(),
+                description: "Identify declared requirements missing @verifies tests or @implements code annotations".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "requirements": { "type": "array", "items": { "type": "string" } },
+                        "source": { "type": "string" }
+                    },
+                    "required": ["requirements"]
                 }),
             },
             ToolDefinition {
@@ -81,8 +108,65 @@ impl McpServerManager {
     /// Dispatch a tool call with input validation and error guidance
     // @implements ft-core-mcp-tools::TASK-CORE-005-2::REQ-008
     // @implements ft-core-mcp-tools::TASK-CORE-005-2::REQ-009
+    // @implements spec-ft-tooling-mcp-repurpose::TASK-TOOL-002-1::REQ-006
+    // @implements spec-ft-tooling-mcp-repurpose::TASK-TOOL-002-2::REQ-004
+    // @implements spec-ft-tooling-mcp-repurpose::TASK-TOOL-002-2::REQ-005
     pub fn call_tool(name: &str, params: serde_json::Value) -> Result<serde_json::Value, ToolError> {
         match name {
+            "query_lineage_graph" => {
+                let symbol = params
+                    .get("symbol")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| ToolError::InvalidParameters(name.to_string(), "Missing 'symbol' string".to_string()))?;
+                let hops = params
+                    .get("hops")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(2) as usize;
+                let payload = GraphToolHandler::query_lineage_graph(symbol, hops)?;
+                Ok(serde_json::to_value(payload).unwrap())
+            }
+            "search_hybrid" => {
+                let query = params
+                    .get("query")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| ToolError::InvalidParameters(name.to_string(), "Missing 'query' string".to_string()))?;
+                let top_k = params
+                    .get("top_k")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(5) as usize;
+                let res = HybridToolHandler::search_hybrid(query, top_k)?;
+                Ok(serde_json::to_value(res).unwrap())
+            }
+            "find_dangling_requirements" => {
+                let req_arr = params
+                    .get("requirements")
+                    .and_then(|v| v.as_array())
+                    .ok_or_else(|| ToolError::InvalidParameters(name.to_string(), "Missing 'requirements' array".to_string()))?;
+                let source = params
+                    .get("source")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+
+                let mut tracker = TraceabilityTracker::new();
+                for req_val in req_arr {
+                    if let Some(req_str) = req_val.as_str() {
+                        tracker.register_requirement(req_str);
+                    }
+                }
+                for ann in AnnotationExtractor::extract(source) {
+                    let key = format!("{}::{}", ann.spec_id, ann.req_id);
+                    match ann.kind {
+                        AnnotationKind::Verifies => {
+                            tracker.record_verifies_edge("test_seam", &key, VerificationStatus::Passed);
+                        }
+                        AnnotationKind::Implements => {
+                            tracker.record_implements_edge("impl_symbol", &key);
+                        }
+                    }
+                }
+                let dangling = tracker.find_dangling_requirements();
+                Ok(serde_json::to_value(dangling).unwrap())
+            }
             "extract_annotations" => {
                 let source = params
                     .get("source")
@@ -102,23 +186,6 @@ impl McpServerManager {
                     .ok_or_else(|| ToolError::InvalidParameters(name.to_string(), "Missing 'statement' string".to_string()))?;
                 match EarsValidator::validate(req_id, statement) {
                     Ok(pattern) => Ok(serde_json::json!({ "valid": true, "pattern": format!("{:?}", pattern) })),
-                    Err(e) => Err(ToolError::ExecutionFailed(e.to_string())),
-                }
-            }
-            "create_sdd_artifact" => {
-                let parsed: crate::gate::CreateArtifactParams = serde_json::from_value(params)
-                    .map_err(|e| ToolError::InvalidParameters(name.to_string(), e.to_string()))?;
-                match crate::gate::ArtifactToolGate::create_artifact(parsed) {
-                    Ok(path) => Ok(serde_json::json!({
-                        "status": "created",
-                        "path": path.to_string_lossy()
-                    })),
-                    Err(crate::gate::GateError::CustomPathProhibited(msg)) => {
-                        Err(ToolError::ExecutionFailed(format!("Custom file path is strictly prohibited: {}", msg)))
-                    }
-                    Err(crate::gate::GateError::DuplicateArtifactId(msg)) => {
-                        Err(ToolError::ExecutionFailed(format!("DuplicateArtifactId: Artifact file already exists at {}", msg)))
-                    }
                     Err(e) => Err(ToolError::ExecutionFailed(e.to_string())),
                 }
             }
@@ -145,11 +212,11 @@ impl McpServerManager {
                     .unwrap_or("passed");
 
                 let status = match test_status_str {
-                    "passed" => crate::traceability::VerificationStatus::Passed,
-                    _ => crate::traceability::VerificationStatus::Failed,
+                    "passed" => VerificationStatus::Passed,
+                    _ => VerificationStatus::Failed,
                 };
 
-                let mut tracker = crate::traceability::TraceabilityTracker::new();
+                let mut tracker = TraceabilityTracker::new();
                 tracker.record_verifies_edge(test_name, req_id, status);
                 tracker.record_implements_edge(symbol_name, req_id);
 

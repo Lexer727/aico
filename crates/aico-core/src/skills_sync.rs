@@ -37,6 +37,7 @@ impl SkillsSynchronizer {
     // @implements ft-core-skills-sync::TASK-SYNC-003::REQ-006
     // @implements ft-core-skills-sync::TASK-SYNC-003::REQ-007
     // @implements ft-core-skills-sync::TASK-SYNC-003::REQ-008
+    // @implements spec-ft-tooling-skills-integration::TASK-TOOL-003-1::REQ-004
     pub fn sync_from_source<P: AsRef<Path>, Q: AsRef<Path>>(
         source_skills_dir: P,
         root_dir: Q,
