@@ -66,3 +66,63 @@ fn test_search_hybrid_tool() {
     );
     assert!(matches!(err_zero_k, Err(ToolError::InvalidParameters(_, _))));
 }
+
+// @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-3::REQ-003
+// @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-4::REQ-004
+#[tokio::test]
+async fn test_query_lineage_graph_with_persisted_kuzu_nodes_and_edges() {
+    use aico_mcp::GraphToolHandler;
+    use aico_storage::{GraphEdge, GraphNode, StorageManager};
+
+    let temp_dir = std::env::temp_dir().join("aico_mcp_kuzu_persisted_lineage_test");
+    let _ = std::fs::remove_dir_all(&temp_dir);
+    std::fs::create_dir_all(&temp_dir).unwrap();
+
+    let storage = StorageManager::open(&temp_dir).expect("open StorageManager");
+    {
+        let gstore = storage.graph_store().write().await;
+        gstore
+            .upsert_node(GraphNode::new("ec-core", "Epic", "Core Epic", "In Progress"))
+            .unwrap();
+        gstore
+            .upsert_node(GraphNode::new(
+                "ft-core-workspace-graph-and-project-creator",
+                "Feature",
+                "Workspace Graph & Project Creator",
+                "In Progress",
+            ))
+            .unwrap();
+        gstore
+            .upsert_node(GraphNode::new(
+                "spec-ft-core-workspace-graph-and-project-creator",
+                "Spec",
+                "Workspace Graph Spec",
+                "In Progress",
+            ))
+            .unwrap();
+        gstore
+            .upsert_edge(GraphEdge::new(
+                "ec-core",
+                "ft-core-workspace-graph-and-project-creator",
+                "CONTAINS",
+            ))
+            .unwrap();
+        gstore
+            .upsert_edge(GraphEdge::new(
+                "ft-core-workspace-graph-and-project-creator",
+                "spec-ft-core-workspace-graph-and-project-creator",
+                "SPECIFIED_BY",
+            ))
+            .unwrap();
+    }
+
+    let payload = GraphToolHandler::query_lineage_graph_with_storage("ec-core", 2, Some(&storage))
+        .expect("query_lineage_graph_with_storage");
+
+    assert_eq!(payload.symbol, "ec-core");
+    assert_eq!(payload.hops, 2);
+    assert_eq!(payload.results.len(), 2);
+    let joined = payload.results.join(" ");
+    assert!(joined.contains("ft-core-workspace-graph-and-project-creator"));
+    assert!(joined.contains("spec-ft-core-workspace-graph-and-project-creator"));
+}

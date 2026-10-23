@@ -18,6 +18,7 @@ import '@xterm/xterm/css/xterm.css';
 import { useDockStore } from '../../stores/useDockStore';
 import { useWebSocket } from '../../context/WebSocketContext';
 import { getWindowId } from '../../stores/useTabStore';
+import { useTerminalTitleSync } from '../../hooks/useTerminalTitleSync';
 import clsx from 'clsx';
 
 export type ShellType = 'powershell' | 'bash' | 'cmd' | 'agy' | 'claude';
@@ -43,9 +44,103 @@ export interface TerminalConsoleProps {
   targetWindowId?: string;
 }
 
-const stripAnsi = (input: string): string =>
+// @implements spec-ft-terminal-quotas-gates-and-notifications::TASK-TERMINAL-007-2::REQ-002
+// @implements spec-ft-terminal-quotas-gates-and-notifications::TASK-TERMINAL-007-2::REQ-004
+// @implements spec-ft-terminal-quotas-gates-and-notifications::TASK-TERMINAL-007-2::REQ-007
+// @implements spec-ft-terminal-quotas-gates-and-notifications::TASK-TERMINAL-007-3::REQ-005
+export const stripAnsi = (input: string): string =>
   // eslint-disable-next-line no-control-regex
   input.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '').replace(/\x1b\][^\x07]*(\x07|\x1b\\)/g, '');
+
+// @implements spec-ft-terminal-quotas-gates-and-notifications::TASK-TERMINAL-007-2::REQ-002
+// @implements spec-ft-terminal-quotas-gates-and-notifications::TASK-TERMINAL-007-2::REQ-004
+// @implements spec-ft-terminal-quotas-gates-and-notifications::TASK-TERMINAL-007-2::REQ-007
+export function detectGateOrWaitingState(text: string): boolean {
+  if (!text) return false;
+  const clean = stripAnsi(text);
+  const patterns = [
+    /\[aico gate/i,
+    /waiting for confirmation/i,
+    /awaiting confirmation/i,
+    /awaiting spec sign-off/i,
+    /halt for implementation confirmation/i,
+    /post-spec confirmation/i,
+    /proceed with implementation\?/i,
+    /reply to confirm/i,
+    /please review and confirm/i,
+    /\[y\/n\]/i,
+    /\(y\/n\)/i,
+    /allow .* to/i,
+    /allow once/i,
+    /approve\?/i,
+    /do you want to proceed/i,
+    /use arrow keys/i,
+    /select an option/i,
+    /press enter to confirm/i,
+  ];
+  return patterns.some((p) => p.test(clean));
+}
+
+// @implements spec-ft-terminal-quotas-gates-and-notifications::TASK-TERMINAL-007-2::REQ-002
+// @implements spec-ft-terminal-quotas-gates-and-notifications::TASK-TERMINAL-007-2::REQ-004
+// @implements spec-ft-terminal-quotas-gates-and-notifications::TASK-TERMINAL-007-2::REQ-007
+export function analyzeAiOutputChunk(
+  rawChunk: string,
+  recentBuffer: string = ''
+): 'working' | 'waiting_for_input' | 'finished' | null {
+  const cleanChunk = stripAnsi(rawChunk);
+  const combined = (recentBuffer + cleanChunk).slice(-2000);
+
+  // 1. Check for Gate or Waiting for input
+  if (detectGateOrWaitingState(combined)) {
+    return 'waiting_for_input';
+  }
+
+  // 2. Active LLM working / spinner / streaming output
+  const hasSpinnerOrThinking = /[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏✻]|thinking|working\.\.\.|generating/i.test(cleanChunk);
+  if (hasSpinnerOrThinking) {
+    return 'working';
+  }
+
+  return null;
+}
+
+// @implements spec-ft-terminal-quotas-gates-and-notifications::TASK-TERMINAL-007-3::REQ-005
+export function triggerDesktopPopupNotification(
+  tabLabel: string,
+  nextStatus: 'finished' | 'waiting_for_input'
+) {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      if (window.localStorage.getItem('aico-desktop-notifications-enabled') === 'false') {
+        return;
+      }
+    }
+
+    const title = nextStatus === 'waiting_for_input' ? 'AICO: Waiting for Input' : 'AICO: Task Finished';
+    const message = `${tabLabel} is ${nextStatus === 'waiting_for_input' ? 'waiting for your confirmation' : 'done'}.`;
+
+    // 1. Backend OS notification endpoint
+    fetch('/api/v1/notifications/popup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title,
+        message,
+        status: nextStatus,
+      }),
+    }).catch(() => {
+      // Ignore network errors if backend notification service is unavailable
+    });
+
+    // 2. Web Notification fallback if permitted
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      new Notification(title, { body: message });
+    }
+  } catch {
+    // Silent fallback
+  }
+}
 
 const AntigravityIcon: React.FC<{ className?: string }> = ({ className = 'w-3.5 h-3.5' }) => (
   <svg
@@ -217,6 +312,9 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({
   const [disconnectedTabs, setDisconnectedTabs] = useState<Record<string, boolean>>({});
   const [aiTabStatuses, setAiTabStatuses] = useState<Record<string, AiTabStatus>>({});
 
+  // @implements spec-ft-terminal-tab-title-status::TASK-TITLE-003::REQ-006
+  useTerminalTitleSync(tabs, aiTabStatuses);
+
   // Tab Strip Scroll & Overflow states
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -248,6 +346,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({
   const lastUserKeystrokeAtRef = useRef<Record<string, number>>({});
   const recentOutputRef = useRef<Record<string, string>>({});
   const workingTimerRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const waitingGateLockRef = useRef<Record<string, boolean>>({});
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const activeTab = tabs.find((t) => t.id === activeTabId) || (tabs.length > 0 ? tabs[0] : null);
@@ -464,9 +563,33 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({
     workingTimerRef.current[tabId] = setTimeout(() => {
       const wasWorking = awaitingAiResponseRef.current[tabId];
       awaitingAiResponseRef.current[tabId] = false;
+
+      // REQ-004 & REQ-007: check if waitingGateLockRef is active OR if detectGateOrWaitingState is true
+      const recent = recentOutputRef.current[tabId] || '';
+      const isGate = waitingGateLockRef.current[tabId] || detectGateOrWaitingState(recent);
+
+      if (isGate) {
+        waitingGateLockRef.current[tabId] = true;
+        setAiTabStatuses((prev) => {
+          const cur = prev[tabId];
+          if (!cur || cur.state !== 'waiting_for_input') {
+            const tab = tabs.find((t) => t.id === tabId);
+            triggerDesktopPopupNotification(tab?.name || 'AI Terminal', 'waiting_for_input');
+            return {
+              ...prev,
+              [tabId]: { state: 'waiting_for_input', reason: 'Waiting for confirmation / input' },
+            };
+          }
+          return prev;
+        });
+        return;
+      }
+
       setAiTabStatuses((prev) => {
         const cur = prev[tabId];
         if (!cur || cur.state === 'working') {
+          const tab = tabs.find((t) => t.id === tabId);
+          triggerDesktopPopupNotification(tab?.name || 'AI Terminal', 'finished');
           return {
             ...prev,
             [tabId]: { state: 'finished', reason: 'Finished — ready for prompt' },
@@ -478,20 +601,21 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({
         onWorkspaceRefreshRef.current?.();
       }
     }, delayMs);
-  }, []);
+  }, [tabs]);
 
-  const analyzeAiOutputChunk = useCallback(
+  const handleAiOutputChunk = useCallback(
     (tabId: string, rawChunk: string) => {
       const clean = stripAnsi(rawChunk);
       if (!clean.trim()) return;
 
-      const combined = ((recentOutputRef.current[tabId] || '') + clean).slice(-600);
+      const combined = ((recentOutputRef.current[tabId] || '') + clean).slice(-2000);
       recentOutputRef.current[tabId] = combined;
 
       // 1. Error / Not logged in / Out of tokens checks (Red static circle)
       if (/not logged in|please run \/login|auth login|authentication failed|login required/i.test(combined)) {
         if (workingTimerRef.current[tabId]) clearTimeout(workingTimerRef.current[tabId]);
         awaitingAiResponseRef.current[tabId] = false;
+        waitingGateLockRef.current[tabId] = false;
         setAiTabStatuses((prev) => ({
           ...prev,
           [tabId]: { state: 'error', reason: 'Not logged in' },
@@ -502,6 +626,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({
       if (/rate limit|quota exceeded|out of tokens|insufficient_quota|429 too many requests/i.test(combined)) {
         if (workingTimerRef.current[tabId]) clearTimeout(workingTimerRef.current[tabId]);
         awaitingAiResponseRef.current[tabId] = false;
+        waitingGateLockRef.current[tabId] = false;
         setAiTabStatuses((prev) => ({
           ...prev,
           [tabId]: { state: 'error', reason: 'Out of tokens / rate limit' },
@@ -512,6 +637,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({
       if (/\[Process Error\]|unhandled error|fatal error/i.test(combined)) {
         if (workingTimerRef.current[tabId]) clearTimeout(workingTimerRef.current[tabId]);
         awaitingAiResponseRef.current[tabId] = false;
+        waitingGateLockRef.current[tabId] = false;
         setAiTabStatuses((prev) => ({
           ...prev,
           [tabId]: { state: 'error', reason: 'Error in AI session' },
@@ -519,30 +645,41 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({
         return;
       }
 
-      // 2. Waiting for user permission / confirmation / multiple-choice (Blue bouncing circle)
-      if (
-        /\[y\/n\]|\(y\/n\)|allow .* to|approve\?|do you want to proceed|use arrow keys|select an option|press enter to confirm|waiting for confirmation/i.test(
-          combined
-        )
-      ) {
+      // 2. Waiting for user permission / confirmation / AICO Gate (Blue bouncing circle) (REQ-002, REQ-004)
+      if (detectGateOrWaitingState(combined)) {
         if (workingTimerRef.current[tabId]) clearTimeout(workingTimerRef.current[tabId]);
         awaitingAiResponseRef.current[tabId] = false;
-        setAiTabStatuses((prev) => ({
-          ...prev,
-          [tabId]: { state: 'waiting_for_input', reason: 'Waiting for confirmation / input' },
-        }));
+        waitingGateLockRef.current[tabId] = true;
+        setAiTabStatuses((prev) => {
+          const cur = prev[tabId];
+          if (!cur || cur.state !== 'waiting_for_input') {
+            const tab = tabs.find((t) => t.id === tabId);
+            triggerDesktopPopupNotification(tab?.name || 'AI Terminal', 'waiting_for_input');
+            return {
+              ...prev,
+              [tabId]: { state: 'waiting_for_input', reason: 'Waiting for confirmation / input' },
+            };
+          }
+          return prev;
+        });
         return;
       }
 
-      // 3. Ignore local keystroke echo when the user is simply typing at the prompt before pressing Enter
+      // 3. If locked in waiting_for_input, ignore trailing TUI redraws/spinners until user types (REQ-007)
+      if (waitingGateLockRef.current[tabId]) {
+        return;
+      }
+
+      // 4. Ignore local keystroke echo when the user is simply typing at the prompt before pressing Enter
       const sinceKeystroke = Date.now() - (lastUserKeystrokeAtRef.current[tabId] || 0);
       if (!awaitingAiResponseRef.current[tabId] && sinceKeystroke < 250) {
         return;
       }
 
-      // 4. Active LLM working / spinner / streaming output (Orange spinning circle)
+      // 5. Active LLM working / spinner / streaming output (Orange spinning circle)
+      const analyzed = analyzeAiOutputChunk(rawChunk, recentOutputRef.current[tabId] || '');
       const hasSpinnerOrThinking = /[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏✻]|thinking|working\.\.\.|generating/i.test(clean);
-      if (awaitingAiResponseRef.current[tabId] || hasSpinnerOrThinking) {
+      if (awaitingAiResponseRef.current[tabId] || hasSpinnerOrThinking || analyzed === 'working') {
         setAiTabStatuses((prev) => ({
           ...prev,
           [tabId]: { state: 'working', reason: 'LLM is working' },
@@ -550,7 +687,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({
         scheduleWorkingToFinished(tabId, 1200);
       }
     },
-    [scheduleWorkingToFinished]
+    [tabs, scheduleWorkingToFinished]
   );
 
   // Mount (or retrieve) the xterm instance for `tabId` and wire its WebSocket.
@@ -637,6 +774,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({
         });
 
         term.onData((data) => {
+          waitingGateLockRef.current[tabId] = false;
           if (isAiShell) {
             if (data.includes('\r') || data.includes('\n')) {
               awaitingAiResponseRef.current[tabId] = true;
@@ -714,7 +852,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({
             if (msg.type === 'output' && typeof msg.data === 'string') {
               currentHandle.term.write(msg.data);
               if (isAiShell) {
-                analyzeAiOutputChunk(tabId, msg.data);
+                handleAiOutputChunk(tabId, msg.data);
               }
             } else if (msg.type === 'error' && msg.message) {
               currentHandle.term.write(`\r\n\u001b[31m[Process Error] ${msg.message}\u001b[0m\r\n`);
@@ -762,7 +900,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({
         setDisconnectedTabs((prev) => ({ ...prev, [tabId]: true }));
       }
     },
-    [analyzeAiOutputChunk, scheduleWorkingToFinished]
+    [handleAiOutputChunk, scheduleWorkingToFinished]
   );
 
   // Show only the active tab's xterm container and ensure its session is running.

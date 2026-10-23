@@ -99,13 +99,21 @@ impl SkillsSynchronizer {
             report.skills_synced += 1;
         }
 
-        // REQ-003: Synchronize supporting root files (plugin.json, README.md, VERSION) and scripts/
-        for root_file in ["plugin.json", "README.md", "VERSION"] {
+        // REQ-003: Synchronize supporting root files (plugin.json, README.md, VERSION, mcp_config.json) and scripts/
+        // @implements spec-ft-tooling-mcp-streamable-http::TASK-TOOL-004-6::REQ-014
+        for root_file in ["plugin.json", "README.md", "VERSION", "mcp_config.json"] {
             let src_file = src_dir.join(root_file);
             if src_file.is_file() {
                 let dst_file = target_agents_skills.join(root_file);
                 Self::sync_file_if_changed(&src_file, &dst_file, &mut report)?;
             }
+        }
+
+        // @implements spec-ft-tooling-mcp-streamable-http::TASK-TOOL-004-6::REQ-014
+        let mcp_src = src_dir.join("mcp_config.json");
+        if mcp_src.is_file() {
+            let target_agents_mcp = root.join(".agents").join("mcp_config.json");
+            Self::sync_file_if_changed(&mcp_src, &target_agents_mcp, &mut report)?;
         }
 
         let src_scripts = src_dir.join("scripts");

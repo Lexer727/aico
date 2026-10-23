@@ -28,43 +28,19 @@ import { AdrViewer } from './features/adr-viewer/AdrViewer';
 import { GlossaryViewer } from './features/glossary-viewer/GlossaryViewer';
 import { AssetViewer } from './features/assets/AssetViewer';
 import type { DiscoveredAssetInfo } from './features/assets/AssetPanel';
-import { VisualLineageCanvas, type GraphNode, type GraphEdge } from './features/epic-hub/VisualLineageCanvas';
+import { VisualLineageCanvas } from './features/epic-hub/VisualLineageCanvas';
 import { WebSocketProvider, useWebSocket } from './context/WebSocketContext';
 import { useTabStore, getWindowId, type TabItem } from './stores/useTabStore';
 import { useDockStore } from './stores/useDockStore';
 import { MobilePairingModal } from './components/navigation/MobilePairingModal';
 import { DesktopWindowSwitcher } from './components/navigation/DesktopWindowSwitcher';
-import { Search, QrCode } from 'lucide-react';
+import { Search, QrCode, ExternalLink } from 'lucide-react';
 
 if (typeof window !== 'undefined') {
   (window as any).__TAB_STORE__ = useTabStore;
 }
 
-const mockProjects = [
-  { id: 'aico-core', name: 'AICO Core SDD' },
-  { id: 'aico-specs', name: 'AICO Specs' },
-];
-
-const mockNodes: GraphNode[] = [
-  { id: 'epic-1', type: 'epic', label: 'Epic 001', isFrontier: false },
-  { id: 'epic-2', type: 'epic', label: 'Epic 002', isFrontier: false },
-  { id: 'feat-1', type: 'task', label: '01-host-runtime', isFrontier: false },
-  { id: 'feat-6', type: 'task', label: '06-webui-shell', isFrontier: false },
-  { id: 'feat-7', type: 'task', label: '07-epic-hub', isFrontier: true },
-  { id: 'spec-1', type: 'spec', label: 'spec-ft-core-host-runtime', isFrontier: false },
-  { id: 'spec-6', type: 'spec', label: 'spec-ft-core-webui-shell', isFrontier: false },
-  { id: 'code-1', type: 'code', label: 'ShellLayout.tsx', isFrontier: false },
-];
-
-const mockEdges: GraphEdge[] = [
-  { id: 'e1', source: 'epic-1', target: 'feat-1' },
-  { id: 'e2', source: 'epic-1', target: 'feat-6' },
-  { id: 'e3', source: 'epic-1', target: 'feat-7' },
-  { id: 'e4', source: 'feat-1', target: 'spec-1' },
-  { id: 'e5', source: 'feat-6', target: 'spec-6' },
-  { id: 'e6', source: 'spec-6', target: 'code-1' },
-];
-
+// @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-1::REQ-007
 // @implements ft-core-code-navigation-and-search::TASK-CORE-013-5::REQ-001
 // @implements ft-core-code-navigation-and-search::TASK-CORE-013-5::REQ-003
 // @implements ft-core-code-navigation-and-search::TASK-CORE-013-5::REQ-006
@@ -109,7 +85,7 @@ export const MainWorkspace: React.FC = () => {
   }>>({});
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [projects, setProjects] = useState(mockProjects);
+  const [projects, setProjects] = useState<{ id: string; name: string; specs_path?: string }[]>([]);
   const [discoveredEpics, setDiscoveredEpics] = useState<DiscoveredEpicNav[]>([]);
   const [fullEpics, setFullEpics] = useState<DiscoveredEpic[]>([]);
   const [discoveredFeatures, setDiscoveredFeatures] = useState<DiscoveredFeatureNav[]>([]);
@@ -642,6 +618,37 @@ export const MainWorkspace: React.FC = () => {
     }
   }, [activeProjectId, setActiveProject, handleOpenEpic, handleOpenFeature, handleOpenSpec, handleOpenAdr, handleOpenCode]);
 
+  // REQ-015 & REQ-016: Open artifact from graph node popout and open full-window graph tab
+  const handleOpenNodeFromGraph = useCallback(
+    (node: any) => {
+      if (node.type === 'epic') {
+        handleOpenEpic(node.id);
+      } else if (node.type === 'feature') {
+        handleOpenFeature(node.id);
+      } else if (node.type === 'spec') {
+        handleOpenSpec(node.id);
+      } else if (node.type === 'plan') {
+        handleOpenPlan(node.id);
+      } else if (node.type === 'adr') {
+        handleOpenAdr(node.id);
+      } else if (node.type === 'code') {
+        handleOpenCode(node.id.replace(/^code:/, ''));
+      }
+    },
+    [handleOpenEpic, handleOpenFeature, handleOpenSpec, handleOpenPlan, handleOpenAdr, handleOpenCode]
+  );
+
+  const handleOpenGraph = useCallback(
+    (epicId: string) => {
+      openTab(activeProjectId, {
+        id: `graph-${epicId}`,
+        title: `Lineage: ${epicId}`,
+        type: 'graph',
+      });
+    },
+    [activeProjectId, openTab]
+  );
+
   // Find active tab object
   const projectTabs = getProjectTabs(activeProjectId);
   const activeTab: TabItem | undefined = projectTabs.find((t) => t.id === activeTabId);
@@ -719,12 +726,55 @@ export const MainWorkspace: React.FC = () => {
             onFileUpload={(f) => setUploadedFiles((prev) => [...prev, f.name])}
           />
 
-          {/* Visual Lineage Graph Canvas (Rendered at the very bottom) */}
+          {/* Visual Lineage Graph Canvas (Rendered at the bottom of Epic View) */}
           <div className="max-w-7xl mx-auto space-y-2 pt-4 border-t border-zinc-800/80">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-              Interactive Lineage Graph
-            </h3>
-            <VisualLineageCanvas nodes={mockNodes} edges={mockEdges} />
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                Interactive Lineage Graph
+              </h3>
+              <button
+                type="button"
+                data-testid="popout-graph"
+                onClick={() => handleOpenGraph(currentEpicData.id)}
+                className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors cursor-pointer"
+                title="Open in separate tab for full-window view"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Open Full Window</span>
+              </button>
+            </div>
+            <VisualLineageCanvas
+              projectName={activeProjectId}
+              epicId={currentEpicData.id}
+              onOpenNode={handleOpenNodeFromGraph}
+              onPopoutGraph={() => handleOpenGraph(currentEpicData.id)}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    if (activeTab.type === 'graph') {
+      const epicId = activeTab.id.replace(/^graph-/, '');
+      return (
+        <div className="p-4 max-w-[1920px] mx-auto h-[calc(100vh-110px)] flex flex-col space-y-2">
+          <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-xs px-2 py-0.5 rounded bg-indigo-950 text-indigo-400 border border-indigo-800/80 font-bold uppercase">
+                {epicId}
+              </span>
+              <h2 className="text-sm font-semibold text-zinc-200">
+                Interactive Lineage Graph (Full Window)
+              </h2>
+            </div>
+          </div>
+          <div className="flex-1 min-h-0">
+            <VisualLineageCanvas
+              projectName={activeProjectId}
+              epicId={epicId}
+              isFullWindow={true}
+              onOpenNode={handleOpenNodeFromGraph}
+            />
           </div>
         </div>
       );
@@ -972,7 +1022,7 @@ export const MainWorkspace: React.FC = () => {
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center gap-2">
                 <HistoryNavButtons />
-                <ProjectSwitcher projects={projects} />
+                <ProjectSwitcher projects={projects} onRefreshProjects={fetchProjects} />
               </div>
               <ConnectionStatusBanner status={status} onReconnect={reconnect} iconOnly={true} />
             </div>
@@ -1000,7 +1050,7 @@ export const MainWorkspace: React.FC = () => {
           <>
             <div className="flex items-center gap-2 shrink-0 relative z-20">
               <HistoryNavButtons />
-              <ProjectSwitcher projects={projects} />
+              <ProjectSwitcher projects={projects} onRefreshProjects={fetchProjects} />
             </div>
 
             {/* Desktop Global Viewport Centered OmniSearch Bar (50vw) */}

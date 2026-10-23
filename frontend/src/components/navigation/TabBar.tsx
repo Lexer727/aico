@@ -109,6 +109,8 @@ export const TabBar: React.FC = () => {
         return <BookOpen className={clsx(iconClass, 'text-amber-400')} />;
       case 'asset':
         return <FolderArchive className={clsx(iconClass, 'text-amber-400')} />;
+      case 'graph':
+        return <GitFork className={clsx(iconClass, 'text-sky-400')} />;
       default:
         return <Package className={clsx(iconClass, 'text-purple-400')} />;
     }

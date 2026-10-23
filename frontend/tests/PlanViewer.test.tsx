@@ -42,6 +42,10 @@ vi.mock('../src/features/feature-task-data', () => ({
     const m = dep.match(/TASK-[A-Za-z0-9-]+/i);
     return m ? m[0].toUpperCase() : null;
   }),
+  isTaskDone: vi.fn().mockImplementation((t: any) => {
+    const s = typeof t === 'string' ? t : t?.status;
+    return s === 'Done' || s === 'Completed' || s === 'Rewritten' || s === 'Skipped/Canceled';
+  }),
 }));
 
 // @verifies ft-specs-blueprint-standards::TASK-SPECS-001-3::REQ-004

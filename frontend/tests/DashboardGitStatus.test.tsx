@@ -78,9 +78,10 @@ describe('DashboardView Git Repositories Status', () => {
       />
     );
 
-    // Repositories card header
+    // Repositories card header and unified grid (REQ-002)
     expect(screen.getByTestId('git-repositories-card')).toBeInTheDocument();
-    expect(screen.getByText('Codebase Repositories')).toBeInTheDocument();
+    expect(screen.getByText('Git Repositories')).toBeInTheDocument();
+    expect(screen.getByTestId('git-repositories-grid')).toBeInTheDocument();
 
     // Verify 3 repository cards rendered
     expect(screen.getByTestId('git-repo-card-aico')).toBeInTheDocument();

@@ -1,9 +1,10 @@
 import { create } from 'zustand';
+import { useAccordionStore } from './useAccordionStore';
 
 export interface TabItem {
   id: string;
   title: string;
-  type: 'epic' | 'feature' | 'spec' | 'plan' | 'code' | 'adr' | 'glossary' | 'brainstorm' | 'deep_dive' | 'asset';
+  type: 'epic' | 'feature' | 'spec' | 'plan' | 'code' | 'adr' | 'glossary' | 'brainstorm' | 'deep_dive' | 'asset' | 'graph';
   path?: string;
 }
 
@@ -191,6 +192,13 @@ export const useTabStore = create<TabState>((set, get) => {
     },
 
     closeTab: (projectId: string, tabId: string) => {
+      // REQ-013: Reset accordion collapse states for closed tab entity
+      try {
+        useAccordionStore.getState().resetEntity(tabId);
+      } catch {
+        // Fallback
+      }
+
       set((state) => {
         const currentTabs = state.tabsByProject[projectId] || [];
         const closedTab = currentTabs.find((t) => t.id === tabId);

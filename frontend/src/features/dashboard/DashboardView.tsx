@@ -19,8 +19,10 @@ import {
   type DiscoveredAdr,
   type FeatureTask,
   type GitRepoStatus,
+  isTaskDone,
 } from '../feature-task-data';
 import { GitRepositoriesCard } from './GitRepositoriesCard';
+import { TagBadge } from '../../components/common/TagBadge';
 
 interface DashboardViewProps {
   epics?: DiscoveredEpic[];
@@ -60,39 +62,7 @@ const defaultTerms: TermInfo[] = [
   },
 ];
 
-const defaultEpics: DiscoveredEpic[] = [
-  {
-    id: 'ec-core',
-    title: 'AICO Core SDD Platform',
-    status: 'Completed',
-    specs_count: 7,
-    executive_summary:
-      'Host runtime, Axum local HTTP/WS daemon, LAN authentication, embedded LanceDB and Kùzu graph lifecycle, and WebUI shell with dockable terminals.',
-    specs: [
-      { id: 'spec-ft-core-host-runtime', title: 'spec-ft-core-host-runtime', status: 'Completed', path: '' },
-      { id: 'spec-ft-core-security-auth', title: 'spec-ft-core-security-auth', status: 'Completed', path: '' },
-      { id: 'spec-ft-core-local-storage', title: 'spec-ft-core-local-storage', status: 'Completed', path: '' },
-      { id: 'spec-ft-core-discovery', title: 'spec-ft-core-discovery', status: 'Completed', path: '' },
-      { id: 'spec-ft-core-mcp-tools', title: 'spec-ft-core-mcp-tools', status: 'Completed', path: '' },
-      { id: 'spec-ft-core-webui-shell', title: 'spec-ft-core-webui-shell', status: 'Completed', path: '' },
-      { id: 'spec-ft-core-epic-hub', title: 'spec-ft-core-epic-hub', status: 'Completed', path: '' },
-    ],
-  },
-  {
-    id: 'ec-specs',
-    title: 'AICO SDD Blueprints & Migration',
-    status: 'Completed',
-    specs_count: 3,
-    executive_summary:
-      'Standardization of SDD artifacts to version 0.1.2, universal YAML line-1 frontmatter with order, standalone features support, relative path linking, and wave-internal task lifecycle.',
-    specs: [
-      { id: 'spec-ft-specs-blueprint-standards', title: 'spec-ft-specs-blueprint-standards', status: 'Completed', path: '' },
-      { id: 'spec-ft-specs-skills-evolution', title: 'spec-ft-specs-skills-evolution', status: 'Completed', path: '' },
-      { id: 'spec-ft-specs-migration-engine', title: 'spec-ft-specs-migration-engine', status: 'Completed', path: '' },
-    ],
-  },
-];
-
+// @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-1::REQ-007
 // @implements ft-core-epic-hub::TASK-CORE-007-12::REQ-001
 // @implements ft-core-epic-hub::TASK-CORE-007-10::REQ-002
 // @implements ft-core-epic-hub::TASK-CORE-007-1::REQ-007
@@ -106,7 +76,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenAdr,
   ubiquitousLanguage,
 }) => {
-  const activeEpics = epics && epics.length > 0 ? epics : defaultEpics;
+  const activeEpics = epics || [];
   const [terms, setTerms] = useState<TermInfo[]>(
     ubiquitousLanguage && ubiquitousLanguage.length > 0 ? ubiquitousLanguage : defaultTerms
   );
@@ -188,8 +158,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               AICO v0.1.2 Standard
             </span>
           </div>
+          {/* @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-1::REQ-001 */}
           <p className="text-xs text-zinc-400 mt-1">
-            Local-First Spec-Driven Development Platform • Root: <span className="font-mono text-zinc-300">d:/aico/aico-specs</span>
+            Local-First Spec-Driven Development Platform
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -211,7 +182,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             {activeEpics.length}
           </div>
           <div className="text-[11px] text-zinc-500 truncate">
-            {activeEpics.map((e) => e.id).join(' & ')}
+            {activeEpics.length > 0 ? activeEpics.map((e) => e.id).join(' & ') : 'None discovered'}
           </div>
         </div>
 
@@ -221,7 +192,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <BookOpen className="w-4 h-4 text-sky-400" />
           </div>
           <div className="text-2xl font-bold font-mono text-zinc-100">
-            {totalSpecsCount > 0 ? totalSpecsCount : 10}
+            {totalSpecsCount}
           </div>
           <div className="text-[11px] text-zinc-500">Strict EARS Syntax & Tags</div>
         </div>
@@ -258,7 +229,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
           </div>
           <div className="text-2xl font-bold font-mono text-emerald-400">
-            {totalSeamsCount > 0 ? `${totalSeamsCount} / ${totalSeamsCount}` : '34 / 34'}
+            {totalSeamsCount > 0 ? `${totalSeamsCount} / ${totalSeamsCount}` : '0 / 0'}
           </div>
           <div className="text-[11px] text-zinc-500">Automated Contract Tests</div>
         </div>
@@ -275,8 +246,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400">
           Project Epics
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {activeEpics.map((epic) => {
+        {activeEpics.length === 0 ? (
+          <p className="text-xs text-zinc-500 italic p-4 bg-zinc-900/30 border border-zinc-800 rounded-xl">
+            No epics discovered in active project.
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {activeEpics.map((epic) => {
               const epicSpecs = epic.specs || [];
               const epicFeatures = epic.features || [];
               const specIds = epicSpecs.length > 0
@@ -288,11 +264,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 epicFeatures.every((f) => {
                   const featDone = f.status === 'Completed' || f.status === 'Done';
                   const tasks = f.tasks || [];
-                  const tasksDone = tasks.length > 0 && tasks.every((t) => t.status === 'Done' || t.status === 'Completed');
+                  const tasksDone = tasks.length > 0 && tasks.every((t) => isTaskDone(t));
                   return featDone || tasksDone;
                 });
               const allEpicTasks = epicFeatures.flatMap((f) => f.tasks || []);
-              const isAllTasksDone = allEpicTasks.length > 0 && allEpicTasks.every((t) => t.status === 'Done' || t.status === 'Completed');
+              const isAllTasksDone = allEpicTasks.length > 0 && allEpicTasks.every((t) => isTaskDone(t));
               const effectiveEpicStatus =
                 (epic.status === 'Completed' || epic.status === 'Done' || isAllFeaturesDone || isAllTasksDone)
                   ? 'Completed'
@@ -306,9 +282,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs px-2 py-0.5 rounded bg-zinc-800 text-indigo-400 font-semibold">
-                          {epic.id}
-                        </span>
+                        {/* @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-2::REQ-006 */}
+                        <TagBadge id={epic.id} onClick={() => onOpenEpic(epic.id)} size="sm" />
                         <span
                           className={`text-[10px] px-2 py-0.5 rounded font-mono ${
                             effectiveEpicStatus === 'Completed' || effectiveEpicStatus === 'Done'
@@ -323,14 +298,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         {epic.title}
                       </h3>
                     </div>
-                    {/* @implements ft-core-ui-visual-consistency::TASK-CORE-010-2::REQ-002 */}
-                    <button
-                      onClick={() => onOpenEpic(epic.id)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors shrink-0 whitespace-nowrap"
-                    >
-                      <span>Open Epic</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
                   </div>
 
                   <p className="text-xs text-zinc-400 leading-relaxed line-clamp-3">
@@ -346,20 +313,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </div>
                     <div className="flex flex-wrap gap-1.5 pt-1">
                       {specIds.map((s) => (
-                        <button
+                        <TagBadge
                           key={s}
+                          id={s}
                           onClick={() => onOpenSpec(s, s)}
-                          className="font-mono text-[10px] px-2 py-1 rounded bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-zinc-100 transition-colors"
-                        >
-                          {s}
-                        </button>
+                          size="xs"
+                        />
                       ))}
                     </div>
                   </div>
                 </div>
               );
             })}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Architecture Decision Records (ADRs) Accordion */}
@@ -415,9 +382,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   className="p-3 bg-zinc-900/80 rounded-lg border border-zinc-800 hover:border-amber-500/50 cursor-pointer transition-colors space-y-1.5 group"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-mono text-xs font-semibold text-amber-400 group-hover:text-amber-300">
-                      {adr.id}
-                    </span>
+                    <TagBadge id={adr.id} size="xs" onClick={() => onOpenAdr?.(adr.id)} />
                     <span className="text-[10px] px-2 py-0.5 rounded font-mono bg-emerald-950 text-emerald-400 border border-emerald-800/80">
                       {adr.status || 'Accepted'}
                     </span>

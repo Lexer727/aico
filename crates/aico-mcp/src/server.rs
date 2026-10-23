@@ -5,6 +5,7 @@ use crate::annotation::{AnnotationExtractor, AnnotationKind};
 use crate::ears::EarsValidator;
 use crate::graph_tools::{GraphToolHandler, HybridToolHandler};
 use crate::traceability::{TraceabilityTracker, VerificationStatus};
+use aico_storage::StorageManager;
 
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum ToolError {
@@ -20,6 +21,7 @@ pub enum ToolError {
 pub struct ToolDefinition {
     pub name: String,
     pub description: String,
+    #[serde(rename = "inputSchema", alias = "input_schema")]
     pub input_schema: serde_json::Value,
 }
 
@@ -30,6 +32,7 @@ impl McpServerManager {
     // @implements ft-core-mcp-tools::TASK-CORE-005-2::REQ-001
     // @implements spec-ft-tooling-mcp-repurpose::TASK-TOOL-002-1::REQ-001
     // @implements spec-ft-tooling-mcp-repurpose::TASK-TOOL-002-2::REQ-001
+    // @implements spec-ft-tooling-mcp-streamable-http::TASK-TOOL-004-1::REQ-004
     pub fn list_tools() -> Vec<ToolDefinition> {
         vec![
             ToolDefinition {
@@ -112,6 +115,17 @@ impl McpServerManager {
     // @implements spec-ft-tooling-mcp-repurpose::TASK-TOOL-002-2::REQ-004
     // @implements spec-ft-tooling-mcp-repurpose::TASK-TOOL-002-2::REQ-005
     pub fn call_tool(name: &str, params: serde_json::Value) -> Result<serde_json::Value, ToolError> {
+        Self::call_tool_with_storage(name, params, None)
+    }
+
+    /// Dispatch a tool call with optional StorageManager context
+    // @implements spec-ft-tooling-mcp-streamable-http::TASK-TOOL-004-1::REQ-005
+    // @implements spec-ft-tooling-mcp-streamable-http::TASK-TOOL-004-2::REQ-006
+    pub fn call_tool_with_storage(
+        name: &str,
+        params: serde_json::Value,
+        storage: Option<&StorageManager>,
+    ) -> Result<serde_json::Value, ToolError> {
         match name {
             "query_lineage_graph" => {
                 let symbol = params
@@ -122,7 +136,7 @@ impl McpServerManager {
                     .get("hops")
                     .and_then(|v| v.as_u64())
                     .unwrap_or(2) as usize;
-                let payload = GraphToolHandler::query_lineage_graph(symbol, hops)?;
+                let payload = GraphToolHandler::query_lineage_graph_with_storage(symbol, hops, storage)?;
                 Ok(serde_json::to_value(payload).unwrap())
             }
             "search_hybrid" => {
@@ -134,7 +148,7 @@ impl McpServerManager {
                     .get("top_k")
                     .and_then(|v| v.as_u64())
                     .unwrap_or(5) as usize;
-                let res = HybridToolHandler::search_hybrid(query, top_k)?;
+                let res = HybridToolHandler::search_hybrid_with_storage(query, top_k, storage)?;
                 Ok(serde_json::to_value(res).unwrap())
             }
             "find_dangling_requirements" => {

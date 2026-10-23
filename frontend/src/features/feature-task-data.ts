@@ -190,10 +190,22 @@ export function extractTaskId(dep: string): string | null {
   return match ? match[0].toUpperCase() : null;
 }
 
+// @implements spec-ft-core-webui-shell::TASK-CORE-006-32::REQ-024
+export function isTaskDone(taskOrStatus: FeatureTask | string | undefined | null): boolean {
+  if (!taskOrStatus) return false;
+  const status = typeof taskOrStatus === 'string' ? taskOrStatus : taskOrStatus.status;
+  return (
+    status === 'Done' ||
+    status === 'Completed' ||
+    status === 'Rewritten' ||
+    status === 'Skipped/Canceled'
+  );
+}
+
 /**
  * Computes the active task frontier dynamically from task statuses and DAG dependencies.
  * A task is on the active frontier if it is 'Pending' or 'In Progress' and all of its
- * blocking dependencies are 'Done' or 'Completed'.
+ * blocking dependencies are 'Done', 'Completed', 'Rewritten', or 'Skipped/Canceled'.
  */
 export function computeActiveFrontier(
   tasks: FeatureTask[],
@@ -224,7 +236,7 @@ export function computeActiveFrontier(
       return true;
     }
 
-    // Every blocker must be Done / Completed
+    // Every blocker must be Done / Completed / Rewritten / Skipped/Canceled
     return blockedList.every((dep) => {
       const depNorm = dep.trim().toUpperCase();
       if (!depNorm || depNorm === 'NONE' || depNorm.startsWith('NONE')) {
@@ -234,7 +246,7 @@ export function computeActiveFrontier(
       const blocker = taskId
         ? taskMap.get(taskId) || taskMap.get(taskId.toLowerCase())
         : taskMap.get(depNorm) || taskMap.get(dep.trim().toLowerCase());
-      return blocker && (blocker.status === 'Done' || blocker.status === 'Completed');
+      return blocker && isTaskDone(blocker);
     });
   });
 }

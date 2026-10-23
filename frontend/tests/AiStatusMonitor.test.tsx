@@ -114,6 +114,64 @@ describe('AiStatusMonitor Component', () => {
     expect(claudeRow.textContent).toContain('100%');
   });
 
+  it('renders Argon with only Weekly limit (W) and never renders 5h meter even if five_hour_remaining_pct is present on legacy payloads', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ai_state: 'waiting_for_input',
+        account: {
+          email: 'argon.user@example.com',
+          tier: 'Google AI Pro',
+        },
+        providers: [
+          {
+            id: 'gemini',
+            name: 'Gemini',
+            cli: 'agy',
+            connected: true,
+            weekly_remaining_pct: 90,
+            weekly_reset: '6d 10h',
+            five_hour_remaining_pct: 85,
+            five_hour_reset: '3h 15m',
+            weekly: { remaining_pct: 90, reset_in: '6d 10h' },
+            five_hour: { remaining_pct: 85, reset_in: '3h 15m' },
+          },
+          {
+            id: 'argon',
+            name: 'Argon',
+            cli: 'agy',
+            connected: true,
+            weekly_remaining_pct: 60,
+            weekly_reset: '5d 4h',
+            five_hour_remaining_pct: 100, // legacy payload
+            weekly: { remaining_pct: 60, reset_in: '5d 4h' },
+          },
+        ],
+      }),
+    } as unknown as Response);
+
+    render(<AiStatusMonitor />);
+
+    const geminiRow = await screen.findByTestId('quota-row-gemini');
+    const argonRow = await screen.findByTestId('quota-row-argon');
+
+    expect(geminiRow).toBeInTheDocument();
+    expect(argonRow).toBeInTheDocument();
+
+    // Gemini shows both W and 5h
+    expect(geminiRow.textContent).toContain('Gemini');
+    expect(geminiRow.textContent).toContain('W');
+    expect(geminiRow.textContent).toContain('5h');
+    expect(screen.getByTestId('five-hour-meter-gemini')).toBeInTheDocument();
+
+    // Argon strictly shows W and NEVER shows 5h
+    expect(argonRow.textContent).toContain('Argon');
+    expect(argonRow.textContent).toContain('W');
+    expect(argonRow.textContent).toContain('60%');
+    expect(argonRow.textContent).not.toContain('5h');
+    expect(screen.queryByTestId('five-hour-meter-argon')).not.toBeInTheDocument();
+  });
+
   it('renders empty state when no AI CLI is connected and never displays hardcoded user email', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,

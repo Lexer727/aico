@@ -1,5 +1,5 @@
-import React from 'react';
-import { X, Settings, Shield, Server, Database, Sliders, FolderTree } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, Settings, Shield, Server, Database, Sliders, FolderTree, Bell } from 'lucide-react';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -8,7 +8,23 @@ interface SettingsModalProps {
 
 // @implements ft-core-webui-shell::TASK-CORE-006-1::REQ-008
 // @implements ft-core-webui-shell::TASK-CORE-006-8::REQ-012
+// @implements spec-ft-terminal-quotas-gates-and-notifications::TASK-TERMINAL-007-3::REQ-005
 export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
+  const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(() => {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      return window.localStorage.getItem('aico-desktop-notifications-enabled') !== 'false';
+    }
+    return true;
+  });
+
+  const toggleNotifications = () => {
+    const next = !notificationsEnabled;
+    setNotificationsEnabled(next);
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem('aico-desktop-notifications-enabled', String(next));
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -140,6 +156,41 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               </div>
               <div className="text-[10px] text-zinc-500 italic pt-1">
                 All navigation and code viewer tabs resolve canonically relative to this root (e.g. codebase/aico/...).
+              </div>
+            </div>
+          </section>
+
+          {/* Desktop Notifications Section */}
+          {/* @implements spec-ft-terminal-quotas-gates-and-notifications::TASK-TERMINAL-007-3::REQ-005 */}
+          <section className="space-y-2.5" data-testid="section-desktop-notifications">
+            <div className="flex items-center gap-2 font-semibold text-zinc-300">
+              <Bell className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Desktop Notifications</span>
+            </div>
+            <div className="bg-zinc-950/60 p-3 rounded-lg border border-zinc-800/80 space-y-2">
+              <div className="flex justify-between items-center">
+                <div>
+                  <span className="text-zinc-200 font-medium block">Windows Popup Notifications</span>
+                  <span className="text-[11px] text-zinc-500 block">
+                    Display native Windows popup notifications when tasks complete or halt at review gates.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={notificationsEnabled}
+                  data-testid="toggle-desktop-notifications"
+                  onClick={toggleNotifications}
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    notificationsEnabled ? 'bg-indigo-600' : 'bg-zinc-700'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                      notificationsEnabled ? 'translate-x-4' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
               </div>
             </div>
           </section>

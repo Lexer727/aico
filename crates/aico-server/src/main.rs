@@ -69,6 +69,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if !projects.is_empty() {
                 reg.set_active(&projects[0].id);
                 println!("[*] Active project set to: {}", projects[0].id);
+                if let Ok(sm) = aico_storage::StorageManager::open(&projects[0].specs_path) {
+                    let mut st = state.storage.write().await;
+                    *st = Some(sm);
+                    println!("[*] Storage initialized for active project ({})", projects[0].id);
+                }
             }
         }
         Err(e) => {
@@ -92,6 +97,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("* Local WebUI:     http://localhost:{}/", addr.port());
     println!("* Network Pairing: {}", pairing_url);
     println!("* WebSocket Hub:   ws://localhost:{}/ws", addr.port());
+    // @implements spec-ft-tooling-mcp-streamable-http::TASK-TOOL-004-5::REQ-013
+    println!("* MCP Endpoint:    http://localhost:{}/mcp", addr.port());
     println!("------------------------------------------------------------");
     println!("Press Ctrl+C to stop the server.");
     println!("============================================================");

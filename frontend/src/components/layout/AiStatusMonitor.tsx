@@ -6,6 +6,12 @@ export interface QuotaAccountInfo {
   tier?: string | null;
 }
 
+// @implements spec-ft-terminal-quotas-gates-and-notifications::TASK-TERMINAL-007-1::REQ-006
+export interface QuotaWindow {
+  remaining_pct: number;
+  reset_in: string;
+}
+
 export interface QuotaProviderStatus {
   id: string;
   name: string;
@@ -13,9 +19,13 @@ export interface QuotaProviderStatus {
   connected: boolean;
   weekly_remaining_pct: number;
   weekly_reset: string;
-  five_hour_remaining_pct: number;
-  five_hour_reset: string;
+  five_hour_remaining_pct?: number;
+  five_hour_reset?: string;
+  weekly?: QuotaWindow | null;
+  five_hour?: QuotaWindow | null;
 }
+
+export type AiProviderQuota = QuotaProviderStatus;
 
 export type AiTerminalState = 'inactive' | 'waiting_for_input' | 'working';
 
@@ -142,47 +152,59 @@ export const AiStatusMonitor: React.FC = () => {
       {/* Connected Provider Quota Lines (Line 1: Gemini weekly + 5h; Line 2: Claude / others) */}
       {data.providers.length > 0 ? (
         <div className="space-y-1.5 pt-0.5">
-          {data.providers.map((provider) => (
-            <div
-              key={provider.id}
-              data-testid={`quota-row-${provider.id}`}
-              className="flex items-center justify-between gap-1.5 text-[11px] leading-tight"
-            >
-              <span className="text-zinc-300 font-medium shrink-0">
-                {provider.name}
-              </span>
+          {data.providers.map((provider) => {
+            const hasFiveHour =
+              provider.id !== 'argon' &&
+              (provider.five_hour !== undefined
+                ? Boolean(provider.five_hour)
+                : provider.five_hour_remaining_pct !== undefined);
 
-              <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-200 min-w-0">
-                {/* Weekly Limit Remaining */}
-                <div
-                  className="flex items-center gap-1"
-                  title={`Weekly Limit Remaining: ${provider.weekly_remaining_pct}% (Resets in ${provider.weekly_reset})`}
-                >
-                  <span className="text-zinc-500 font-sans">W</span>
-                  <span>{provider.weekly_remaining_pct}%</span>
-                  <QuotaRing percentage={provider.weekly_remaining_pct} />
-                  <span className="text-zinc-500 text-[9px]">
-                    {provider.weekly_reset}
-                  </span>
-                </div>
+            return (
+              <div
+                key={provider.id}
+                data-testid={`quota-row-${provider.id}`}
+                className="flex items-center justify-between gap-1.5 text-[11px] leading-tight"
+              >
+                <span className="text-zinc-300 font-medium shrink-0">
+                  {provider.name}
+                </span>
 
-                <span className="text-zinc-700">·</span>
+                <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-200 min-w-0">
+                  {/* Weekly Limit Remaining */}
+                  <div
+                    className="flex items-center gap-1"
+                    title={`Weekly Limit Remaining: ${provider.weekly?.remaining_pct ?? provider.weekly_remaining_pct}% (Resets in ${provider.weekly?.reset_in ?? provider.weekly_reset})`}
+                  >
+                    <span className="text-zinc-500 font-sans">W</span>
+                    <span>{provider.weekly?.remaining_pct ?? provider.weekly_remaining_pct}%</span>
+                    <QuotaRing percentage={provider.weekly?.remaining_pct ?? provider.weekly_remaining_pct} />
+                    <span className="text-zinc-500 text-[9px]">
+                      {provider.weekly?.reset_in ?? provider.weekly_reset}
+                    </span>
+                  </div>
 
-                {/* Five Hour Limit Remaining */}
-                <div
-                  className="flex items-center gap-1"
-                  title={`Five Hour Limit Remaining: ${provider.five_hour_remaining_pct}% (Resets in ${provider.five_hour_reset})`}
-                >
-                  <span className="text-zinc-500 font-sans">5h</span>
-                  <span>{provider.five_hour_remaining_pct}%</span>
-                  <QuotaRing percentage={provider.five_hour_remaining_pct} />
-                  <span className="text-zinc-500 text-[9px]">
-                    {provider.five_hour_reset}
-                  </span>
+                  {/* Five Hour Limit Remaining (REQ-006: only render when five_hour is not explicitly null and provider is not argon) */}
+                  {hasFiveHour && (
+                    <>
+                      <span className="text-zinc-700">·</span>
+                      <div
+                        data-testid={`five-hour-meter-${provider.id}`}
+                        className="flex items-center gap-1"
+                        title={`Five Hour Limit Remaining: ${provider.five_hour?.remaining_pct ?? provider.five_hour_remaining_pct ?? 100}% (Resets in ${provider.five_hour?.reset_in ?? provider.five_hour_reset ?? '5h 0m'})`}
+                      >
+                        <span className="text-zinc-500 font-sans">5h</span>
+                        <span>{provider.five_hour?.remaining_pct ?? provider.five_hour_remaining_pct ?? 100}%</span>
+                        <QuotaRing percentage={provider.five_hour?.remaining_pct ?? provider.five_hour_remaining_pct ?? 100} />
+                        <span className="text-zinc-500 text-[9px]">
+                          {provider.five_hour?.reset_in ?? provider.five_hour_reset}
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <div

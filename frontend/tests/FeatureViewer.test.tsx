@@ -79,6 +79,29 @@ describe('FeatureViewer Component', () => {
     expect(collapsedHandleProgress).toHaveTextContent('Done (50%)');
   });
 
+  // @verifies spec-ft-core-webui-shell::TASK-CORE-006-33::REQ-024
+  it('counts Rewritten and Skipped/Canceled tasks as Done in task progress calculation and resolves DAG dependencies', () => {
+    const featureWithRewritten = {
+      ...mockFeature,
+      tasks: [
+        { id: 'TASK-CORE-005-1', title: 'Task 1', status: 'Done', blocked_by: [] },
+        { id: 'TASK-CORE-005-2', title: 'Task 2', status: 'Completed', blocked_by: [] },
+        { id: 'TASK-CORE-005-3', title: 'Task 3', status: 'Rewritten', blocked_by: ['TASK-CORE-005-1'] },
+        { id: 'TASK-CORE-005-4', title: 'Task 4', status: 'Skipped/Canceled', blocked_by: ['TASK-CORE-005-2'] },
+      ],
+    };
+
+    render(<FeatureViewer feature={featureWithRewritten} />);
+
+    // 4 out of 4 tasks should be counted as done (100%)
+    const handleProgress = screen.getByTestId('task-plan-handle-progress');
+    expect(handleProgress).toHaveTextContent('4/4');
+    expect(handleProgress).toHaveTextContent('Done (100%)');
+
+    // Header subtext
+    expect(screen.getByText('4/4 Tasks Done (100%)')).toBeInTheDocument();
+  });
+
   it('renders Specs accordion with Scope Boundaries, EARS requirements, and Designated Public Test Seams', () => {
     const featureWithSpecs = {
       ...mockFeature,

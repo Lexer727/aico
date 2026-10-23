@@ -28,6 +28,7 @@ import {
   type TermInfo,
   type DiscoveredAdr,
   type DiscoveredFeature,
+  isTaskDone,
 } from '../feature-task-data';
 
 export interface FeatureData {
@@ -206,7 +207,7 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
 
   const tasksList: FeatureTask[] = feature.tasks || [];
   const totalTasks = tasksList.length;
-  const doneTasks = tasksList.filter((t) => t.status === 'Done' || t.status === 'Completed').length;
+  const doneTasks = tasksList.filter((t) => isTaskDone(t)).length;
   const taskProgressPct = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 100;
 
   const tasksMap = useMemo(() => {
@@ -945,7 +946,7 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
                           const blocker = taskId
                             ? tasksMap[taskId] || tasksMap[taskId.toLowerCase()]
                             : tasksMap[depUpper] || tasksMap[dep.trim().toLowerCase()];
-                          return blocker && (blocker.status === 'Done' || blocker.status === 'Completed');
+                          return blocker && isTaskDone(blocker);
                         });
 
                         return (
@@ -964,7 +965,7 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
                               </div>
                               <span
                                 className={`text-[9px] px-1.5 py-0.5 rounded font-mono shrink-0 font-semibold ${
-                                  task.status === 'Done'
+                                  isTaskDone(task.status)
                                     ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
                                     : task.status === 'In Progress'
                                     ? 'bg-amber-950 text-amber-400 border border-amber-800'
@@ -1009,7 +1010,7 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
                                       : tasksMap[depUpper] || tasksMap[dep.trim().toLowerCase()];
                                     const isResolved =
                                       isNone ||
-                                      (blocker && (blocker.status === 'Done' || blocker.status === 'Completed'));
+                                      (blocker && isTaskDone(blocker));
 
                                     return (
                                       <span

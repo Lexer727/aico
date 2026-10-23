@@ -5,6 +5,8 @@ edition.workspace = true
 
 [dependencies]
 aico-core = { path = "../aico-core" }
+aico-mcp = { path = "../aico-mcp" }
+aico-storage = { path = "../aico-storage" }
 tokio.workspace = true
 axum.workspace = true
 tower.workspace = true

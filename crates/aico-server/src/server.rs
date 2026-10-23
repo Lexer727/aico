@@ -17,10 +17,14 @@ use thiserror::Error;
 use tokio::net::TcpListener;
 use tokio::sync::RwLock;
 
-use aico_core::{AicoConfig, DiscoveredProject, WorkspaceRegistry};
+use aico_core::{AicoConfig, DiscoveredProject, ProjectStatus, WorkspaceRegistry};
 use crate::auth::LanAuthenticator;
-use crate::git::{GitRepoStatus, GitStatusScanner};
+use crate::git::{
+    collect_project_git_status, git_ai_commit_repo, git_clone_repo, git_commit_repo, git_pull_repo, git_push_repo,
+    GitRepoStatus,
+};
 use crate::ws::WebSocketHub;
+use std::path::{Path as StdPath, PathBuf};
 
 #[derive(Error, Debug)]
 pub enum ServerError {
@@ -68,6 +72,7 @@ pub struct AppState {
     pub terminal_sessions: Arc<crate::terminal::TerminalSessionRegistry>,
     pub quota_service: Arc<crate::quotas::QuotaDiscoveryService>,
     pub bound_port: Arc<std::sync::atomic::AtomicU16>,
+    pub storage: Arc<RwLock<Option<aico_storage::StorageManager>>>,
 }
 
 impl Default for AppState {
@@ -80,6 +85,7 @@ impl Default for AppState {
             terminal_sessions: Arc::new(crate::terminal::TerminalSessionRegistry::default()),
             quota_service: Arc::new(crate::quotas::QuotaDiscoveryService::default()),
             bound_port: Arc::new(std::sync::atomic::AtomicU16::new(4242)),
+            storage: Arc::new(RwLock::new(None)),
         }
     }
 }
@@ -167,8 +173,12 @@ impl HostServer {
             .route("/api/v1/auth/pairing", get(get_pairing_handler))
             // @implements ft-core-assets-manager::TASK-ASSET-009::REQ-013
             .route("/api/v1/config", get(get_config_handler))
-            .route("/api/v1/projects", get(list_projects_handler))
+            // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-4::REQ-004
+            // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-4::REQ-007
+            .route("/api/v1/projects", get(list_projects_handler).post(handle_create_project))
             .route("/api/v1/projects/active", post(set_active_project_handler))
+            // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-5::REQ-006
+            .route("/api/v1/graph", get(handle_get_graph))
             .route("/api/v1/epics", get(list_epics_handler))
             .route("/api/v1/epics/:id", get(get_epic_handler))
             .route("/api/v1/features", get(list_features_handler))
@@ -178,6 +188,21 @@ impl HostServer {
             .route("/api/v1/glossary", get(get_glossary_handler))
             .route("/api/v1/stats", get(get_stats_handler))
             .route("/api/v1/git/status", get(get_git_status_handler))
+            // @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-2::REQ-004
+            .route("/api/v1/git/pull", post(handle_git_pull))
+            // @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-2::REQ-004
+            .route("/api/v1/git/push", post(handle_git_push))
+            // @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-2::REQ-004
+            // @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-2::REQ-008
+            .route("/api/v1/git/commit", post(handle_git_commit))
+            // @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-4::REQ-004
+            .route("/api/v1/git/ai-commit", post(handle_git_ai_commit))
+            // @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-2::REQ-004
+            // @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-2::REQ-006
+            // @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-2::REQ-007
+            .route("/api/v1/git/clone", post(handle_git_clone))
+            // @implements spec-ft-terminal-quotas-gates-and-notifications::TASK-TERMINAL-007-3::REQ-005
+            .route("/api/v1/notifications/popup", post(handle_popup_notification))
             // @implements ft-core-omni-search-fulltext::TASK-CORE-009-7::REQ-010
             .route("/api/v1/code/files", get(list_code_files_handler))
             .route("/api/v1/raw", get(get_raw_file_handler))
@@ -202,6 +227,10 @@ impl HostServer {
             .route("/api/v1/terminal/sessions", get(crate::terminal::terminal_sessions_handler))
             // @implements ft-terminal-ai-quota-monitor::TASK-QUOTA-005::REQ-001
             .route("/api/v1/ai/quotas", get(crate::quotas::get_ai_quotas_handler))
+            // @implements spec-ft-tooling-mcp-streamable-http::TASK-TOOL-004-3::REQ-002
+            // @implements spec-ft-tooling-mcp-streamable-http::TASK-TOOL-004-5::REQ-002
+            // @implements spec-ft-tooling-mcp-streamable-http::TASK-TOOL-004-5::REQ-012
+            .route("/mcp", post(mcp_post_handler).get(mcp_get_handler).options(mcp_options_handler))
             .route("/ws", get(ws_handler))
             .fallback(crate::assets::static_asset_handler)
             .with_state(state)
@@ -284,6 +313,76 @@ async fn get_pairing_handler(
     })
 }
 
+// @implements spec-ft-tooling-mcp-streamable-http::TASK-TOOL-004-3::REQ-002
+// @implements spec-ft-tooling-mcp-streamable-http::TASK-TOOL-004-3::REQ-006
+// @implements spec-ft-tooling-mcp-streamable-http::TASK-TOOL-004-3::REQ-008
+// @implements spec-ft-tooling-mcp-streamable-http::TASK-TOOL-004-5::REQ-012
+async fn mcp_post_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let storage_guard = state.storage.read().await;
+    let storage_ref = storage_guard.as_ref();
+    let res = aico_mcp::protocol::handle_json_rpc(&payload, storage_ref);
+    (
+        StatusCode::OK,
+        [
+            ("access-control-allow-origin", "*"),
+            ("access-control-allow-headers", "content-type, authorization, mcp-session-id"),
+            ("content-type", "application/json"),
+        ],
+        Json(res),
+    )
+}
+
+// @implements spec-ft-tooling-mcp-streamable-http::TASK-TOOL-004-3::REQ-002
+// @implements spec-ft-tooling-mcp-streamable-http::TASK-TOOL-004-3::REQ-007
+// @implements spec-ft-tooling-mcp-streamable-http::TASK-TOOL-004-5::REQ-012
+async fn mcp_get_handler(
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let tools = aico_mcp::McpServerManager::list_tools();
+    let registry = state.registry.read().await;
+    let active_project = registry.get_active().map(|p| p.id.clone()).unwrap_or_else(|| "none".to_string());
+
+    let payload = serde_json::json!({
+        "status": "ok",
+        "transport": "streamable-http",
+        "protocolVersion": "2024-11-05",
+        "server": {
+            "name": "aico",
+            "version": env!("CARGO_PKG_VERSION")
+        },
+        "active_project": active_project,
+        "tools_count": tools.len(),
+        "tools": tools.into_iter().map(|t| t.name).collect::<Vec<_>>()
+    });
+
+    (
+        StatusCode::OK,
+        [
+            ("access-control-allow-origin", "*"),
+            ("access-control-allow-headers", "content-type, authorization, mcp-session-id"),
+            ("content-type", "application/json"),
+        ],
+        Json(payload),
+    )
+}
+
+// @implements spec-ft-tooling-mcp-streamable-http::TASK-TOOL-004-5::REQ-002
+// @implements spec-ft-tooling-mcp-streamable-http::TASK-TOOL-004-5::REQ-012
+async fn mcp_options_handler() -> impl IntoResponse {
+    (
+        StatusCode::OK,
+        [
+            ("access-control-allow-origin", "*"),
+            ("access-control-allow-methods", "GET, POST, OPTIONS"),
+            ("access-control-allow-headers", "content-type, authorization, mcp-session-id"),
+        ],
+        "",
+    )
+}
+
 async fn health_check_handler(
     State(state): State<AppState>,
 ) -> Json<HealthResponse> {
@@ -317,6 +416,12 @@ async fn set_active_project_handler(
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     let mut registry = state.registry.write().await;
     if registry.set_active(&payload.project_id) {
+        if let Some(active) = registry.get_active() {
+            if let Ok(sm) = aico_storage::StorageManager::open(&active.specs_path) {
+                let mut st = state.storage.write().await;
+                *st = Some(sm);
+            }
+        }
         state.ws_hub.broadcast("active_project_changed", &payload.project_id);
         Ok(Json(serde_json::json!({
             "status": "ok",
@@ -1759,28 +1864,21 @@ async fn get_stats_handler(
 }
 
 // @implements ft-git-backend-status::TASK-GIT-001-3::REQ-005
+// @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-1::REQ-001
+// @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-2::REQ-005
 async fn get_git_status_handler(
     State(state): State<AppState>,
 ) -> Json<Vec<GitRepoStatus>> {
     let registry = state.registry.read().await;
     let active_project = registry.get_active().cloned().or_else(|| registry.list_cloned().into_iter().next());
+    drop(registry);
 
-    let repos = if let Some(proj) = active_project {
-        proj.manifest.get_effective_repositories(&proj.specs_path)
+    let results = if let Some(proj) = active_project {
+        collect_project_git_status(&proj.specs_path).await
     } else {
         vec![]
     };
 
-    drop(registry);
-
-    let mut scan_futures = Vec::new();
-    for repo in repos {
-        scan_futures.push(async move {
-            GitStatusScanner::scan_repo(&repo.id, &repo.name, &repo.path, &repo.repo_type, repo.url.as_deref()).await
-        });
-    }
-
-    let results = futures_util::future::join_all(scan_futures).await;
     Json(results)
 }
 
@@ -2097,5 +2195,1062 @@ async fn search_handler(
 
     Json(hits)
 }
+
+// ---------------------------------------------------------------------------
+// PROJECT CREATOR, LINEAGE GRAPH & GIT OPERATIONS ENDPOINTS
+// ---------------------------------------------------------------------------
+
+pub fn get_workspace_root(registry: &WorkspaceRegistry) -> PathBuf {
+    if let Ok(root_env) = std::env::var("AICO_ROOT") {
+        return PathBuf::from(root_env);
+    }
+    if let Some(active) = registry.get_active() {
+        if let Some(parent) = StdPath::new(&active.specs_path).parent() {
+            return parent.to_path_buf();
+        }
+    }
+    if let Some(first) = registry.list_cloned().first() {
+        if let Some(parent) = StdPath::new(&first.specs_path).parent() {
+            return parent.to_path_buf();
+        }
+    }
+    if StdPath::new("d:/aico").exists() {
+        PathBuf::from("d:/aico")
+    } else {
+        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+    }
+}
+
+fn format_rfc3339_utc(secs: u64) -> String {
+    let sec = (secs % 60) as u32;
+    let min = ((secs / 60) % 60) as u32;
+    let hour = ((secs / 3600) % 24) as u32;
+    let mut days = (secs / 86400) as i64;
+
+    let mut year = 1970;
+    loop {
+        let leap = (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+        let days_in_year = if leap { 366 } else { 365 };
+        if days < days_in_year {
+            break;
+        }
+        days -= days_in_year;
+        year += 1;
+    }
+
+    let leap = (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+    let days_in_months = [
+        31, if leap { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
+    ];
+    let mut month = 1;
+    for &dim in &days_in_months {
+        if days < dim {
+            break;
+        }
+        days -= dim;
+        month += 1;
+    }
+    let day = days + 1;
+    format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", year, month, day, hour, min, sec)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateProjectRequest {
+    pub name: String,
+}
+
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-4::REQ-004
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-4::REQ-007
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-2::REQ-010
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-2::REQ-012
+// @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-2::REQ-009
+async fn handle_create_project(
+    State(state): State<AppState>,
+    Json(payload): Json<CreateProjectRequest>,
+) -> impl IntoResponse {
+    let raw = payload.name.trim();
+    let raw_stripped = raw.strip_suffix("-specs").unwrap_or(raw).trim();
+    let slug = raw_stripped.to_lowercase().replace(' ', "-").replace('_', "-");
+
+    if slug.is_empty()
+        || !slug.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+        || slug.starts_with('-')
+        || slug.ends_with('-')
+    {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Invalid project name: must be non-empty lowercase alphanumeric with hyphens"
+            })),
+        ).into_response();
+    }
+
+    let registry = state.registry.read().await;
+    let ws_root = get_workspace_root(&registry);
+    drop(registry);
+
+    let target_specs_dir = ws_root.join(format!("{}-specs", slug));
+    if target_specs_dir.exists() {
+        return (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({
+                "error": format!("Project specifications directory already exists: {}", target_specs_dir.display())
+            })),
+        ).into_response();
+    }
+
+    let subdirs = [".aico", "adr", "epics", "features"];
+    for sub in &subdirs {
+        if let Err(e) = std::fs::create_dir_all(target_specs_dir.join(sub)) {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": format!("Failed to create directory {}: {}", sub, e) })),
+            ).into_response();
+        }
+    }
+
+    let title = slug
+        .split('-')
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                None => String::new(),
+                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let now = format_rfc3339_utc(secs);
+
+    let manifest_json = serde_json::json!({
+        "project_name": slug,
+        "id": format!("{}-specs", slug),
+        "name": format!("{} Specs", title),
+        "url": "",
+        "created_at": now,
+        "repositories": [
+            {
+                "id": slug,
+                "name": format!("{} Codebase", title),
+                "path": format!("../codebase/{}", slug),
+                "url": "",
+                "type": "codebase"
+            }
+        ]
+    });
+    if let Err(e) = std::fs::write(
+        target_specs_dir.join(".aico-project.json"),
+        serde_json::to_string_pretty(&manifest_json).unwrap_or_default(),
+    ) {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": format!("Failed to write .aico-project.json: {}", e) })),
+        ).into_response();
+    }
+
+    let glossary_content = format!(
+        "---\nid: glossary-{slug}\ntype: glossary\naico_skills_version: \"0.1.2\"\ntitle: \"{title} Ubiquitous Domain Glossary\"\nstatus: \"Draft\"\nderives_from: []\ncreated_at: \"{now}\"\n---\n\n# {title} Ubiquitous Domain Glossary\n\n## 1. Core Domain Terms\n"
+    );
+    if let Err(e) = std::fs::write(target_specs_dir.join("glossary.md"), glossary_content) {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": format!("Failed to write glossary.md: {}", e) })),
+        ).into_response();
+    }
+
+    let _ = std::process::Command::new("git")
+        .arg("init")
+        .current_dir(&target_specs_dir)
+        .output();
+
+    let codebase_dir = ws_root.join("codebase").join(&slug);
+    let codebase_path = if codebase_dir.exists() { Some(codebase_dir) } else { None };
+    let proj_status = if codebase_path.is_some() {
+        ProjectStatus::Active
+    } else {
+        ProjectStatus::CodebaseMissing
+    };
+
+    let mut reg = state.registry.write().await;
+    let proj = DiscoveredProject {
+        id: format!("{}-specs", slug),
+        name: format!("{} Specs", title),
+        specs_path: target_specs_dir.clone(),
+        codebase_path,
+        manifest: aico_core::ProjectManifest {
+            name: slug.clone(),
+            version: Some("0.1.0".to_string()),
+            codebase_path: Some(format!("../codebase/{}", slug)),
+            created_at: Some(now),
+            repositories: Some(vec![
+                aico_core::ProjectRepository {
+                    id: slug.clone(),
+                    name: format!("{} Codebase", title),
+                    path: format!("../codebase/{}", slug),
+                    repo_type: "codebase".to_string(),
+                    url: None,
+                }
+            ]),
+        },
+        status: proj_status,
+    };
+    reg.register(proj.clone());
+    reg.set_active(&proj.id);
+    drop(reg);
+
+    state.ws_hub.broadcast("active_project_changed", &proj.id);
+
+    (StatusCode::CREATED, Json(proj)).into_response()
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GraphQuery {
+    pub project: Option<String>,
+    pub epic: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LineageNode {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub node_type: String,
+    pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub epic: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LineageEdge {
+    pub source: String,
+    pub target: String,
+    pub relation: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LineageGraphResponse {
+    pub nodes: Vec<LineageNode>,
+    pub edges: Vec<LineageEdge>,
+}
+
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-4::REQ-005
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-14::REQ-023
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-5::REQ-006
+async fn handle_get_graph(
+    State(state): State<AppState>,
+    Query(query): Query<GraphQuery>,
+) -> impl IntoResponse {
+    let registry = state.registry.read().await;
+    let active_project = if let Some(ref pid) = query.project {
+        registry.list_cloned().into_iter().find(|p| p.id == *pid || p.name == *pid)
+    } else {
+        registry.get_active().cloned().or_else(|| registry.list_cloned().into_iter().next())
+    };
+    drop(registry);
+
+    let proj = match active_project {
+        Some(p) => p,
+        None => return (StatusCode::OK, Json(LineageGraphResponse { nodes: vec![], edges: vec![] })).into_response(),
+    };
+
+    let full_graph = build_specs_lineage_graph(&proj.specs_path);
+
+    // Persist snapshot to <specs_root>/.aico/storage/graph/lineage_graph.json
+    let graph_storage_dir = proj.specs_path.join(".aico").join("storage").join("graph");
+    let _ = std::fs::create_dir_all(&graph_storage_dir);
+    let snapshot_file = graph_storage_dir.join("lineage_graph.json");
+    if let Ok(serialized) = serde_json::to_string_pretty(&full_graph) {
+        let _ = std::fs::write(snapshot_file, serialized);
+    }
+
+    // Optional filtering by epic
+    let epic_filter = query.epic.as_deref().unwrap_or("all");
+    let response_graph = if epic_filter != "all" && !epic_filter.trim().is_empty() {
+        let mut matching_node_ids = std::collections::HashSet::new();
+
+        for node in &full_graph.nodes {
+            if node.id == epic_filter || node.epic.as_deref() == Some(epic_filter) {
+                matching_node_ids.insert(node.id.clone());
+            }
+        }
+
+        // Include connected ADR nodes (outgoing edge into this epic's nodes) and code seam nodes
+        let mut extra_node_ids = std::collections::HashSet::new();
+        for edge in &full_graph.edges {
+            if matching_node_ids.contains(&edge.target) {
+                if let Some(src_node) = full_graph.nodes.iter().find(|n| n.id == edge.source) {
+                    if src_node.node_type == "adr" {
+                        extra_node_ids.insert(edge.source.clone());
+                    }
+                }
+            }
+            if matching_node_ids.contains(&edge.source) {
+                if let Some(tgt_node) = full_graph.nodes.iter().find(|n| n.id == edge.target) {
+                    if tgt_node.node_type == "code" {
+                        extra_node_ids.insert(edge.target.clone());
+                    }
+                }
+            }
+        }
+        matching_node_ids.extend(extra_node_ids);
+
+        let filtered_nodes: Vec<LineageNode> = full_graph
+            .nodes
+            .into_iter()
+            .filter(|n| matching_node_ids.contains(&n.id))
+            .collect();
+
+        let filtered_edges: Vec<LineageEdge> = full_graph
+            .edges
+            .into_iter()
+            .filter(|e| matching_node_ids.contains(&e.source) && matching_node_ids.contains(&e.target))
+            .collect();
+
+        LineageGraphResponse {
+            nodes: filtered_nodes,
+            edges: filtered_edges,
+        }
+    } else {
+        full_graph
+    };
+
+    (StatusCode::OK, Json(response_graph)).into_response()
+}
+
+fn normalize_artifact_id(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.to_ascii_lowercase().starts_with("adr-") {
+        trimmed.to_ascii_uppercase()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn parse_graph_frontmatter(content: &str) -> (std::collections::HashMap<String, String>, Vec<String>) {
+    let mut fields = std::collections::HashMap::new();
+    let mut derives_from = Vec::new();
+
+    if !content.starts_with("---") {
+        return (fields, derives_from);
+    }
+
+    let end_idx = match content[3..].find("---") {
+        Some(idx) => idx + 3,
+        None => return (fields, derives_from),
+    };
+
+    let fm_block = &content[3..end_idx];
+    for line in fm_block.lines() {
+        let line = line.trim();
+        if line.starts_with("derives_from:") {
+            let list_part = line["derives_from:".len()..].trim();
+            if list_part.starts_with('[') && list_part.ends_with(']') {
+                let inner = &list_part[1..list_part.len() - 1];
+                for item in inner.split(',') {
+                    let cleaned = item.trim().trim_matches('"').trim_matches('\'').trim();
+                    if !cleaned.is_empty() {
+                        derives_from.push(normalize_artifact_id(cleaned));
+                    }
+                }
+            }
+        } else if let Some((k, v)) = line.split_once(':') {
+            let key = k.trim().to_string();
+            let val = v.trim().trim_matches('"').trim_matches('\'').to_string();
+            fields.insert(key, val);
+        }
+    }
+
+    (fields, derives_from)
+}
+
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-4::REQ-005
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-14::REQ-023
+fn build_specs_lineage_graph(specs_dir: &StdPath) -> LineageGraphResponse {
+    let mut nodes_map: std::collections::HashMap<String, LineageNode> = std::collections::HashMap::new();
+    let mut edges: Vec<LineageEdge> = Vec::new();
+
+    // 1. ADRs: <specs_dir>/adr/*.md
+    let adr_dir = specs_dir.join("adr");
+    if adr_dir.exists() {
+        if let Ok(entries) = std::fs::read_dir(adr_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) == Some("md") {
+                    if let Ok(content) = std::fs::read_to_string(&path) {
+                        let (fm, derives) = parse_graph_frontmatter(&content);
+                        let file_stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("ADR");
+                        let raw_adr_id = fm.get("id").cloned().unwrap_or_else(|| {
+                            if file_stem.starts_with("000") || file_stem.starts_with("001") {
+                                format!("ADR-{}", &file_stem[..4.min(file_stem.len())])
+                            } else {
+                                file_stem.to_string()
+                            }
+                        });
+                        let adr_id = normalize_artifact_id(&raw_adr_id);
+                        let title = fm.get("title").cloned().unwrap_or_else(|| file_stem.to_string());
+                        let status = fm.get("status").cloned();
+                        let rel_path = path.strip_prefix(specs_dir).map(|p| p.to_string_lossy().replace('\\', "/")).ok();
+
+                        nodes_map.insert(adr_id.clone(), LineageNode {
+                            id: adr_id.clone(),
+                            node_type: "adr".to_string(),
+                            label: format!("{}: {}", adr_id, title),
+                            path: rel_path,
+                            status,
+                            epic: None,
+                        });
+
+                        for d in derives {
+                            edges.push(LineageEdge {
+                                source: d,
+                                target: adr_id.clone(),
+                                relation: "derives_from".to_string(),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Epics: <specs_dir>/epics/ec-*
+    let epics_dir = specs_dir.join("epics");
+    if epics_dir.exists() {
+        if let Ok(epic_entries) = std::fs::read_dir(epics_dir) {
+            for epic_entry in epic_entries.flatten() {
+                let epic_path = epic_entry.path();
+                if epic_path.is_dir() {
+                    let epic_id = epic_path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
+                    if epic_id.starts_with("ec-") {
+                        let rel_path = epic_path.strip_prefix(specs_dir).map(|p| p.to_string_lossy().replace('\\', "/")).ok();
+                        nodes_map.insert(epic_id.clone(), LineageNode {
+                            id: epic_id.clone(),
+                            node_type: "epic".to_string(),
+                            label: format!("Epic {}", epic_id),
+                            path: rel_path,
+                            status: Some("Active".to_string()),
+                            epic: Some(epic_id.clone()),
+                        });
+
+                        if let Ok(files) = std::fs::read_dir(&epic_path) {
+                            for f in files.flatten() {
+                                let fpath = f.path();
+                                let fname = fpath.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                                if fname.starts_with("brain-") && fname.ends_with(".md") {
+                                    if let Ok(content) = std::fs::read_to_string(&fpath) {
+                                        let (fm, derives) = parse_graph_frontmatter(&content);
+                                        let b_id = fm.get("id").cloned().unwrap_or_else(|| fpath.file_stem().unwrap().to_string_lossy().to_string());
+                                        let b_title = fm.get("title").cloned().unwrap_or_else(|| b_id.clone());
+                                        let b_status = fm.get("status").cloned();
+                                        let b_rel = fpath.strip_prefix(specs_dir).map(|p| p.to_string_lossy().replace('\\', "/")).ok();
+
+                                        nodes_map.insert(b_id.clone(), LineageNode {
+                                            id: b_id.clone(),
+                                            node_type: "brainstorm".to_string(),
+                                            label: format!("{}: {}", b_id, b_title),
+                                            path: b_rel,
+                                            status: b_status,
+                                            epic: Some(epic_id.clone()),
+                                        });
+
+                                        edges.push(LineageEdge {
+                                            source: epic_id.clone(),
+                                            target: b_id.clone(),
+                                            relation: "brainstorm".to_string(),
+                                        });
+
+                                        for d in derives {
+                                            if d.starts_with("ADR-") {
+                                                edges.push(LineageEdge {
+                                                    source: d.clone(),
+                                                    target: epic_id.clone(),
+                                                    relation: "governs".to_string(),
+                                                });
+                                            }
+                                            edges.push(LineageEdge {
+                                                source: d,
+                                                target: b_id.clone(),
+                                                relation: "derives_from".to_string(),
+                                            });
+                                        }
+                                    }
+                                } else if fname.starts_with("deepdive-") && fname.ends_with(".md") {
+                                    if let Ok(content) = std::fs::read_to_string(&fpath) {
+                                        let (fm, derives) = parse_graph_frontmatter(&content);
+                                        let dd_id = fm.get("id").cloned().unwrap_or_else(|| fpath.file_stem().unwrap().to_string_lossy().to_string());
+                                        let dd_title = fm.get("title").cloned().unwrap_or_else(|| dd_id.clone());
+                                        let dd_status = fm.get("status").cloned();
+                                        let dd_rel = fpath.strip_prefix(specs_dir).map(|p| p.to_string_lossy().replace('\\', "/")).ok();
+
+                                        nodes_map.insert(dd_id.clone(), LineageNode {
+                                            id: dd_id.clone(),
+                                            node_type: "deepdive".to_string(),
+                                            label: format!("{}: {}", dd_id, dd_title),
+                                            path: dd_rel,
+                                            status: dd_status,
+                                            epic: Some(epic_id.clone()),
+                                        });
+
+                                        edges.push(LineageEdge {
+                                            source: epic_id.clone(),
+                                            target: dd_id.clone(),
+                                            relation: "deepdive".to_string(),
+                                        });
+
+                                        for d in derives {
+                                            if d.starts_with("ADR-") {
+                                                edges.push(LineageEdge {
+                                                    source: d.clone(),
+                                                    target: epic_id.clone(),
+                                                    relation: "governs".to_string(),
+                                                });
+                                            }
+                                            edges.push(LineageEdge {
+                                                source: d,
+                                                target: dd_id.clone(),
+                                                relation: "derives_from".to_string(),
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        let feats_dir = epic_path.join("features");
+                        if feats_dir.exists() {
+                            scan_features_for_graph(&feats_dir, Some(&epic_id), specs_dir, &mut nodes_map, &mut edges);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. Standalone features: <specs_dir>/features/ft-*
+    let standalone_feats = specs_dir.join("features");
+    if standalone_feats.exists() {
+        scan_features_for_graph(&standalone_feats, None, specs_dir, &mut nodes_map, &mut edges);
+    }
+
+    // Deduplicate edges while preserving insertion order
+    let mut seen_edges = std::collections::HashSet::new();
+    let dedup_edges: Vec<LineageEdge> = edges
+        .into_iter()
+        .filter(|e| seen_edges.insert((e.source.clone(), e.target.clone(), e.relation.clone())))
+        .collect();
+
+    let mut nodes: Vec<LineageNode> = nodes_map.into_values().collect();
+    nodes.sort_by(|a, b| a.id.cmp(&b.id));
+
+    LineageGraphResponse {
+        nodes,
+        edges: dedup_edges,
+    }
+}
+
+fn scan_features_for_graph(
+    features_dir: &StdPath,
+    epic_id: Option<&str>,
+    specs_dir: &StdPath,
+    nodes_map: &mut std::collections::HashMap<String, LineageNode>,
+    edges: &mut Vec<LineageEdge>,
+) {
+    let entries = match std::fs::read_dir(features_dir) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+
+    for entry in entries.flatten() {
+        let feat_path = entry.path();
+        if !feat_path.is_dir() {
+            continue;
+        }
+        let feat_id = match feat_path.file_name().and_then(|n| n.to_str()) {
+            Some(name) if name.starts_with("ft-") => name.to_string(),
+            _ => continue,
+        };
+
+        let feat_rel = feat_path.strip_prefix(specs_dir).map(|p| p.to_string_lossy().replace('\\', "/")).ok();
+        nodes_map.insert(feat_id.clone(), LineageNode {
+            id: feat_id.clone(),
+            node_type: "feature".to_string(),
+            label: format!("Feature {}", feat_id),
+            path: feat_rel,
+            status: Some("Active".to_string()),
+            epic: epic_id.map(|s| s.to_string()),
+        });
+
+        if let Some(eid) = epic_id {
+            edges.push(LineageEdge {
+                source: eid.to_string(),
+                target: feat_id.clone(),
+                relation: "contains".to_string(),
+            });
+        }
+
+        let mut spec_id_opt: Option<String> = None;
+        let mut plan_id_opt: Option<String> = None;
+
+        if let Ok(files) = std::fs::read_dir(&feat_path) {
+            let mut file_paths: Vec<PathBuf> = files.flatten().map(|f| f.path()).collect();
+            // Process spec-*.md before plan-*.md so spec_id_opt is populated when resolving task Addresses
+            file_paths.sort_by(|a, b| {
+                let a_name = a.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                let b_name = b.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                let a_is_spec = a_name.starts_with("spec-");
+                let b_is_spec = b_name.starts_with("spec-");
+                b_is_spec.cmp(&a_is_spec).then_with(|| a_name.cmp(b_name))
+            });
+
+            for fpath in file_paths {
+                let fname = fpath.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                if fname.starts_with("spec-") && fname.ends_with(".md") {
+                    if let Ok(content) = std::fs::read_to_string(&fpath) {
+                        let (fm, derives) = parse_graph_frontmatter(&content);
+                        let s_id = fm.get("id").cloned().unwrap_or_else(|| fpath.file_stem().unwrap().to_string_lossy().to_string());
+                        let s_title = fm.get("title").cloned().unwrap_or_else(|| s_id.clone());
+                        let s_status = fm.get("status").cloned();
+                        let s_rel = fpath.strip_prefix(specs_dir).map(|p| p.to_string_lossy().replace('\\', "/")).ok();
+
+                        nodes_map.insert(s_id.clone(), LineageNode {
+                            id: s_id.clone(),
+                            node_type: "spec".to_string(),
+                            label: format!("{}: {}", s_id, s_title),
+                            path: s_rel,
+                            status: s_status,
+                            epic: epic_id.map(|s| s.to_string()),
+                        });
+
+                        edges.push(LineageEdge {
+                            source: feat_id.clone(),
+                            target: s_id.clone(),
+                            relation: "specifies".to_string(),
+                        });
+
+                        for d in derives {
+                            if d.starts_with("ADR-") {
+                                if let Some(eid) = epic_id {
+                                    edges.push(LineageEdge {
+                                        source: d.clone(),
+                                        target: eid.to_string(),
+                                        relation: "governs".to_string(),
+                                    });
+                                }
+                            }
+                            edges.push(LineageEdge {
+                                source: d,
+                                target: s_id.clone(),
+                                relation: "derives_from".to_string(),
+                            });
+                        }
+
+                        for line in content.lines() {
+                            let line = line.trim();
+                            if let Some(pos) = line.find("REQ-") {
+                                let rem = &line[pos..];
+                                let req_code: String = rem.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '-').collect();
+                                if req_code.starts_with("REQ-") && req_code.len() >= 5 {
+                                    let req_node_id = format!("{}::{}", s_id, req_code);
+                                    nodes_map.entry(req_node_id.clone()).or_insert_with(|| LineageNode {
+                                        id: req_node_id.clone(),
+                                        node_type: "requirement".to_string(),
+                                        label: req_code.clone(),
+                                        path: None,
+                                        status: None,
+                                        epic: epic_id.map(|s| s.to_string()),
+                                    });
+                                    edges.push(LineageEdge {
+                                        source: s_id.clone(),
+                                        target: req_node_id.clone(),
+                                        relation: "specifies".to_string(),
+                                    });
+                                    // REQ-020: Direct Feature -> Requirement edge
+                                    edges.push(LineageEdge {
+                                        source: feat_id.clone(),
+                                        target: req_node_id,
+                                        relation: "specifies".to_string(),
+                                    });
+                                }
+                            }
+                        }
+
+                        spec_id_opt = Some(s_id);
+                    }
+                } else if fname.starts_with("plan-") && fname.ends_with(".md") {
+                    if let Ok(content) = std::fs::read_to_string(&fpath) {
+                        let (fm, derives) = parse_graph_frontmatter(&content);
+                        let p_id = fm.get("id").cloned().unwrap_or_else(|| fpath.file_stem().unwrap().to_string_lossy().to_string());
+                        let p_title = fm.get("title").cloned().unwrap_or_else(|| p_id.clone());
+                        let p_status = fm.get("status").cloned();
+                        let p_rel = fpath.strip_prefix(specs_dir).map(|p| p.to_string_lossy().replace('\\', "/")).ok();
+
+                        nodes_map.insert(p_id.clone(), LineageNode {
+                            id: p_id.clone(),
+                            node_type: "plan".to_string(),
+                            label: format!("{}: {}", p_id, p_title),
+                            path: p_rel,
+                            status: p_status,
+                            epic: epic_id.map(|s| s.to_string()),
+                        });
+
+                        edges.push(LineageEdge {
+                            source: feat_id.clone(),
+                            target: p_id.clone(),
+                            relation: "contains".to_string(),
+                        });
+
+                        for d in derives {
+                            if d.starts_with("ADR-") {
+                                if let Some(eid) = epic_id {
+                                    edges.push(LineageEdge {
+                                        source: d.clone(),
+                                        target: eid.to_string(),
+                                        relation: "governs".to_string(),
+                                    });
+                                }
+                            }
+                            edges.push(LineageEdge {
+                                source: d,
+                                target: p_id.clone(),
+                                relation: "derives_from".to_string(),
+                            });
+                        }
+
+                        let mut current_task_id: Option<String> = None;
+                        for line in content.lines() {
+                            let line = line.trim();
+                            // REQ-023: Strict task declaration parsing (starts with - **TASK-, * **TASK-, ### TASK-, or **TASK-)
+                            let is_task_decl = (line.starts_with("- **TASK-")
+                                || line.starts_with("* **TASK-")
+                                || line.starts_with("### TASK-")
+                                || line.starts_with("**TASK-"))
+                                && line.contains("TASK-");
+                            if is_task_decl {
+                                if let Some(pos) = line.find("TASK-") {
+                                    let rem = &line[pos..];
+                                    let task_code: String = rem.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '-').collect();
+                                    if task_code.starts_with("TASK-") && task_code.len() >= 6 {
+                                        current_task_id = Some(task_code.clone());
+                                        nodes_map.entry(task_code.clone()).or_insert_with(|| LineageNode {
+                                            id: task_code.clone(),
+                                            node_type: "task".to_string(),
+                                            label: task_code.clone(),
+                                            path: None,
+                                            status: None,
+                                            epic: epic_id.map(|s| s.to_string()),
+                                        });
+                                        edges.push(LineageEdge {
+                                            source: p_id.clone(),
+                                            target: task_code.clone(),
+                                            relation: "contains".to_string(),
+                                        });
+                                        // REQ-020: Direct Feature -> Task edge
+                                        edges.push(LineageEdge {
+                                            source: feat_id.clone(),
+                                            target: task_code,
+                                            relation: "contains".to_string(),
+                                        });
+                                    }
+                                }
+                            } else if let Some(ref tid) = current_task_id {
+                                if line.contains("Addresses") && line.contains("REQ-") {
+                                    for word in line.split(&[' ', ',', '`', '"', '[', ']', '*'][..]) {
+                                        let w = word.trim();
+                                        if w.starts_with("REQ-") {
+                                            let target_req = if let Some(ref sid) = spec_id_opt {
+                                                format!("{}::{}", sid, w)
+                                            } else {
+                                                w.to_string()
+                                            };
+                                            edges.push(LineageEdge {
+                                                source: tid.clone(),
+                                                target: target_req,
+                                                relation: "addresses".to_string(),
+                                            });
+                                        }
+                                    }
+                                } else if line.contains("Verification Seam") {
+                                    if let Some((_, seam)) = line.split_once(':') {
+                                        let seam_clean = seam
+                                            .trim()
+                                            .trim_start_matches('*')
+                                            .trim()
+                                            .trim_matches('`')
+                                            .trim();
+                                        if !seam_clean.is_empty() {
+                                            let code_id = format!("code:{}", seam_clean);
+                                            nodes_map.entry(code_id.clone()).or_insert_with(|| LineageNode {
+                                                id: code_id.clone(),
+                                                node_type: "code".to_string(),
+                                                label: seam_clean.to_string(),
+                                                path: Some(seam_clean.to_string()),
+                                                status: None,
+                                                epic: epic_id.map(|s| s.to_string()),
+                                            });
+                                            edges.push(LineageEdge {
+                                                source: tid.clone(),
+                                                target: code_id.clone(),
+                                                relation: "verifies".to_string(),
+                                            });
+                                            // Also emit rolled-up Plan -> Code edge for clean lineage view
+                                            edges.push(LineageEdge {
+                                                source: p_id.clone(),
+                                                target: code_id.clone(),
+                                                relation: "verifies".to_string(),
+                                            });
+                                            // REQ-020: Direct Feature -> Code edge
+                                            edges.push(LineageEdge {
+                                                source: feat_id.clone(),
+                                                target: code_id,
+                                                relation: "verifies".to_string(),
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        plan_id_opt = Some(p_id);
+                    }
+                }
+            }
+        }
+
+        if let (Some(sid), Some(pid)) = (spec_id_opt, plan_id_opt) {
+            edges.push(LineageEdge {
+                source: sid,
+                target: pid,
+                relation: "derives_from".to_string(),
+            });
+        }
+    }
+}
+
+async fn resolve_repo_dir(state: &AppState, repo_id: Option<&str>, path: Option<&str>) -> Result<PathBuf, String> {
+    if let Some(p) = path {
+        if !p.trim().is_empty() {
+            let path_buf = PathBuf::from(p);
+            if path_buf.exists() {
+                return Ok(path_buf);
+            }
+        }
+    }
+
+    let registry = state.registry.read().await;
+    let active = registry.get_active().cloned().or_else(|| registry.list_cloned().into_iter().next());
+    drop(registry);
+
+    let proj = active.ok_or_else(|| "No active project registered".to_string())?;
+
+    if let Some(rid) = repo_id {
+        if rid == proj.id || rid == format!("{}-specs", proj.manifest.name) {
+            return Ok(proj.specs_path);
+        }
+
+        let effective = proj.manifest.get_effective_repositories(&proj.specs_path);
+        for r in effective {
+            if r.id == rid {
+                return Ok(PathBuf::from(r.path));
+            }
+        }
+        return Err(format!("Repository '{}' not found in active project", rid));
+    }
+
+    Ok(proj.specs_path)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GitActionRequest {
+    pub repo_id: Option<String>,
+    pub path: Option<String>,
+}
+
+// @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-2::REQ-004
+async fn handle_git_pull(
+    State(state): State<AppState>,
+    Json(payload): Json<GitActionRequest>,
+) -> impl IntoResponse {
+    let repo_dir = match resolve_repo_dir(&state, payload.repo_id.as_deref(), payload.path.as_deref()).await {
+        Ok(dir) => dir,
+        Err(err) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": err }))).into_response(),
+    };
+
+    match git_pull_repo(&repo_dir) {
+        Ok(msg) => (StatusCode::OK, Json(serde_json::json!({ "status": "ok", "message": msg }))).into_response(),
+        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": err }))).into_response(),
+    }
+}
+
+// @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-2::REQ-004
+async fn handle_git_push(
+    State(state): State<AppState>,
+    Json(payload): Json<GitActionRequest>,
+) -> impl IntoResponse {
+    let repo_dir = match resolve_repo_dir(&state, payload.repo_id.as_deref(), payload.path.as_deref()).await {
+        Ok(dir) => dir,
+        Err(err) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": err }))).into_response(),
+    };
+
+    match git_push_repo(&repo_dir) {
+        Ok(msg) => (StatusCode::OK, Json(serde_json::json!({ "status": "ok", "message": msg }))).into_response(),
+        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": err }))).into_response(),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GitCommitRequest {
+    pub repo_id: Option<String>,
+    pub path: Option<String>,
+    #[serde(default)]
+    pub message: String,
+}
+
+// @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-2::REQ-004
+// @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-2::REQ-008
+async fn handle_git_commit(
+    State(state): State<AppState>,
+    Json(payload): Json<GitCommitRequest>,
+) -> impl IntoResponse {
+    let trimmed = payload.message.trim();
+    if trimmed.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "Commit message cannot be empty (REQ-008)" })),
+        ).into_response();
+    }
+
+    let repo_dir = match resolve_repo_dir(&state, payload.repo_id.as_deref(), payload.path.as_deref()).await {
+        Ok(dir) => dir,
+        Err(err) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": err }))).into_response(),
+    };
+
+    match git_commit_repo(&repo_dir, trimmed) {
+        Ok(msg) => (StatusCode::OK, Json(serde_json::json!({ "status": "ok", "message": msg }))).into_response(),
+        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": err }))).into_response(),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GitAiCommitRequest {
+    #[serde(default)]
+    pub project: Option<String>,
+    #[serde(default)]
+    pub repo_id: Option<String>,
+    #[serde(default)]
+    pub path: Option<String>,
+}
+
+// @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-4::REQ-004
+async fn handle_git_ai_commit(
+    State(state): State<AppState>,
+    Json(payload): Json<GitAiCommitRequest>,
+) -> impl IntoResponse {
+    let repo_dir = match resolve_repo_dir(&state, payload.repo_id.as_deref(), payload.path.as_deref()).await {
+        Ok(dir) => dir,
+        Err(err) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": err }))).into_response(),
+    };
+
+    match git_ai_commit_repo(&repo_dir) {
+        Ok(msg) => (StatusCode::OK, Json(serde_json::json!({ "status": "ok", "message": msg }))).into_response(),
+        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": err }))).into_response(),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GitCloneRequest {
+    pub repo_id: String,
+    pub url: String,
+    #[serde(rename = "type", default)]
+    pub repo_type: Option<String>,
+    #[serde(default)]
+    pub workspace_root: Option<String>,
+}
+
+// @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-2::REQ-004
+// @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-2::REQ-006
+// @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-2::REQ-007
+async fn handle_git_clone(
+    State(state): State<AppState>,
+    Json(payload): Json<GitCloneRequest>,
+) -> impl IntoResponse {
+    let registry = state.registry.read().await;
+    let ws_root = match payload.workspace_root {
+        Some(ref r) if !r.trim().is_empty() => PathBuf::from(r),
+        _ => get_workspace_root(&registry),
+    };
+    drop(registry);
+
+    let repo_type = payload.repo_type.as_deref().unwrap_or("codebase");
+    match git_clone_repo(&ws_root, &payload.repo_id, &payload.url, repo_type) {
+        Ok(target) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "status": "ok",
+                "target_dir": target.to_string_lossy().to_string(),
+            })),
+        ).into_response(),
+        Err(err) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": err })),
+        ).into_response(),
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct PopupNotificationRequest {
+    pub title: String,
+    pub message: String,
+    #[serde(default)]
+    pub status: Option<String>,
+}
+
+// @implements spec-ft-terminal-quotas-gates-and-notifications::TASK-TERMINAL-007-3::REQ-005
+async fn handle_popup_notification(
+    Json(payload): Json<PopupNotificationRequest>,
+) -> impl IntoResponse {
+    #[cfg(target_os = "windows")]
+    {
+        if std::env::var("AICO_DISABLE_OS_POPUP").unwrap_or_default() != "1" {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            let safe_title = payload.title.replace('"', "`\"");
+            let safe_message = payload.message.replace('"', "`\"");
+            let script = format!(
+                "[void] [System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms'); \
+                 $notify = New-Object System.Windows.Forms.NotifyIcon; \
+                 $notify.Icon = [System.Drawing.SystemIcons]::Information; \
+                 $notify.BalloonTipTitle = \"{}\"; \
+                 $notify.BalloonTipText = \"{}\"; \
+                 $notify.Visible = $True; \
+                 $notify.ShowBalloonTip(5000); \
+                 Start-Sleep -Seconds 6; \
+                 $notify.Dispose()",
+                safe_title, safe_message
+            );
+            let _ = std::process::Command::new("powershell")
+                .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+                .creation_flags(CREATE_NO_WINDOW)
+                .spawn();
+        }
+    }
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "status": "sent",
+            "title": payload.title,
+            "message": payload.message,
+        })),
+    )
+}
+
 
 

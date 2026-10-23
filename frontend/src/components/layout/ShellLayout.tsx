@@ -446,9 +446,9 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
   const renderNavContent = () => (
     <div className="flex flex-col h-full bg-zinc-900 border-r border-zinc-800 text-zinc-300 select-none">
       {/* Sidebar Header */}
+      {/* @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-1::REQ-001 */}
       <div className="flex items-center justify-between p-3.5 border-b border-zinc-800 bg-zinc-950/40">
         <div className="flex items-center gap-2 font-bold text-zinc-100 text-xs tracking-wide">
-          <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-pulse" />
           <span>AICO WORKSPACE</span>
         </div>
         {/* @implements ft-core-ui-visual-consistency::TASK-CORE-010-5::REQ-001 */}

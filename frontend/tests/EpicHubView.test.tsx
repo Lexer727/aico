@@ -2,12 +2,20 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 import { EpicHubView } from '../src/features/epic-hub/EpicHubView';
+import { VisualLineageCanvas } from '../src/features/epic-hub/VisualLineageCanvas';
 import { useAccordionStore } from '../src/stores/useAccordionStore';
 
 // @verifies ft-core-epic-hub::TASK-CORE-007-12::REQ-001
 // @verifies ft-core-epic-hub::TASK-CORE-007-10::REQ-002
 // @verifies ft-core-epic-hub::TASK-CORE-007-11::REQ-005
 // @verifies ft-core-epic-hub::TASK-CORE-007-4::REQ-011
+// @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-1::REQ-001
+// @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-1::REQ-002
+// @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-1::REQ-003
+// @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-1::REQ-007
+// @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-1::REQ-008
+// @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-5::REQ-006
+// @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-5::REQ-011
 describe('EpicHubView Component', () => {
   beforeEach(() => {
     useAccordionStore.setState({ collapsedByEntity: {} });
@@ -83,6 +91,37 @@ describe('EpicHubView Component', () => {
     expect(collapsedHandleProgress).toBeInTheDocument();
     expect(collapsedHandleProgress).toHaveTextContent('1/2');
     expect(collapsedHandleProgress).toHaveTextContent('Done (50%)');
+  });
+
+  // @verifies spec-ft-core-webui-shell::TASK-CORE-006-35::REQ-024
+  it('counts Rewritten and Completed tasks as done in child feature task sub-views and resolves blockers', () => {
+    const epicWithFeatures = {
+      ...mockEpic,
+      features: [
+        {
+          id: 'ft-core-mcp-tools',
+          name: 'Deterministic MCP Tool Gates & Code Annotations',
+          tasks: [
+            { id: 'TASK-CORE-005-1', title: 'Task 1', status: 'Done' },
+            { id: 'TASK-CORE-005-2', title: 'Task 2', status: 'Done' },
+            { id: 'TASK-CORE-005-3', title: 'Task 3', status: 'Rewritten' },
+            { id: 'TASK-CORE-005-4', title: 'Task 4', status: 'Done', blocked_by: ['TASK-CORE-005-3'] },
+          ],
+        },
+      ],
+    };
+
+    render(<EpicHubView epic={epicWithFeatures} />);
+
+    // Child feature header progress should show 4/4 Done (100%)
+    expect(screen.getByText('4/4 Done (100%)')).toBeInTheDocument();
+
+    // Check Rewritten status badge has emerald styling
+    const rewrittenBadge = screen.getByText('Rewritten');
+    expect(rewrittenBadge).toHaveClass('bg-emerald-950');
+
+    // Dependent task blocked_by TASK-CORE-005-3 should show resolved (Done)
+    expect(screen.getByText(/TASK-CORE-005-3 \(Done\)/)).toBeInTheDocument();
   });
 
   // @verifies ft-core-assets-manager::TASK-ASSET-008::REQ-011
@@ -200,5 +239,83 @@ describe('EpicHubView Component', () => {
     expect(fileLink).toBeInTheDocument();
     fireEvent.click(fileLink);
     expect(handleSelectCode).toHaveBeenCalledWith('crates/aico-server/src/server.rs');
+  });
+
+  // @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-5::REQ-006
+  // @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-5::REQ-011
+  // @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-9::REQ-017
+  // @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-9::REQ-018
+  it('renders 6-column Epic lineage graph with SVG edges and expands feature tasks on drilldown', () => {
+    const nodes = [
+      { id: 'ADR-0004', type: 'adr', label: 'ADR-0004: React Frontend' },
+      { id: 'ec-core', type: 'epic', label: 'Epic ec-core' },
+      { id: 'ft-core-1', type: 'feature', label: 'Feature ft-core-1' },
+      { id: 'spec-ft-core-1', type: 'spec', label: 'spec-ft-core-1: Spec' },
+      { id: 'plan-ft-core-1', type: 'plan', label: 'plan-ft-core-1: Plan' },
+      { id: 'TASK-CORE-001', type: 'task', label: 'TASK-CORE-001' },
+      { id: 'code:server.rs', type: 'code', label: 'server.rs' },
+    ];
+    const edges = [
+      { id: 'e1', source: 'ADR-0004', target: 'ec-core' },
+      { id: 'e2', source: 'ec-core', target: 'ft-core-1' },
+      { id: 'e3', source: 'ft-core-1', target: 'spec-ft-core-1' },
+      { id: 'e4', source: 'spec-ft-core-1', target: 'plan-ft-core-1' },
+      { id: 'e5', source: 'plan-ft-core-1', target: 'code:server.rs' },
+      { id: 'e6', source: 'plan-ft-core-1', target: 'TASK-CORE-001' },
+    ];
+
+    render(<VisualLineageCanvas nodes={nodes} edges={edges} />);
+
+    expect(screen.getByText('ADR-0004: React Frontend')).toBeInTheDocument();
+    expect(screen.getByTestId('node-Feature ft-core-1')).toBeInTheDocument();
+    expect(screen.queryByText('TASK-CORE-001')).toBeNull();
+
+    // Click feature node to trigger drilldown
+    const featNode = screen.getByTestId('node-Feature ft-core-1');
+    fireEvent.click(featNode);
+    expect(screen.getByText('TASK-CORE-001')).toBeInTheDocument();
+  });
+
+  // @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-6::REQ-013
+  it('persists manual feature collapse state in useAccordionStore across remounts and resets on resetEntity', () => {
+    const epicWithFeatures = {
+      ...mockEpic,
+      features: [
+        {
+          id: 'ft-core-1',
+          name: 'Feature 1',
+          status: 'Completed',
+          tasks: [
+            { id: 'TASK-1', title: 'Task 1', status: 'Done' },
+          ],
+        },
+      ],
+    };
+
+    // 1. First render: completed feature starts collapsed
+    const { unmount } = render(<EpicHubView epic={epicWithFeatures} />);
+    const taskList = screen.getByTestId('feature-task-list-ft-core-1');
+    expect(taskList).toHaveClass('hidden');
+
+    // 2. User expands the completed feature
+    const header = screen.getByTestId('feature-header-ft-core-1');
+    fireEvent.click(header);
+    expect(taskList).not.toHaveClass('hidden');
+
+    // 3. User switches tabs (unmounting EpicHubView) and returns (remounting EpicHubView)
+    unmount();
+    render(<EpicHubView epic={epicWithFeatures} />);
+
+    // REQ-013: The feature must remain expanded across remounts!
+    const remountedTaskList = screen.getByTestId('feature-task-list-ft-core-1');
+    expect(remountedTaskList).not.toHaveClass('hidden');
+
+    // 4. Tab is closed -> resetEntity is invoked
+    useAccordionStore.getState().resetEntity('001-aico-core');
+
+    // 5. Epic is reopened later -> resets to default (completed features collapsed)
+    render(<EpicHubView epic={epicWithFeatures} />);
+    const resetTaskList = screen.getAllByTestId('feature-task-list-ft-core-1')[0];
+    expect(resetTaskList).toHaveClass('hidden');
   });
 });

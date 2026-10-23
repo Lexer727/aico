@@ -326,3 +326,84 @@ fn test_parse_language_server_quota_summary_extracts_distinct_gemini_buckets_and
     assert_eq!(claude_status.five_hour_remaining_pct, 65);
 }
 
+// @verifies ft-terminal-ai-quota-monitor::TASK-QUOTA-009::REQ-012
+#[test]
+fn test_parse_language_server_quota_summary_parses_argon_weekly_bucket() {
+    let summary_json = serde_json::json!({
+        "response": {
+            "groups": [
+                {
+                    "displayName": "Claude and GPT models",
+                    "buckets": [
+                        {
+                            "bucketId": "3p-weekly",
+                            "window": "weekly",
+                            "remainingFraction": 1.0,
+                            "resetTime": "2026-10-29T22:22:31Z"
+                        }
+                    ]
+                },
+                {
+                    "displayName": "Gemini 4 Argon",
+                    "buckets": [
+                        {
+                            "bucketId": "gemini-argon-wtu-weekly",
+                            "displayName": "Gemini 4 Argon Weekly Limit",
+                            "window": "weekly",
+                            "remainingFraction": 0.803,
+                            "resetTime": "2099-01-03T12:00:00Z"
+                        }
+                    ]
+                }
+            ]
+        }
+    });
+
+    let summary = parse_language_server_quota_summary(&summary_json)
+        .expect("Gemini Argon bucket should be parsed");
+    let gemini = summary.iter().find(|p| p.id == "gemini").unwrap();
+    assert_eq!(gemini.id, "gemini");
+    assert_eq!(gemini.weekly_remaining_pct, 100);
+
+    let argon = summary.iter().find(|p| p.id == "argon").unwrap();
+    assert_eq!(argon.id, "argon");
+    assert_eq!(argon.weekly_remaining_pct, 80);
+    assert_eq!(argon.five_hour, None);
+}
+
+// @verifies ft-terminal-ai-quota-monitor::TASK-QUOTA-009::REQ-012
+#[tokio::test]
+async fn test_standalone_language_server_probe_discovers_gemini_quotas_and_account() {
+    let ls_bin = QuotaDiscoveryService::resolve_language_server_binary();
+    if ls_bin.is_none() {
+        eprintln!("Skipping test_standalone_language_server_probe: language_server binary not found");
+        return;
+    }
+
+    let discovery = QuotaDiscoveryService::default();
+    let (account, providers) = discovery.discover().await;
+
+    // Must discover account email and tier
+    let account = account.expect("Expected account info from language server probe");
+    assert!(!account.email.is_empty(), "Account email must not be empty");
+    assert!(
+        account.email.contains('@'),
+        "Account email should contain @ domain: {}",
+        account.email
+    );
+
+    // Must discover connected Gemini provider
+    let gemini = providers
+        .iter()
+        .find(|p| p.id == "gemini")
+        .expect("Gemini provider must be discovered");
+    assert!(gemini.connected);
+    assert_eq!(gemini.cli, "agy");
+    assert_eq!(gemini.name, "Gemini");
+    assert!(gemini.weekly_remaining_pct <= 100);
+    assert!(gemini.five_hour_remaining_pct <= 100);
+    assert!(!gemini.weekly_reset.is_empty());
+    assert!(!gemini.five_hour_reset.is_empty());
+}
+
+

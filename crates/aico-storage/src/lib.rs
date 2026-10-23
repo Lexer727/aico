@@ -11,7 +11,7 @@ pub mod hybrid;
 
 pub use error::StorageError;
 pub use vector::{LanceVectorStore, VectorRecord, VectorQueryResult};
-pub use graph::KuzuGraphStore;
+pub use graph::{KuzuGraphStore, GraphNode, GraphEdge, GraphSnapshot};
 pub use manager::StorageManager;
 pub use schema::{SchemaMigrator, GraphNodeType, GraphRelationType};
 pub use asset::{AssetIngestionService, StoredAsset};

@@ -101,6 +101,7 @@ fn test_skills_synchronizer_updates_skills_rules_and_prunes_stale_entries() {
     )
     .unwrap();
     fs::write(submodule_skills.join("plugin.json"), "{\n  \"name\": \"aico-skills\",\n  \"version\": \"0.1.2\"\n}").unwrap();
+    fs::write(submodule_skills.join("mcp_config.json"), "{\n  \"mcpServers\": {\n    \"aico\": {\n      \"url\": \"http://localhost:4242/mcp\"\n    }\n  }\n}").unwrap();
     fs::write(submodule_skills.join("README.md"), "# Skills Catalog").unwrap();
     fs::write(source_scripts.join("get-version.mjs"), "export default '0.1.2';").unwrap();
     fs::write(source_rules.join("GEMINI.md"), "# Canonical 4-Phase GEMINI Rules").unwrap();
@@ -146,6 +147,15 @@ fn test_skills_synchronizer_updates_skills_rules_and_prunes_stale_entries() {
     assert_eq!(
         fs::read_to_string(agents_skills.join("scripts").join("get-version.mjs")).unwrap(),
         "export default '0.1.2';"
+    );
+    // @verifies spec-ft-tooling-mcp-streamable-http::TASK-TOOL-004-6::REQ-014
+    assert!(
+        temp_root.join(".agents").join("mcp_config.json").is_file(),
+        "Workspace root .agents/mcp_config.json should be created"
+    );
+    assert!(
+        agents_skills.join("mcp_config.json").is_file(),
+        "Plugin level .agents/skills/mcp_config.json should be created"
     );
 
     // Verify stale entries pruned

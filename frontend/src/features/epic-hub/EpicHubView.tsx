@@ -25,6 +25,7 @@ import {
   type FeatureTask,
   type TermInfo,
   type DiscoveredAdr,
+  isTaskDone,
 } from '../feature-task-data';
 
 export interface EpicData {
@@ -74,7 +75,7 @@ interface EpicHubViewProps {
   onOpenAdr?: (adrId: string) => void;
   onPopOut?: (epicId: string, section: string) => void;
   onOpenSpec?: (specId: string, title: string) => void;
-  onOpenFeature?: (featureId: string, name: string) => void;
+  onOpenFeature?: (featureId: string, name?: string) => void;
   onOpenAsset?: (asset: DiscoveredAssetInfo) => void;
   uploadedFiles?: string[];
   onFileUpload?: (file: File) => void;
@@ -212,7 +213,7 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
   // Compute overall task plan progress across all features in this epic
   const allTasks: FeatureTask[] = currentFeaturesList.flatMap((f) => f.tasks || []);
   const totalTasks = allTasks.length;
-  const doneTasks = allTasks.filter((t) => t.status === 'Done' || t.status === 'Completed').length;
+  const doneTasks = allTasks.filter((t) => isTaskDone(t)).length;
   const overallPercentage = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 100;
 
   // Dynamic epic status calculation: if all features and tasks are finished, status rolls up to Completed
@@ -221,7 +222,7 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
     currentFeaturesList.every((f) => {
       const featDone = f.status === 'Completed' || f.status === 'Done';
       const tasks = f.tasks || [];
-      const tasksDone = tasks.length > 0 && tasks.every((t) => t.status === 'Done' || t.status === 'Completed');
+      const tasksDone = tasks.length > 0 && tasks.every((t) => isTaskDone(t));
       return featDone || tasksDone;
     });
   const isAllTasksDone = allTasks.length > 0 && doneTasks === allTasks.length;
@@ -787,12 +788,27 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
           {!collapsedSections.taskPlan && (
             <div className="p-4 text-xs text-zinc-300 border-t border-zinc-800/80 bg-zinc-950/30 space-y-4">
               {/* Sequential Feature Groups with Dedicated Task DAGs */}
+              {/* @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-2::REQ-002 */}
+              {/* @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-2::REQ-005 */}
+              {/* @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-2::REQ-008 */}
               <div className="space-y-4 max-h-[700px] overflow-y-auto pr-1">
                 {currentFeaturesList.map((feat) => {
                   const featTasks = feat.tasks || [];
                   const featTotal = featTasks.length;
-                  const featDone = featTasks.filter((t) => t.status === 'Done').length;
+                  // @implements spec-ft-core-webui-shell::TASK-CORE-006-34::REQ-024
+                  const featDone = featTasks.filter((t) => isTaskDone(t)).length;
                   const featPct = featTotal > 0 ? Math.round((featDone / featTotal) * 100) : 100;
+                  const is100Pct = (featTotal > 0 && featPct === 100) || feat.status === 'Completed' || feat.status === 'Done';
+                  const sectionKey = `feat-${feat.id}`;
+                  // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-6::REQ-013
+                  const isCollapsed =
+                    entityCollapsed && entityCollapsed[sectionKey] !== undefined
+                      ? entityCollapsed[sectionKey]
+                      : is100Pct;
+
+                  const toggleFeatureCollapse = () => {
+                    toggleSectionInStore(epic.id, sectionKey, is100Pct);
+                  };
 
                   return (
                     <div
@@ -801,11 +817,34 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
                     >
                       {/* Feature Task Header & Progress Bar */}
                       <div className="space-y-1.5">
-                        <div className="flex items-center justify-between gap-2">
+                        <div
+                          className="flex items-center justify-between gap-2 cursor-pointer select-none"
+                          onClick={toggleFeatureCollapse}
+                          data-testid={`feature-header-${feat.id}`}
+                        >
                           <div className="flex items-center gap-2 min-w-0">
-                            <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-zinc-800 text-indigo-400 shrink-0">
+                            <button
+                              type="button"
+                              aria-label={isCollapsed ? `Expand ${feat.id}` : `Collapse ${feat.id}`}
+                              className="text-zinc-400 hover:text-zinc-200 transition-colors shrink-0"
+                            >
+                              {isCollapsed ? (
+                                <ChevronRight className="w-3.5 h-3.5" />
+                              ) : (
+                                <ChevronDown className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              data-testid={`feature-badge-${feat.id}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onOpenFeature?.(feat.id, feat.name);
+                              }}
+                              className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-zinc-800 text-indigo-400 hover:bg-indigo-500/20 hover:text-indigo-300 cursor-pointer transition-colors shrink-0"
+                            >
                               {feat.id}
-                            </span>
+                            </button>
                             <span className="font-semibold text-xs text-zinc-200 truncate">
                               {feat.name}
                             </span>
@@ -814,14 +853,6 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
                             <span className="font-mono text-[11px] text-zinc-400">
                               {featDone}/{featTotal} Done ({featPct}%)
                             </span>
-                            {onOpenFeature && (
-                              <button
-                                onClick={() => onOpenFeature(feat.id, feat.name)}
-                                className="text-[10px] px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors"
-                              >
-                                View Feature
-                              </button>
-                            )}
                           </div>
                         </div>
                         <div className="w-full bg-zinc-950 rounded-full h-1.5 overflow-hidden border border-zinc-800/60">
@@ -833,7 +864,10 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
                       </div>
 
                       {/* Pure Vertical DAG Tasks without waves */}
-                      <div className="space-y-2.5 pt-1">
+                      <div
+                        data-testid={`feature-task-list-${feat.id}`}
+                        className={isCollapsed ? 'hidden' : 'space-y-2.5 pt-1'}
+                      >
                         {featTasks.map((task) => {
                           const blockedList = task.blocked_by || task.blockedBy || [];
                           const addressesList = task.addresses || [];
@@ -855,7 +889,7 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
                                 </div>
                                 <span
                                   className={`text-[9px] px-1.5 py-0.5 rounded font-mono shrink-0 font-semibold ${
-                                    task.status === 'Done'
+                                    isTaskDone(task.status)
                                       ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
                                       : task.status === 'In Progress'
                                       ? 'bg-amber-950 text-amber-400 border border-amber-800'
@@ -896,7 +930,7 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
                                     const blocker = taskId
                                       ? allTasksMap[taskId] || allTasksMap[taskId.toLowerCase()]
                                       : allTasksMap[depUpper] || allTasksMap[dep.trim().toLowerCase()];
-                                    return blocker && (blocker.status === 'Done' || blocker.status === 'Completed');
+                                    return blocker && isTaskDone(blocker);
                                   });
 
                                   return (
@@ -911,7 +945,7 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
                                           : allTasksMap[depUpper] || allTasksMap[dep.trim().toLowerCase()];
                                         const isResolved =
                                           isNone ||
-                                          (blocker && (blocker.status === 'Done' || blocker.status === 'Completed'));
+                                          (blocker && isTaskDone(blocker));
 
                                         return (
                                           <span
