@@ -3034,6 +3034,7 @@ fn scan_features_for_graph(
     }
 }
 
+// @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-6::REQ-008
 async fn resolve_repo_dir(state: &AppState, repo_id: Option<&str>, path: Option<&str>) -> Result<PathBuf, String> {
     if let Some(p) = path {
         if !p.trim().is_empty() {
@@ -3051,16 +3052,23 @@ async fn resolve_repo_dir(state: &AppState, repo_id: Option<&str>, path: Option<
     let proj = active.ok_or_else(|| "No active project registered".to_string())?;
 
     if let Some(rid) = repo_id {
-        if rid == proj.id || rid == format!("{}-specs", proj.manifest.name) {
-            return Ok(proj.specs_path);
-        }
-
+        // 1. Search effective repositories first (ensures codebase repo matching proj.id is found)
         let effective = proj.manifest.get_effective_repositories(&proj.specs_path);
         for r in effective {
             if r.id == rid {
                 return Ok(PathBuf::from(r.path));
             }
         }
+
+        // 2. Check if rid matches the specs repository specifically
+        if rid == "specs"
+            || rid == proj.id
+            || rid == format!("{}-specs", proj.manifest.name)
+            || rid == format!("{}-specs", proj.id)
+        {
+            return Ok(proj.specs_path);
+        }
+
         return Err(format!("Repository '{}' not found in active project", rid));
     }
 

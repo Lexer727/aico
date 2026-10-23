@@ -182,12 +182,12 @@ describe('GitRepositoriesCard', () => {
         expect.objectContaining({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ project: 'aico', repo_id: 'aico' }),
+          body: JSON.stringify({ project: 'aico', repo_id: 'aico', path: 'd:/aico/codebase/aico' }),
         })
       );
     });
 
-    // Trigger One-Click AI Commit (REQ-004: directly calls /api/v1/git/ai-commit without text box)
+    // Trigger One-Click AI Commit (REQ-004, REQ-008: directly calls /api/v1/git/ai-commit with path telemetry)
     fireEvent.click(aicoCommitBtn);
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith(
@@ -198,6 +198,7 @@ describe('GitRepositoriesCard', () => {
           body: JSON.stringify({
             project: 'aico',
             repo_id: 'aico',
+            path: 'd:/aico/codebase/aico',
           }),
         })
       );

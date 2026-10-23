@@ -121,6 +121,7 @@ export const GitRepositoriesCard: React.FC<GitRepositoriesCardProps> = ({
         body: JSON.stringify({
           project: projectName,
           repo_id: repo.id,
+          path: repo.path,
         }),
       });
       if (res.ok) {
@@ -161,6 +162,7 @@ export const GitRepositoriesCard: React.FC<GitRepositoriesCardProps> = ({
         body: JSON.stringify({
           project: projectName,
           repo_id: repo.id,
+          path: repo.path,
         }),
       });
       if (res.ok) {
@@ -192,6 +194,7 @@ export const GitRepositoriesCard: React.FC<GitRepositoriesCardProps> = ({
   };
 
   // @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-4::REQ-004
+  // @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-6::REQ-008
   const handleAiCommit = async (repo: GitRepoStatusExtended) => {
     setActionLoading((prev) => ({ ...prev, [repo.id]: 'commit' }));
     setActionFeedback(null);
@@ -202,6 +205,7 @@ export const GitRepositoriesCard: React.FC<GitRepositoriesCardProps> = ({
         body: JSON.stringify({
           project: projectName,
           repo_id: repo.id,
+          path: repo.path,
         }),
       });
       if (res.ok) {

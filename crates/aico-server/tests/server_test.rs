@@ -378,6 +378,26 @@ async fn test_git_manifest_and_operations_endpoints() {
         .expect("Push request should complete");
     assert!(push_res.status() == 200 || push_res.status() == 500);
 
+    // 3e. Test Codebase Repo Resolution Precedence & AI Commit (REQ-008)
+    let codebase_dir = temp_dir.join("codebase").join("test-codebase");
+    std::fs::create_dir_all(&codebase_dir).unwrap();
+    let _ = std::process::Command::new("git").arg("init").current_dir(&codebase_dir).output();
+    let _ = std::process::Command::new("git").args(["config", "user.name", "TestUser"]).current_dir(&codebase_dir).output();
+    let _ = std::process::Command::new("git").args(["config", "user.email", "test@example.com"]).current_dir(&codebase_dir).output();
+    std::fs::write(codebase_dir.join("submodule_change.txt"), "submodule pointer update").unwrap();
+
+    let codebase_ai_commit_res = client.post(&ai_commit_url)
+        .json(&serde_json::json!({
+            "repo_id": "test-codebase",
+            "path": codebase_dir.to_string_lossy().to_string(),
+        }))
+        .send()
+        .await
+        .expect("Codebase AI commit request should complete");
+    assert_eq!(codebase_ai_commit_res.status(), 200);
+    let codebase_body: serde_json::Value = codebase_ai_commit_res.json().await.unwrap();
+    assert_eq!(codebase_body["status"], "ok");
+
     server_task.abort();
     let _ = std::fs::remove_dir_all(&temp_dir);
 }
