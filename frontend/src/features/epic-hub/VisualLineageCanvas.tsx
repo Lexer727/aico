@@ -105,6 +105,7 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [isAllSelected, setIsAllSelected] = useState<boolean>(true);
+  const [drilledEpicId, setDrilledEpicId] = useState<string | null>(null);
   const [drilledFeatureId, setDrilledFeatureId] = useState<string | null>(null);
 
   // Zoom & Pan
@@ -168,6 +169,13 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
 
   const rawNodes = initialNodes && initialNodes.length > 0 ? initialNodes : fetchedNodes;
   const rawEdges = initialEdges && initialEdges.length > 0 ? initialEdges : fetchedEdges;
+
+  // Epics list for multi-epic focus selector
+  const epicList = useMemo(() => {
+    return rawNodes
+      .filter((n) => n.type.toLowerCase() === 'epic')
+      .sort((a, b) => a.id.localeCompare(b.id));
+  }, [rawNodes]);
 
   // Features list for drill-down selector
   const featureList = useMemo(() => {
@@ -251,6 +259,45 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
 
     return edgeList;
   }, [rawNodes, rawEdges]);
+
+  // Determine all node IDs connected to the focused epic using BFS (governing ADRs + epic + child features + code seams)
+  // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-16::REQ-025
+  const drilledEpicNodeIds = useMemo(() => {
+    if (!drilledEpicId) return null;
+    const set = new Set<string>([drilledEpicId]);
+    const queue = [drilledEpicId];
+
+    // Downstream traversal: follow directed edges from the epic
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      for (const edge of effectiveEdges) {
+        if (edge.source === current && !set.has(edge.target)) {
+          set.add(edge.target);
+          queue.push(edge.target);
+        }
+      }
+    }
+
+    // Upstream traversal: include governing ADRs that point to the epic or to any node within the epic's subtree
+    for (const edge of effectiveEdges) {
+      if (set.has(edge.target)) {
+        const srcNode = rawNodes.find((n) => n.id === edge.source);
+        if (srcNode && srcNode.type.toLowerCase() === 'adr') {
+          set.add(edge.source);
+        }
+      }
+    }
+
+    return set;
+  }, [drilledEpicId, effectiveEdges, rawNodes]);
+
+  // Dynamic features list scoped to active epic (if focused)
+  const activeFeatures = useMemo(() => {
+    if (drilledEpicId && drilledEpicNodeIds) {
+      return featureList.filter((f) => drilledEpicNodeIds.has(f.id));
+    }
+    return featureList;
+  }, [featureList, drilledEpicId, drilledEpicNodeIds]);
 
   // Determine all node IDs connected to the drilled feature using BFS
   // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-9::REQ-018
@@ -343,11 +390,21 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
     // REQ-020 & REQ-021: Omit brainstorm, deepdive, spec, plan, and requirement from visual DAG
     let base = rawNodes.filter((n) => !OMITTED_NODE_TYPES.has(n.type.toLowerCase()));
 
+    // REQ-025: Isolate graph to focused epic ecosystem
+    if (drilledEpicId && drilledEpicNodeIds) {
+      base = base.filter((n) => drilledEpicNodeIds.has(n.id));
+    }
+
     if (drilledFeatureId && drilledFeatureNodeIds) {
       // In drilled mode: show ADRs, Epic, and all nodes belonging to the drilled feature (including its TASKs!)
       base = base.filter((n) => {
         const t = n.type.toLowerCase();
-        if (t === 'adr' || t === 'epic') return true;
+        if (t === 'adr' || t === 'epic') {
+          if (drilledEpicId && drilledEpicNodeIds) {
+            return drilledEpicNodeIds.has(n.id);
+          }
+          return true;
+        }
         return drilledFeatureNodeIds.has(n.id);
       });
     } else {
@@ -366,6 +423,8 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
     rawNodes,
     selectedTypes,
     isAllSelected,
+    drilledEpicId,
+    drilledEpicNodeIds,
     drilledFeatureId,
     drilledFeatureNodeIds,
     featureList.length,
@@ -568,9 +627,14 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
 
   // REQ-015: Left click only toggles selection / highlights provenance & blast-radius
   // REQ-018: Clicking a feature node toggles drill-down for that feature
+  // REQ-025: Clicking an epic node toggles focus/drill-down for that epic
   const handleNodeClick = (node: GraphNode) => {
     setSelectedNodeId((prev) => (prev === node.id ? null : node.id));
-    if (node.type.toLowerCase() === 'feature') {
+    const nodeType = node.type.toLowerCase();
+    if (nodeType === 'epic') {
+      setDrilledEpicId((prev) => (prev === node.id ? null : node.id));
+      setDrilledFeatureId(null);
+    } else if (nodeType === 'feature') {
       setDrilledFeatureId((prev) => (prev === node.id ? null : node.id));
     }
     onSelectNode?.(node.id);
@@ -692,9 +756,46 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
           })}
         </div>
 
-        {/* Feature Drilldown Selector & Zoom / Popout Controls */}
+        {/* Epic Focus & Feature Drilldown Selectors & Zoom / Popout Controls */}
         <div className="flex items-center gap-2 flex-wrap">
-          {featureList.length > 0 && (
+          {/* REQ-025: Epic Focus Selector (rendered when multiple epics exist, e.g. dashboard) */}
+          {epicList.length > 1 && (
+            <div className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-800 rounded px-2 py-1 shadow-xs">
+              <span className="text-[11px] font-medium text-zinc-400">Epic:</span>
+              <select
+                data-testid="epic-focus-select"
+                value={drilledEpicId || ''}
+                onChange={(e) => {
+                  setDrilledEpicId(e.target.value || null);
+                  setDrilledFeatureId(null);
+                }}
+                className="bg-zinc-800 text-zinc-200 text-[11px] rounded px-1.5 py-0.5 border border-zinc-700 focus:outline-none focus:border-indigo-500 cursor-pointer max-w-[210px] truncate"
+              >
+                <option value="">All Epics (Workspace Overview)</option>
+                {epicList.map((ep) => (
+                  <option key={ep.id} value={ep.id}>
+                    {ep.label || ep.id}
+                  </option>
+                ))}
+              </select>
+              {drilledEpicId && (
+                <button
+                  type="button"
+                  data-testid="reset-epic-focus-btn"
+                  onClick={() => {
+                    setDrilledEpicId(null);
+                    setDrilledFeatureId(null);
+                  }}
+                  className="px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-950/80 border border-indigo-700/60 text-indigo-300 hover:bg-indigo-900 hover:text-indigo-100 transition-colors cursor-pointer"
+                  title="Reset to Workspace Overview"
+                >
+                  ✕ Reset to All
+                </button>
+              )}
+            </div>
+          )}
+
+          {activeFeatures.length > 0 && (
             <div className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-800 rounded px-2 py-1 shadow-xs">
               <span className="text-[11px] font-medium text-zinc-400">Drilldown:</span>
               <select
@@ -704,7 +805,7 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
                 className="bg-zinc-800 text-zinc-200 text-[11px] rounded px-1.5 py-0.5 border border-zinc-700 focus:outline-none focus:border-indigo-500 cursor-pointer max-w-[210px] truncate"
               >
                 <option value="">Epic Overview (All Features)</option>
-                {featureList.map((f) => (
+                {activeFeatures.map((f) => (
                   <option key={f.id} value={f.id}>
                     {f.label || f.id}
                   </option>
@@ -964,7 +1065,7 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
                 }}
                 className={clsx(
                   'flex items-center gap-2 px-2.5 py-1.5 rounded-lg border cursor-pointer transition-all duration-200 bg-zinc-900 shadow-md group z-10',
-                  isSelected
+                  isSelected || (node.type.toLowerCase() === 'epic' && drilledEpicId === node.id)
                     ? 'border-indigo-500 bg-indigo-950/60 ring-2 ring-indigo-500/60 shadow-lg shadow-indigo-500/25'
                     : isHovered
                     ? 'border-indigo-400 bg-zinc-850 scale-[1.02]'
@@ -1037,6 +1138,15 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
         </div>
 
         <div className="flex items-center gap-3">
+          {drilledEpicId && (
+            <div
+              data-testid="epic-focus-status-badge"
+              className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-indigo-950/80 border border-indigo-700/60 text-indigo-300 text-[11px] font-mono"
+            >
+              <span className="text-zinc-400">Epic Focus:</span>
+              <span className="font-semibold text-white">{drilledEpicId}</span>
+            </div>
+          )}
           {drilledFeatureId && (
             <div
               data-testid="drilldown-status-badge"

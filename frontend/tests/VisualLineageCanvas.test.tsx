@@ -323,4 +323,82 @@ describe('VisualLineageCanvas Component', () => {
     expect(screen.queryByTestId('node-Feature Hub')).toBeNull();
     expect(screen.queryByText('TASK-HUB-01')).toBeNull();
   });
+
+  // @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-16::REQ-025
+  it('focuses workspace lineage graph on selected epic, isolating governing ADRs and child features while omitting unrelated epics, with reset to overview', () => {
+    const multiEpicNodes = [
+      { id: 'ADR-0001', type: 'adr', label: 'ADR-0001: Core Architecture' },
+      { id: 'ADR-0011', type: 'adr', label: 'ADR-0011: Native Storage' },
+      { id: 'ec-core', type: 'epic', label: 'Epic ec-core' },
+      { id: 'ec-storage', type: 'epic', label: 'Epic ec-storage' },
+      { id: 'ft-core-discovery', type: 'feature', label: 'Feature Discovery' },
+      { id: 'ft-storage-vector', type: 'feature', label: 'Feature Vector' },
+      { id: 'code:core.rs', type: 'code', label: 'core.rs' },
+      { id: 'code:vector.rs', type: 'code', label: 'vector.rs' },
+    ];
+
+    const multiEpicEdges = [
+      { id: 'e1', source: 'ADR-0001', target: 'ec-core' },
+      { id: 'e2', source: 'ADR-0011', target: 'ec-storage' },
+      { id: 'e3', source: 'ec-core', target: 'ft-core-discovery' },
+      { id: 'e4', source: 'ec-storage', target: 'ft-storage-vector' },
+      { id: 'e5', source: 'ft-core-discovery', target: 'code:core.rs' },
+      { id: 'e6', source: 'ft-storage-vector', target: 'code:vector.rs' },
+    ];
+
+    render(
+      <VisualLineageCanvas
+        nodes={multiEpicNodes}
+        edges={multiEpicEdges}
+      />
+    );
+
+    // Initial Overview: both epics and their features are visible
+    expect(screen.getByTestId('node-Epic ec-core')).toBeInTheDocument();
+    expect(screen.getByTestId('node-Epic ec-storage')).toBeInTheDocument();
+    expect(screen.getByTestId('node-Feature Discovery')).toBeInTheDocument();
+    expect(screen.getByTestId('node-Feature Vector')).toBeInTheDocument();
+    expect(screen.getByTestId('epic-focus-select')).toBeInTheDocument();
+
+    // 1. Click on Epic ec-storage node to focus
+    const storageEpicNode = screen.getByTestId('node-Epic ec-storage');
+    fireEvent.click(storageEpicNode);
+
+    // REQ-025: ec-storage, its governing ADR-0011, child feature, and code seam are isolated
+    expect(screen.getByTestId('node-Epic ec-storage')).toBeInTheDocument();
+    expect(screen.getByTestId('node-Feature Vector')).toBeInTheDocument();
+    expect(screen.getByText('vector.rs')).toBeInTheDocument();
+    expect(screen.getByText('ADR-0011: Native Storage')).toBeInTheDocument();
+    expect(screen.getByTestId('epic-focus-status-badge')).toBeInTheDocument();
+    expect(screen.getByTestId('reset-epic-focus-btn')).toBeInTheDocument();
+
+    // REQ-025: Unrelated ec-core and its child features are omitted
+    expect(screen.queryByTestId('node-Epic ec-core')).toBeNull();
+    expect(screen.queryByTestId('node-Feature Discovery')).toBeNull();
+    expect(screen.queryByText('core.rs')).toBeNull();
+    expect(screen.queryByText('ADR-0001: Core Architecture')).toBeNull();
+
+    // 2. Reset back to workspace overview via reset button
+    const resetEpicBtn = screen.getByTestId('reset-epic-focus-btn');
+    fireEvent.click(resetEpicBtn);
+
+    // All epics and features are visible again
+    expect(screen.getByTestId('node-Epic ec-core')).toBeInTheDocument();
+    expect(screen.getByTestId('node-Epic ec-storage')).toBeInTheDocument();
+    expect(screen.getByTestId('node-Feature Discovery')).toBeInTheDocument();
+    expect(screen.getByTestId('node-Feature Vector')).toBeInTheDocument();
+
+    // 3. Test selection via Epic Focus Dropdown
+    const epicSelect = screen.getByTestId('epic-focus-select');
+    fireEvent.change(epicSelect, { target: { value: 'ec-core' } });
+
+    expect(screen.getByTestId('node-Epic ec-core')).toBeInTheDocument();
+    expect(screen.getByTestId('node-Feature Discovery')).toBeInTheDocument();
+    expect(screen.getByText('core.rs')).toBeInTheDocument();
+    expect(screen.getByText('ADR-0001: Core Architecture')).toBeInTheDocument();
+
+    expect(screen.queryByTestId('node-Epic ec-storage')).toBeNull();
+    expect(screen.queryByTestId('node-Feature Vector')).toBeNull();
+    expect(screen.queryByText('vector.rs')).toBeNull();
+  });
 });
