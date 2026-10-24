@@ -28,8 +28,12 @@ async fn test_project_management_rest_api() {
     };
     registry.register(project);
 
+    let test_storage = std::env::temp_dir().join(format!("aico-test-{}", rand::random::<u64>()));
+    let _ = std::fs::create_dir_all(&test_storage);
+
     let state = AppState {
         registry: Arc::new(RwLock::new(registry)),
+        storage_federation: Arc::new(aico_storage::StorageFederationManager::with_workspace_root(test_storage.clone())),
         ..Default::default()
     };
 
@@ -167,4 +171,5 @@ async fn test_project_management_rest_api() {
     assert!(raw_text.contains("spec-ft-fast-trace"));
 
     server_task.abort();
+    let _ = std::fs::remove_dir_all(&test_storage);
 }
