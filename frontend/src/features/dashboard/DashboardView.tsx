@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronRight,
   Search,
+  ExternalLink,
 } from 'lucide-react';
 import {
   fetchGlossary,
@@ -23,15 +24,20 @@ import {
 } from '../feature-task-data';
 import { GitRepositoriesCard } from './GitRepositoriesCard';
 import { TagBadge } from '../../components/common/TagBadge';
+import { InlineMarkdown } from '../../components/common/MarkdownView';
+import { VisualLineageCanvas } from '../epic-hub/VisualLineageCanvas';
 
 interface DashboardViewProps {
   epics?: DiscoveredEpic[];
   adrs?: DiscoveredAdr[];
   gitStatuses?: GitRepoStatus[];
+  projectName?: string;
   onOpenEpic: (epicId: string) => void;
   onOpenSpec: (specId: string, title: string) => void;
   onOpenGlossary?: () => void;
   onOpenAdr?: (adrId: string) => void;
+  onOpenNode?: (node: any) => void;
+  onPopoutGraph?: () => void;
   ubiquitousLanguage?: TermInfo[];
 }
 
@@ -63,6 +69,9 @@ const defaultTerms: TermInfo[] = [
 ];
 
 // @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-1::REQ-007
+// @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-7::REQ-009
+// @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-7::REQ-010
+// @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-8::REQ-011
 // @implements ft-core-epic-hub::TASK-CORE-007-12::REQ-001
 // @implements ft-core-epic-hub::TASK-CORE-007-10::REQ-002
 // @implements ft-core-epic-hub::TASK-CORE-007-1::REQ-007
@@ -70,10 +79,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   epics = [],
   adrs: initialAdrs,
   gitStatuses,
+  projectName,
   onOpenEpic,
-  onOpenSpec,
+  onOpenSpec: _onOpenSpec,
   onOpenGlossary,
   onOpenAdr,
+  onOpenNode,
+  onPopoutGraph,
   ubiquitousLanguage,
 }) => {
   const activeEpics = epics || [];
@@ -300,26 +312,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </div>
                   </div>
 
-                  <p className="text-xs text-zinc-400 leading-relaxed line-clamp-3">
-                    {epic.executive_summary ||
+                  {/* @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-8::REQ-011 */}
+                  <InlineMarkdown
+                    as="p"
+                    className="text-xs text-zinc-400 leading-relaxed line-clamp-3"
+                    content={
+                      epic.executive_summary ||
                       epic.executiveSummary ||
-                      'Spec-driven engineering epic coordinating architectural trade-offs, formal EARS specifications, and vertical tracer-bullet DAG execution.'}
-                  </p>
+                      'Spec-driven engineering epic coordinating architectural trade-offs, formal EARS specifications, and vertical tracer-bullet DAG execution.'
+                    }
+                  />
 
-                  <div className="space-y-1.5 pt-2 border-t border-zinc-800">
+                  {/* @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-7::REQ-009 */}
+                  <div className="pt-2 border-t border-zinc-800">
                     <div className="flex justify-between text-xs text-zinc-400">
                       <span>Specifications ({specIds.length})</span>
                       <span className="font-mono text-emerald-400">100% Contract Covered</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {specIds.map((s) => (
-                        <TagBadge
-                          key={s}
-                          id={s}
-                          onClick={() => onOpenSpec(s, s)}
-                          size="xs"
-                        />
-                      ))}
                     </div>
                   </div>
                 </div>
@@ -327,6 +335,36 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             })}
           </div>
         )}
+      </div>
+
+      {/* Workspace-Wide Interactive Lineage Graph (All Epics) */}
+      {/* @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-7::REQ-010 */}
+      <div
+        data-testid="dashboard-lineage-graph-section"
+        className="space-y-2 pt-2"
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400">
+            Interactive Workspace Lineage Graph
+          </h2>
+          {onPopoutGraph && (
+            <button
+              type="button"
+              data-testid="dashboard-popout-graph"
+              onClick={onPopoutGraph}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 border border-zinc-800 transition-colors cursor-pointer"
+              title="Open in separate tab for full-window view"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>Open Full Window</span>
+            </button>
+          )}
+        </div>
+        <VisualLineageCanvas
+          projectName={projectName}
+          onOpenNode={onOpenNode}
+          onPopoutGraph={onPopoutGraph}
+        />
       </div>
 
       {/* Architecture Decision Records (ADRs) Accordion */}
@@ -391,9 +429,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     {adr.title}
                   </h4>
                   {adr.decision && (
-                    <p className="text-[11px] text-zinc-400 line-clamp-2">
-                      {adr.decision}
-                    </p>
+                    <InlineMarkdown
+                      as="p"
+                      className="text-[11px] text-zinc-400 line-clamp-2"
+                      content={adr.decision}
+                    />
                   )}
                   <div className="flex items-center justify-between text-[10px] text-zinc-500 pt-1 border-t border-zinc-800/60">
                     <span>Inspect record</span>
@@ -475,7 +515,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   className="p-3 bg-zinc-900/80 rounded-lg border border-zinc-800 space-y-1.5 hover:border-zinc-700 transition-colors"
                 >
                   <span className="font-semibold text-amber-400 text-xs block">{t.term}</span>
-                  <p className="text-zinc-400 text-[11px] leading-relaxed">{t.definition}</p>
+                  <InlineMarkdown
+                    as="p"
+                    className="text-zinc-400 text-[11px] leading-relaxed"
+                    content={t.definition}
+                  />
                 </div>
               ))}
             </div>

@@ -8,7 +8,7 @@ import {
   type DiscoveredFeature,
   isTaskDone,
 } from '../feature-task-data';
-import { MarkdownView } from '../../components/common/MarkdownView';
+import { MarkdownView, InlineMarkdown } from '../../components/common/MarkdownView';
 import { TagBadge } from '../../components/common/TagBadge';
 import { MarkdownToggleButton } from '../../components/common/MarkdownToggleButton';
 
@@ -334,6 +334,7 @@ export const PlanViewer: React.FC<PlanViewerProps> = ({
                       </div>
 
                       {/* Deliverables */}
+                      {/* @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-8::REQ-011 */}
                       {deliverablesList.length > 0 && (
                         <div className="pt-2 border-t border-zinc-800/60 space-y-1">
                           <span className="text-[11px] font-semibold text-zinc-300 block">
@@ -341,7 +342,7 @@ export const PlanViewer: React.FC<PlanViewerProps> = ({
                           </span>
                           <ul className="list-disc list-inside text-zinc-400 text-xs space-y-0.5">
                             {deliverablesList.map((deliv, idx) => (
-                              <li key={idx}>{deliv}</li>
+                              <InlineMarkdown key={idx} as="li" content={deliv} />
                             ))}
                           </ul>
                         </div>

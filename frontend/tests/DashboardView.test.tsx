@@ -6,6 +6,9 @@ import { DashboardView } from '../src/features/dashboard/DashboardView';
 // @verifies ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-1::REQ-001
 // @verifies ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-1::REQ-007
 // @verifies ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-2::REQ-006
+// @verifies ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-7::REQ-009
+// @verifies ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-7::REQ-010
+// @verifies ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-8::REQ-011
 // @verifies ft-core-epic-hub::TASK-CORE-007-1::REQ-007
 describe('DashboardView Component', () => {
   it('renders workspace overview without hardcoded root path and displays zero-mock empty state', () => {
@@ -24,7 +27,7 @@ describe('DashboardView Component', () => {
     expect(screen.getByText('No epics discovered in active project.')).toBeInTheDocument();
   });
 
-  it('renders project epics with TagBadge navigation and omits bulky Open Epic button', () => {
+  it('renders project epics with TagBadge navigation, omits spec tag pills, and formats inline markdown', () => {
     const onOpenEpic = vi.fn();
     const onOpenSpec = vi.fn();
     const epics = [
@@ -32,6 +35,7 @@ describe('DashboardView Component', () => {
         id: 'ec-core',
         title: 'AICO Core SDD Platform',
         status: 'Completed',
+        executive_summary: 'Delivers **local-first** orchestration with `aico-server` and strict EARS contracts.',
         specs_count: 1,
         specs: [{ id: 'spec-ft-core-host-runtime', title: 'spec-ft-core-host-runtime', status: 'Completed', path: '' }],
       },
@@ -44,7 +48,7 @@ describe('DashboardView Component', () => {
       },
     ];
 
-    render(<DashboardView onOpenEpic={onOpenEpic} onOpenSpec={onOpenSpec} epics={epics} />);
+    const { container } = render(<DashboardView onOpenEpic={onOpenEpic} onOpenSpec={onOpenSpec} epics={epics} />);
 
     // REQ-006: TagBadges are rendered with pointer cursor
     const ecCoreBadge = screen.getByTestId('tag-badge-ec-core');
@@ -61,11 +65,36 @@ describe('DashboardView Component', () => {
     fireEvent.click(ecCoreBadge);
     expect(onOpenEpic).toHaveBeenCalledWith('ec-core');
 
-    // Clicking Spec TagBadge opens spec
-    const specBadge = screen.getByTestId('tag-badge-spec-ft-core-host-runtime');
-    expect(specBadge).toBeInTheDocument();
-    fireEvent.click(specBadge);
-    expect(onOpenSpec).toHaveBeenCalledWith('spec-ft-core-host-runtime', 'spec-ft-core-host-runtime');
+    // REQ-009: Spec TagBadges must NOT be rendered inside Project Epics cards
+    expect(screen.queryByTestId('tag-badge-spec-ft-core-host-runtime')).toBeNull();
+    expect(screen.getByText('Specifications (1)')).toBeInTheDocument();
+
+    // REQ-011: Executive summary inline markdown (**local-first** and `aico-server`) is formatted as HTML
+    const strongEl = container.querySelector('strong');
+    expect(strongEl?.textContent).toBe('local-first');
+    const codeEl = container.querySelector('code');
+    expect(codeEl?.textContent).toBe('aico-server');
+    expect(screen.queryByText(/\*\*local-first\*\*/)).toBeNull();
+  });
+
+  it('renders workspace-wide VisualLineageCanvas on the dashboard and supports full-window popout', () => {
+    const onPopoutGraph = vi.fn();
+    render(
+      <DashboardView
+        onOpenEpic={vi.fn()}
+        onOpenSpec={vi.fn()}
+        projectName="aico"
+        onPopoutGraph={onPopoutGraph}
+      />
+    );
+
+    // REQ-010: Interactive Workspace Lineage Graph section is present on Dashboard
+    expect(screen.getByTestId('dashboard-lineage-graph-section')).toBeInTheDocument();
+    expect(screen.getByTestId('lineage-graph-canvas')).toBeInTheDocument();
+
+    const popoutBtn = screen.getByTestId('dashboard-popout-graph');
+    fireEvent.click(popoutBtn);
+    expect(onPopoutGraph).toHaveBeenCalledTimes(1);
   });
 
   it('renders Ubiquitous Domain Terminology and allows expanding and searching', () => {

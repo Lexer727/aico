@@ -638,11 +638,13 @@ export const MainWorkspace: React.FC = () => {
     [handleOpenEpic, handleOpenFeature, handleOpenSpec, handleOpenPlan, handleOpenAdr, handleOpenCode]
   );
 
+  // @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-7::REQ-010
   const handleOpenGraph = useCallback(
     (epicId: string) => {
+      const isWorkspace = epicId === 'workspace' || epicId === 'all';
       openTab(activeProjectId, {
         id: `graph-${epicId}`,
-        title: `Lineage: ${epicId}`,
+        title: isWorkspace ? `Lineage: ${activeProjectId}` : `Lineage: ${epicId}`,
         type: 'graph',
       });
     },
@@ -660,10 +662,13 @@ export const MainWorkspace: React.FC = () => {
         <DashboardView
           epics={fullEpics}
           adrs={fullAdrs}
+          projectName={activeProjectId}
           onOpenEpic={handleOpenEpic}
           onOpenSpec={handleOpenSpec}
           onOpenGlossary={handleOpenGlossary}
           onOpenAdr={handleOpenAdr}
+          onOpenNode={handleOpenNodeFromGraph}
+          onPopoutGraph={() => handleOpenGraph('workspace')}
           ubiquitousLanguage={fullEpics[0]?.ubiquitous_language || fullEpics[0]?.ubiquitousLanguage}
         />
       );
@@ -755,13 +760,15 @@ export const MainWorkspace: React.FC = () => {
     }
 
     if (activeTab.type === 'graph') {
-      const epicId = activeTab.id.replace(/^graph-/, '');
+      const rawTarget = activeTab.id.replace(/^graph-/, '');
+      const epicId = rawTarget === 'workspace' || rawTarget === 'all' ? undefined : rawTarget;
+      const badgeLabel = epicId || activeProjectId || 'Workspace';
       return (
         <div className="p-4 max-w-[1920px] mx-auto h-[calc(100vh-110px)] flex flex-col space-y-2">
           <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
             <div className="flex items-center gap-2">
               <span className="font-mono text-xs px-2 py-0.5 rounded bg-indigo-950 text-indigo-400 border border-indigo-800/80 font-bold uppercase">
-                {epicId}
+                {badgeLabel}
               </span>
               <h2 className="text-sm font-semibold text-zinc-200">
                 Interactive Lineage Graph (Full Window)
@@ -947,10 +954,13 @@ export const MainWorkspace: React.FC = () => {
       <DashboardView
         epics={fullEpics}
         adrs={fullAdrs}
+        projectName={activeProjectId}
         onOpenEpic={handleOpenEpic}
         onOpenSpec={handleOpenSpec}
         onOpenGlossary={handleOpenGlossary}
         onOpenAdr={handleOpenAdr}
+        onOpenNode={handleOpenNodeFromGraph}
+        onPopoutGraph={() => handleOpenGraph('workspace')}
         ubiquitousLanguage={fullEpics[0]?.ubiquitous_language || fullEpics[0]?.ubiquitousLanguage}
       />
     );

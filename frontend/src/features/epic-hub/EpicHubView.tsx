@@ -14,7 +14,7 @@ import {
   ArrowRight,
   FolderGit2,
 } from 'lucide-react';
-import { MarkdownView, stripDocumentHeader } from '../../components/common/MarkdownView';
+import { MarkdownView, InlineMarkdown, stripDocumentHeader } from '../../components/common/MarkdownView';
 import { AssetPanel, type DiscoveredAssetInfo } from '../assets/AssetPanel';
 import { useAccordionStore } from '../../stores/useAccordionStore';
 import {
@@ -552,10 +552,13 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
                               {adrInfo?.status || 'Accepted'}
                             </span>
                           </div>
+                          {/* @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-8::REQ-011 */}
                           {adrInfo?.decision && (
-                            <p className="text-[11px] text-zinc-400 line-clamp-2">
-                              {adrInfo.decision}
-                            </p>
+                            <InlineMarkdown
+                              as="p"
+                              className="text-[11px] text-zinc-400 line-clamp-2"
+                              content={adrInfo.decision}
+                            />
                           )}
                           <div className="flex items-center justify-between text-[10px] text-zinc-500 pt-1">
                             <span>Click to view decision record</span>
@@ -970,7 +973,7 @@ export const EpicHubView: React.FC<EpicHubViewProps> = ({
                                 <div className="pt-1.5 border-t border-zinc-800/50">
                                   <ul className="list-disc list-inside text-zinc-400 text-[10px] space-y-0.5">
                                     {deliverablesList.map((deliv, idx) => (
-                                      <li key={idx}>{deliv}</li>
+                                      <InlineMarkdown key={idx} as="li" content={deliv} />
                                     ))}
                                   </ul>
                                 </div>

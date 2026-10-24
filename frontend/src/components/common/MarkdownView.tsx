@@ -173,3 +173,41 @@ export const MarkdownView: React.FC<MarkdownViewProps> = ({ content = '', classN
     />
   );
 };
+
+interface InlineMarkdownProps {
+  content?: string;
+  className?: string;
+  as?: 'span' | 'p' | 'div' | 'li';
+}
+
+// @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-8::REQ-011
+export const InlineMarkdown: React.FC<InlineMarkdownProps> = ({
+  content = '',
+  className = '',
+  as: Component = 'span',
+}) => {
+  const html = useMemo(() => {
+    if (!content) return '';
+    try {
+      const normalized = content
+        .split(/\r?\n/)
+        .map((line) => line.trim().replace(/^[-*]\s+/, ''))
+        .filter(Boolean)
+        .join(' ');
+      return marked.parseInline(normalized) as string;
+    } catch {
+      return content;
+    }
+  }, [content]);
+
+  if (!content) {
+    return null;
+  }
+
+  return (
+    <Component
+      className={`markdown-inline ${className}`.trim()}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
+};

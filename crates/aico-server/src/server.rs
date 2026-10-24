@@ -966,7 +966,7 @@ pub fn parse_spec_details(content: &str) -> (Option<String>, Vec<String>, Vec<St
     let description = if description_lines.is_empty() {
         None
     } else {
-        Some(description_lines.join(" "))
+        Some(description_lines.join("\n"))
     };
 
     (description, in_scope, out_of_scope, requirements, test_seams)
@@ -1042,6 +1042,7 @@ pub fn parse_plan_tasks(content: &str) -> Vec<FeatureTaskInfo> {
 }
 
 /// Parse ADR markdown content into context, decision, consequences
+// @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-8::REQ-011
 pub fn parse_adr_details(content: &str) -> (Option<String>, Option<String>, Option<String>) {
     let mut context_lines = Vec::new();
     let mut decision_lines = Vec::new();
@@ -1053,12 +1054,14 @@ pub fn parse_adr_details(content: &str) -> (Option<String>, Option<String>, Opti
     for line in content.lines() {
         let trimmed = line.trim();
         if trimmed == "---" {
-            if !in_frontmatter {
+            if !in_frontmatter && !frontmatter_ended {
                 in_frontmatter = true;
                 continue;
-            } else {
+            } else if in_frontmatter {
                 in_frontmatter = false;
                 frontmatter_ended = true;
+                continue;
+            } else {
                 continue;
             }
         }
@@ -1095,13 +1098,14 @@ pub fn parse_adr_details(content: &str) -> (Option<String>, Option<String>, Opti
     }
 
     (
-        if context_lines.is_empty() { None } else { Some(context_lines.join(" ")) },
-        if decision_lines.is_empty() { None } else { Some(decision_lines.join(" ")) },
-        if consequences_lines.is_empty() { None } else { Some(consequences_lines.join(" ")) },
+        if context_lines.is_empty() { None } else { Some(context_lines.join("\n")) },
+        if decision_lines.is_empty() { None } else { Some(decision_lines.join("\n")) },
+        if consequences_lines.is_empty() { None } else { Some(consequences_lines.join("\n")) },
     )
 }
 
 /// Parse executive summary from brain-*.md
+// @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-8::REQ-011
 pub fn parse_epic_brainstorm(content: &str) -> Option<String> {
     let mut summary_lines = Vec::new();
     let mut in_summary = false;
@@ -1111,12 +1115,17 @@ pub fn parse_epic_brainstorm(content: &str) -> Option<String> {
     for line in content.lines() {
         let trimmed = line.trim();
         if trimmed == "---" {
-            if !in_frontmatter {
+            if !in_frontmatter && !frontmatter_ended {
                 in_frontmatter = true;
                 continue;
-            } else {
+            } else if in_frontmatter {
                 in_frontmatter = false;
                 frontmatter_ended = true;
+                continue;
+            } else {
+                if in_summary && !summary_lines.is_empty() {
+                    break;
+                }
                 continue;
             }
         }
@@ -1145,7 +1154,7 @@ pub fn parse_epic_brainstorm(content: &str) -> Option<String> {
     if summary_lines.is_empty() {
         None
     } else {
-        Some(summary_lines.join(" "))
+        Some(summary_lines.join("\n"))
     }
 }
 

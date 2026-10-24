@@ -318,4 +318,49 @@ describe('EpicHubView Component', () => {
     const resetTaskList = screen.getAllByTestId('feature-task-list-ft-core-1')[0];
     expect(resetTaskList).toHaveClass('hidden');
   });
+
+  // @verifies ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-8::REQ-011
+  it('formats inline markdown in task deliverables and ADR decisions without showing raw syntax', () => {
+    const epicWithDeliverables = {
+      ...mockEpic,
+      adrs: ['ADR-0004'],
+      features: [
+        {
+          id: 'ft-core-active',
+          name: 'Active Feature',
+          status: 'In Progress',
+          tasks: [
+            {
+              id: 'TASK-1',
+              title: 'Task 1',
+              status: 'In Progress',
+              deliverables: ['Updates **DashboardView** in `DashboardView.tsx`'],
+            },
+          ],
+        },
+      ],
+    };
+
+    const allAdrs = [
+      {
+        id: 'ADR-0004',
+        title: 'React Frontend',
+        status: 'Accepted',
+        decision: 'Use **React 19** with `Tailwind CSS`.',
+      },
+    ];
+
+    const { container } = render(<EpicHubView epic={epicWithDeliverables} allAdrs={allAdrs} />);
+
+    // Expand ADRs section
+    fireEvent.click(screen.getByText(/Architecture Decision Records/));
+
+    const strongTexts = Array.from(container.querySelectorAll('strong')).map((el) => el.textContent);
+    expect(strongTexts).toContain('DashboardView');
+    expect(strongTexts).toContain('React 19');
+
+    const codeTexts = Array.from(container.querySelectorAll('code')).map((el) => el.textContent);
+    expect(codeTexts).toContain('DashboardView.tsx');
+    expect(codeTexts).toContain('Tailwind CSS');
+  });
 });

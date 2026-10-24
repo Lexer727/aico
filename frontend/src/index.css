@@ -179,9 +179,30 @@ body,
   margin-bottom: 1rem;
 }
 
-.markdown-content a {
+.markdown-content a,
+.markdown-inline a {
   color: #38bdf8;
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+.markdown-inline strong {
+  font-weight: 600;
+  color: #f4f4f5;
+}
+
+.markdown-inline em {
+  font-style: italic;
+  color: #d4d4d8;
+}
+
+.markdown-inline code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.72rem;
+  background-color: #18181b;
+  color: #38bdf8;
+  padding: 0.075rem 0.3rem;
+  border-radius: 0.25rem;
+  border: 1px solid #27272a;
 }
 

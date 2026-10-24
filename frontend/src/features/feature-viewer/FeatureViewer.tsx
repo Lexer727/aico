@@ -16,7 +16,7 @@ import {
   FolderGit2,
 } from 'lucide-react';
 import { AssetPanel, type DiscoveredAssetInfo } from '../assets/AssetPanel';
-import { MarkdownView, stripDocumentHeader, extractExecutiveSummary } from '../../components/common/MarkdownView';
+import { MarkdownView, InlineMarkdown, stripDocumentHeader, extractExecutiveSummary } from '../../components/common/MarkdownView';
 import { useAccordionStore } from '../../stores/useAccordionStore';
 import {
   fetchFeature,
@@ -497,10 +497,13 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
                               {adrInfo?.status || 'Accepted'}
                             </span>
                           </div>
+                          {/* @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-8::REQ-011 */}
                           {adrInfo?.decision && (
-                            <p className="text-[11px] text-zinc-400 line-clamp-2">
-                              {adrInfo.decision}
-                            </p>
+                            <InlineMarkdown
+                              as="p"
+                              className="text-[11px] text-zinc-400 line-clamp-2"
+                              content={adrInfo.decision}
+                            />
                           )}
                           <div className="flex items-center justify-between text-[10px] text-zinc-500 pt-1">
                             <span>Click to view decision record</span>
@@ -626,7 +629,7 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
                       {inScopeList.length > 0 ? (
                         <ul className="list-disc list-inside text-zinc-400 text-[11px] leading-relaxed space-y-1">
                           {inScopeList.map((item, idx) => (
-                            <li key={idx}>{item}</li>
+                            <InlineMarkdown key={idx} as="li" content={item} />
                           ))}
                         </ul>
                       ) : (
@@ -642,7 +645,7 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
                       {outOfScopeList.length > 0 ? (
                         <ul className="list-disc list-inside text-zinc-400 text-[11px] leading-relaxed space-y-1">
                           {outOfScopeList.map((item, idx) => (
-                            <li key={idx}>{item}</li>
+                            <InlineMarkdown key={idx} as="li" content={item} />
                           ))}
                         </ul>
                       ) : (
@@ -680,7 +683,11 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
                               {req.status}
                             </span>
                           </div>
-                          <p className="text-zinc-300 text-xs leading-relaxed">{req.statement}</p>
+                          <InlineMarkdown
+                            as="p"
+                            className="text-zinc-300 text-xs leading-relaxed"
+                            content={req.statement}
+                          />
                           {req.seam && (
                             <div className="text-[10px] text-zinc-500 font-mono">
                               Seam: <span className="text-zinc-400">{req.seam}</span>
@@ -706,9 +713,13 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
                     <div className="space-y-1.5 text-[11px] font-mono text-zinc-400">
                       {testSeamsList.map((seam, idx) => (
                         <div key={idx} className="p-2.5 bg-zinc-900 rounded border border-zinc-800">
-                          <span className="text-emerald-400 font-semibold">{seam.path}</span>
+                          <InlineMarkdown className="text-emerald-400 font-semibold" content={seam.path} />
                           {seam.description && seam.description !== seam.path && (
-                            <div className="text-zinc-400 text-[11px] mt-1 font-sans">{seam.description}</div>
+                            <InlineMarkdown
+                              as="div"
+                              className="text-zinc-400 text-[11px] mt-1 font-sans"
+                              content={seam.description}
+                            />
                           )}
                         </div>
                       ))}
@@ -1057,7 +1068,7 @@ export const FeatureViewer: React.FC<FeatureViewerProps> = ({
                               <div className="pt-1.5 border-t border-zinc-800/50">
                                 <ul className="list-disc list-inside text-zinc-400 text-[10px] space-y-0.5">
                                   {deliverablesList.map((deliv, idx) => (
-                                    <li key={idx}>{deliv}</li>
+                                    <InlineMarkdown key={idx} as="li" content={deliv} />
                                   ))}
                                 </ul>
                               </div>

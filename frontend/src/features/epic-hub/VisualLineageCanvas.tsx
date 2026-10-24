@@ -642,6 +642,7 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
 
   return (
     <div
+      data-testid="lineage-graph-canvas"
       className={clsx(
         'relative w-full bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden flex flex-col select-none',
         isFullWindow ? 'h-full flex-1' : 'h-[560px]'

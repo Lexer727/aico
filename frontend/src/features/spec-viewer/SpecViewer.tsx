@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BookOpen, ShieldCheck, CheckCircle2, GitBranch, Crosshair, GitFork } from 'lucide-react';
 import { fetchFeature, type DiscoveredFeature } from '../feature-task-data';
-import { MarkdownView } from '../../components/common/MarkdownView';
+import { MarkdownView, InlineMarkdown } from '../../components/common/MarkdownView';
 import { TagBadge } from '../../components/common/TagBadge';
 import { MarkdownToggleButton } from '../../components/common/MarkdownToggleButton';
 
@@ -176,10 +176,11 @@ export const SpecViewer: React.FC<SpecViewerProps> = ({
                   <span className="font-semibold text-indigo-400 text-xs block">
                     In-Scope Boundaries ({inScopeList.length})
                   </span>
+                  {/* @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-8::REQ-011 */}
                   {inScopeList.length > 0 ? (
                     <ul className="list-disc list-inside text-zinc-300 text-xs leading-relaxed space-y-1">
                       {inScopeList.map((item, idx) => (
-                        <li key={idx}>{item}</li>
+                        <InlineMarkdown key={idx} as="li" content={item} />
                       ))}
                     </ul>
                   ) : (
@@ -193,7 +194,7 @@ export const SpecViewer: React.FC<SpecViewerProps> = ({
                   {outOfScopeList.length > 0 ? (
                     <ul className="list-disc list-inside text-zinc-300 text-xs leading-relaxed space-y-1">
                       {outOfScopeList.map((item, idx) => (
-                        <li key={idx}>{item}</li>
+                        <InlineMarkdown key={idx} as="li" content={item} />
                       ))}
                     </ul>
                   ) : (
@@ -239,9 +240,11 @@ export const SpecViewer: React.FC<SpecViewerProps> = ({
                       </div>
                     </div>
 
-                    <p className="text-xs text-zinc-200 leading-relaxed font-sans">
-                      {req.statement}
-                    </p>
+                    <InlineMarkdown
+                      as="p"
+                      className="text-xs text-zinc-200 leading-relaxed font-sans"
+                      content={req.statement}
+                    />
 
                     {req.seam && (
                       <div className="flex items-center gap-2 pt-2 border-t border-zinc-800/60 text-[11px] text-zinc-500 font-mono">
@@ -269,9 +272,13 @@ export const SpecViewer: React.FC<SpecViewerProps> = ({
               <div className="space-y-2 text-xs font-mono text-zinc-400">
                 {testSeamsList.map((seam, idx) => (
                   <div key={idx} className="p-3 bg-zinc-900/60 rounded-xl border border-zinc-800">
-                    <span className="text-emerald-400 font-semibold">{seam.path}</span>
+                    <InlineMarkdown className="text-emerald-400 font-semibold" content={seam.path} />
                     {seam.description && seam.description !== seam.path && (
-                      <div className="text-zinc-400 text-xs mt-1 font-sans">{seam.description}</div>
+                      <InlineMarkdown
+                        as="div"
+                        className="text-zinc-400 text-xs mt-1 font-sans"
+                        content={seam.description}
+                      />
                     )}
                   </div>
                 ))}

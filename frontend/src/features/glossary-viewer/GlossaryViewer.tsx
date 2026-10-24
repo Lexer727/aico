@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BookOpen, Search } from 'lucide-react';
 import { fetchGlossary, type TermInfo } from '../feature-task-data';
+import { InlineMarkdown } from '../../components/common/MarkdownView';
 
 export interface GlossaryViewerProps {
   terms?: TermInfo[];
@@ -91,7 +92,12 @@ export const GlossaryViewer: React.FC<GlossaryViewerProps> = ({ terms: initialTe
               <BookOpen className="w-4 h-4 text-amber-400" />
               <h3 className="font-bold text-amber-400 text-sm">{t.term}</h3>
             </div>
-            <p className="text-zinc-300 text-xs leading-relaxed">{t.definition}</p>
+            {/* @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-8::REQ-011 */}
+            <InlineMarkdown
+              as="p"
+              className="text-zinc-300 text-xs leading-relaxed"
+              content={t.definition}
+            />
           </div>
         ))}
       </div>

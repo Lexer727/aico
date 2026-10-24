@@ -106,20 +106,21 @@ ${displayConsequences}
           <MarkdownView content={rawMarkdown} />
         </div>
       ) : (
+        /* @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-8::REQ-011 */
         <div className="space-y-4 text-xs">
           <div className="p-4 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-1.5">
             <h3 className="font-semibold text-zinc-300 uppercase tracking-wider text-[11px]">Context</h3>
-            <p className="text-zinc-400 leading-relaxed font-sans">{displayContext}</p>
+            <MarkdownView content={displayContext} className="text-zinc-400 leading-relaxed font-sans" />
           </div>
 
           <div className="p-4 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-1.5">
             <h3 className="font-semibold text-indigo-400 uppercase tracking-wider text-[11px]">Decision</h3>
-            <p className="text-zinc-200 leading-relaxed font-sans font-medium">{displayDecision}</p>
+            <MarkdownView content={displayDecision} className="text-zinc-200 leading-relaxed font-sans font-medium" />
           </div>
 
           <div className="p-4 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-1.5">
             <h3 className="font-semibold text-emerald-400 uppercase tracking-wider text-[11px]">Consequences</h3>
-            <p className="text-zinc-400 leading-relaxed font-sans">{displayConsequences}</p>
+            <MarkdownView content={displayConsequences} className="text-zinc-400 leading-relaxed font-sans" />
           </div>
         </div>
       )}
