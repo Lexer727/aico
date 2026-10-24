@@ -58,8 +58,16 @@ impl RootScanner {
                         _ => ProjectStatus::Active,
                     };
 
+                    // @implements spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-1::REQ-001
+                    let project_id = manifest.id.clone().unwrap_or_else(|| {
+                        path.file_name()
+                            .and_then(|n| n.to_str())
+                            .map(|s| s.to_string())
+                            .unwrap_or_else(|| format!("{}-specs", manifest.name))
+                    });
+
                     discovered.push(DiscoveredProject {
-                        id: manifest.name.clone(),
+                        id: project_id,
                         name: manifest.name.clone(),
                         specs_path: path,
                         codebase_path,

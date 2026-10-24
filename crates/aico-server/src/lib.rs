@@ -5,6 +5,7 @@ pub mod assets;
 pub mod git;
 pub mod terminal;
 pub mod quotas;
+pub mod crawler;
 
 pub use server::{
     AppState, CodeAnnotationInfo, CodeFileInfo, DiscoveredEpic, DiscoveredSpecInfo, HealthResponse,
@@ -15,3 +16,4 @@ pub use auth::LanAuthenticator;
 pub use assets::{FrontendAssets, static_asset_handler};
 pub use git::{GitRepoStatus, GitStatusScanner, GitCommitInfo};
 pub use terminal::{terminal_ws_handler, resolve_shell_command, ShellType};
+pub use crawler::{WorkspaceCrawler, CrawlReport};

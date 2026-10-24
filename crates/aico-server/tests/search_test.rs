@@ -22,6 +22,7 @@ async fn test_filesystem_search_rest_api() {
         codebase_path: Some(PathBuf::from("d:/aico/codebase/aico")),
         manifest: ProjectManifest {
             name: "aico".to_string(),
+            id: None,
             version: Some("0.1.1".to_string()),
             codebase_path: Some("../codebase/aico".to_string()),
             created_at: None,

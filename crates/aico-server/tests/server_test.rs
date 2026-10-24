@@ -174,6 +174,7 @@ async fn test_graph_endpoint_returns_connected_lineage() {
             codebase_path: None,
             manifest: aico_core::ProjectManifest {
                 name: "demo-app".to_string(),
+                id: Some("demo-app-specs".to_string()),
                 version: Some("0.1.0".to_string()),
                 codebase_path: None,
                 created_at: None,
@@ -309,6 +310,7 @@ async fn test_git_manifest_and_operations_endpoints() {
             codebase_path: None,
             manifest: aico_core::ProjectManifest {
                 name: "test-repo".to_string(),
+                id: Some("test-repo-specs".to_string()),
                 version: Some("0.1.0".to_string()),
                 codebase_path: None,
                 created_at: None,
@@ -509,6 +511,7 @@ async fn test_dynamic_project_storage_switching() {
             codebase_path: None,
             manifest: aico_core::ProjectManifest {
                 name: "project-one".to_string(),
+                id: Some("project-one-specs".to_string()),
                 version: Some("0.1.0".to_string()),
                 codebase_path: None,
                 created_at: None,
@@ -523,6 +526,7 @@ async fn test_dynamic_project_storage_switching() {
             codebase_path: None,
             manifest: aico_core::ProjectManifest {
                 name: "project-two".to_string(),
+                id: Some("project-two-specs".to_string()),
                 version: Some("0.1.0".to_string()),
                 codebase_path: None,
                 created_at: None,
@@ -590,6 +594,7 @@ async fn test_storage_stats_endpoint() {
             codebase_path: None,
             manifest: aico_core::ProjectManifest {
                 name: "telemetry-project".to_string(),
+                id: Some("telemetry-project-specs".to_string()),
                 version: Some("0.1.0".to_string()),
                 codebase_path: None,
                 created_at: None,
@@ -622,6 +627,97 @@ async fn test_storage_stats_endpoint() {
     assert!(stats_body["vector_chunks_count"].is_number());
     assert_eq!(stats_body["cache_state"], "ready");
     assert!(stats_body["storage_dir_bytes"].is_number());
+
+    server_task.abort();
+    let _ = std::fs::remove_dir_all(&temp_root);
+}
+
+// @verifies spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-2::REQ-002
+// @verifies spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-2::REQ-003
+// @verifies spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-2::REQ-005
+// @verifies spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-2::REQ-008
+// @verifies spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-3::REQ-006
+// @verifies spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-3::REQ-007
+#[tokio::test]
+async fn test_storage_reindex_and_rebuild_graph_endpoints() {
+    let mut config = ServerConfig::default();
+    config.base_port = 4360;
+
+    let temp_root = std::env::temp_dir().join(format!("aico_reindex_test_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+    let p_specs = temp_root.join("crawler-proj-specs");
+    let p_code = temp_root.join("codebase").join("crawler-proj");
+    std::fs::create_dir_all(p_specs.join("adr")).unwrap();
+    std::fs::create_dir_all(p_specs.join("epics").join("ec-demo")).unwrap();
+    std::fs::create_dir_all(p_code.join("src")).unwrap();
+
+    std::fs::write(
+        p_specs.join("adr").join("0001-test.md"),
+        "---\nid: ADR-0001\ntitle: Architecture Test\nstatus: Approved\nderives_from: []\n---\n# Architecture Decision 1",
+    ).unwrap();
+    std::fs::write(
+        p_code.join("src").join("lib.rs"),
+        "pub fn authenticate_session(token: &str) -> bool {\n    !token.is_empty()\n}\n",
+    ).unwrap();
+
+    let state = AppState::default();
+    {
+        let mut reg = state.registry.write().await;
+        reg.register(aico_core::DiscoveredProject {
+            id: "crawler-proj-specs".to_string(),
+            name: "Crawler Project Specs".to_string(),
+            specs_path: p_specs.clone(),
+            codebase_path: Some(p_code.clone()),
+            manifest: aico_core::ProjectManifest {
+                name: "crawler-proj".to_string(),
+                id: Some("crawler-proj-specs".to_string()),
+                version: Some("0.1.0".to_string()),
+                codebase_path: Some("../codebase/crawler-proj".to_string()),
+                created_at: None,
+                repositories: None,
+            },
+            status: aico_core::ProjectStatus::Active,
+        });
+        reg.set_active("crawler-proj-specs");
+    }
+
+    let mut server = HostServer::with_state(config, state);
+    let addr = server.bind().await.expect("Server should bind successfully");
+
+    let server_task = tokio::spawn(async move {
+        server.serve().await.expect("Server should run cleanly");
+    });
+
+    let client = reqwest::Client::new();
+
+    // 1. Test POST /api/v1/storage/reindex
+    let reindex_url = format!("http://{}/api/v1/storage/reindex", addr);
+    let reindex_res = client.post(&reindex_url)
+        .json(&serde_json::json!({ "project_id": "crawler-proj-specs" }))
+        .send().await.unwrap();
+    assert_eq!(reindex_res.status(), 200);
+
+    let reindex_body: serde_json::Value = reindex_res.json().await.unwrap();
+    assert_eq!(reindex_body["status"], "ok");
+    assert_eq!(reindex_body["project_id"], "crawler-proj-specs");
+    assert!(reindex_body["files_scanned"].as_u64().unwrap() >= 2);
+    assert!(reindex_body["chunks_upserted"].as_u64().unwrap() >= 2);
+    assert!(reindex_body["total_chunks"].as_u64().unwrap() >= 2);
+
+    // Verify LanceDB disk table was created and contains data under workspace root
+    let vector_dir = temp_root.join(".aico").join("storage").join("vector");
+    assert!(vector_dir.exists(), "Vector store directory should exist under workspace root");
+
+    // 2. Test POST /api/v1/storage/rebuild-graph
+    let rebuild_url = format!("http://{}/api/v1/storage/rebuild-graph", addr);
+    let rebuild_res = client.post(&rebuild_url)
+        .json(&serde_json::json!({ "project_id": "crawler-proj-specs" }))
+        .send().await.unwrap();
+    assert_eq!(rebuild_res.status(), 200);
+
+    let rebuild_body: serde_json::Value = rebuild_res.json().await.unwrap();
+    assert_eq!(rebuild_body["status"], "ok");
+    assert_eq!(rebuild_body["project_id"], "crawler-proj-specs");
+    assert!(rebuild_body["nodes_count"].as_u64().unwrap() >= 1);
 
     server_task.abort();
     let _ = std::fs::remove_dir_all(&temp_root);

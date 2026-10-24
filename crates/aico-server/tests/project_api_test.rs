@@ -18,6 +18,7 @@ async fn test_project_management_rest_api() {
         codebase_path: Some(PathBuf::from("d:/aico/codebase/core")),
         manifest: ProjectManifest {
             name: "core-project".to_string(),
+            id: None,
             version: Some("0.1.0".to_string()),
             codebase_path: Some("../codebase/core".to_string()),
             created_at: None,

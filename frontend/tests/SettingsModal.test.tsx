@@ -40,4 +40,48 @@ describe('SettingsModal Component', () => {
     expect(screen.getByText('d:/aico/*-specs/')).toBeInTheDocument();
     expect(screen.getByText('d:/aico/codebase/*/')).toBeInTheDocument();
   });
+
+  // @verifies spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-4::REQ-009
+  // @verifies spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-4::REQ-010
+  it('renders storage maintenance buttons and executes rebuild-graph and reindex API calls', async () => {
+    const onClose = vi.fn();
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url === '/api/v1/storage/rebuild-graph') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ status: 'ok', project_id: 'aico-specs', nodes_count: 50, edges_count: 90 }),
+        });
+      }
+      if (url === '/api/v1/storage/reindex') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ status: 'ok', project_id: 'aico-specs', files_scanned: 12, chunks_upserted: 45, total_chunks: 45 }),
+        });
+      }
+      return Promise.reject(new Error(`Unhandled URL: ${url}`));
+    });
+
+    globalThis.fetch = fetchMock;
+
+    render(<SettingsModal isOpen={true} onClose={onClose} />);
+
+    const rebuildBtn = screen.getByTestId('rebuild-graph-btn');
+    const reindexBtn = screen.getByTestId('reindex-vectors-btn');
+    expect(rebuildBtn).toBeInTheDocument();
+    expect(reindexBtn).toBeInTheDocument();
+
+    // Trigger rebuild graph
+    fireEvent.click(rebuildBtn);
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/storage/rebuild-graph', expect.objectContaining({ method: 'POST' }));
+
+    const graphBadge = await screen.findByTestId('graph-status-badge');
+    expect(graphBadge).toHaveTextContent(/Rebuilt: 50 nodes, 90 edges/i);
+
+    // Trigger reindex vectors
+    fireEvent.click(reindexBtn);
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/storage/reindex', expect.objectContaining({ method: 'POST' }));
+
+    const vectorBadge = await screen.findByTestId('vector-status-badge');
+    expect(vectorBadge).toHaveTextContent(/Indexed: 12 files, 45 chunks/i);
+  });
 });

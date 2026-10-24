@@ -42,6 +42,7 @@ async fn test_assets_management_service_and_endpoints() {
         codebase_path: Some(temp_root.join("codebase")),
         manifest: ProjectManifest {
             name: "demo-project".to_string(),
+            id: None,
             version: Some("0.1.0".to_string()),
             codebase_path: Some("../codebase".to_string()),
             created_at: None,

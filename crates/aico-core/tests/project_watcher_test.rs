@@ -42,7 +42,7 @@ async fn test_hot_discovery_watcher() {
     let event = event_rx.recv().await.expect("Must receive DiscoveryEvent");
     match event {
         DiscoveryEvent::RegistryUpdated(ids) => {
-            assert_eq!(ids, vec!["live-app".to_string()]);
+            assert_eq!(ids, vec!["live-specs".to_string()]);
         }
     }
 }

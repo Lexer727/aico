@@ -198,14 +198,41 @@ impl LanceVectorStore {
             }
         }
 
-        // 4. REQ-008: Check row count and maintain index if needed
+        Ok(records.len())
+    }
+
+    /// Delete all chunks associated with a project ID
+    // @implements spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-5::REQ-003
+    pub async fn delete_by_project(&self, project_id: &str) -> Result<usize, StorageError> {
+        let table = self.ensure_table().await?;
+        let predicate = format!("project_id = '{}'", project_id.replace('\'', "''"));
+        let _ = table.delete(&predicate).await;
+
+        let mut mem = self.records.write().unwrap();
+        let mut removed = 0;
+        mem.retain(|_, v| {
+            if let Some(pid) = v.metadata.get("project_id").and_then(|p| p.as_str()) {
+                if pid == project_id {
+                    removed += 1;
+                    return false;
+                }
+            }
+            true
+        });
+        Ok(removed)
+    }
+
+    /// Train and maintain IVF-PQ vector index on the embedded table when row count >= 10,000
+    // @implements ft-storage-lancedb-hybrid-search::TASK-STORAGE-002-1::REQ-008
+    // @implements spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-5::REQ-003
+    pub async fn create_vector_index(&self) -> Result<(), StorageError> {
+        let table = self.ensure_table().await?;
         if let Ok(count) = table.count_rows(None).await {
-            if count >= 1000 {
+            if count >= 10_000 {
                 let _ = table.create_index(&["vector"], lancedb::index::Index::Auto).execute().await;
             }
         }
-
-        Ok(records.len())
+        Ok(())
     }
 
     /// Delete all chunks associated with a file path

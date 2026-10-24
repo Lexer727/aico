@@ -188,6 +188,16 @@ impl GraphCacheManager {
         full_graph
     }
 
+    // @implements spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-3::REQ-006
+    pub async fn force_rebuild(&self, specs_path: &StdPath) -> LineageGraphResponse {
+        {
+            let mut guard = self.inner.write().await;
+            guard.cached_graph = None;
+            guard.manifest.clear();
+        }
+        self.get_or_refresh_graph(specs_path).await
+    }
+
     fn collect_markdown_files(specs_path: &StdPath) -> Vec<PathBuf> {
         let mut files = Vec::new();
         let subdirs = ["epics", "adr", "features"];
@@ -353,6 +363,10 @@ impl HostServer {
             .route("/api/v1/projects/switch", post(set_active_project_handler))
             // @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-4::REQ-003
             .route("/api/v1/storage/stats", get(get_storage_stats_handler))
+            // @implements spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-2::REQ-005
+            .route("/api/v1/storage/reindex", post(handle_storage_reindex))
+            // @implements spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-3::REQ-006
+            .route("/api/v1/storage/rebuild-graph", post(handle_storage_rebuild_graph))
             // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-5::REQ-006
             .route("/api/v1/graph", get(handle_get_graph))
             .route("/api/v1/epics", get(list_epics_handler))
@@ -641,6 +655,94 @@ async fn get_storage_stats_handler(
             .map_err(|_| (StatusCode::NOT_FOUND, "No project storage found".to_string()))?;
         Ok(Json(stats))
     }
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct ReindexRequest {
+    pub project_id: Option<String>,
+}
+
+// @implements spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-2::REQ-005
+// @implements spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-2::REQ-008
+async fn handle_storage_reindex(
+    State(state): State<AppState>,
+    body: Option<Json<ReindexRequest>>,
+) -> Result<Json<crate::crawler::CrawlReport>, (StatusCode, String)> {
+    let req = body.map(|Json(b)| b).unwrap_or_default();
+    let registry = state.registry.read().await;
+    let target_proj = if let Some(ref pid) = req.project_id {
+        registry.list_cloned().into_iter().find(|p| p.id == *pid || p.name == *pid)
+    } else {
+        registry.get_active().cloned().or_else(|| registry.list_cloned().into_iter().next())
+    };
+    drop(registry);
+
+    let proj = match target_proj {
+        Some(p) => p,
+        None => return Err((StatusCode::NOT_FOUND, "No project registered".to_string())),
+    };
+
+    let storage = state
+        .storage_federation
+        .register_project(&proj.id, &proj.specs_path)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let report = crate::crawler::WorkspaceCrawler::crawl_and_index(
+        &storage,
+        &proj.specs_path,
+        proj.codebase_path.as_deref(),
+    )
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    state.ws_hub.broadcast("storage_updated", &proj.id);
+
+    Ok(Json(report))
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct RebuildGraphRequest {
+    pub project_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RebuildGraphResponse {
+    pub status: String,
+    pub project_id: String,
+    pub nodes_count: usize,
+    pub edges_count: usize,
+}
+
+// @implements spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-3::REQ-006
+// @implements spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-3::REQ-007
+async fn handle_storage_rebuild_graph(
+    State(state): State<AppState>,
+    body: Option<Json<RebuildGraphRequest>>,
+) -> Result<Json<RebuildGraphResponse>, (StatusCode, String)> {
+    let req = body.map(|Json(b)| b).unwrap_or_default();
+    let registry = state.registry.read().await;
+    let target_proj = if let Some(ref pid) = req.project_id {
+        registry.list_cloned().into_iter().find(|p| p.id == *pid || p.name == *pid)
+    } else {
+        registry.get_active().cloned().or_else(|| registry.list_cloned().into_iter().next())
+    };
+    drop(registry);
+
+    let proj = match target_proj {
+        Some(p) => p,
+        None => return Err((StatusCode::NOT_FOUND, "No project registered".to_string())),
+    };
+
+    let full_graph = state.graph_cache.force_rebuild(&proj.specs_path).await;
+    state.ws_hub.broadcast("graph_updated", &proj.id);
+
+    Ok(Json(RebuildGraphResponse {
+        status: "ok".to_string(),
+        project_id: proj.id,
+        nodes_count: full_graph.nodes.len(),
+        edges_count: full_graph.edges.len(),
+    }))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -2673,6 +2775,7 @@ async fn handle_create_project(
         codebase_path,
         manifest: aico_core::ProjectManifest {
             name: slug.clone(),
+            id: Some(format!("{}-specs", slug)),
             version: Some("0.1.0".to_string()),
             codebase_path: Some(format!("../codebase/{}", slug)),
             created_at: Some(now),

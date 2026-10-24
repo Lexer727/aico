@@ -21,6 +21,7 @@ async fn test_codebase_scanner_and_raw_file_api() {
         codebase_path: Some(PathBuf::from("d:/aico/codebase/aico")),
         manifest: ProjectManifest {
             name: "aico".to_string(),
+            id: None,
             version: Some("0.1.1".to_string()),
             codebase_path: Some("d:/aico/codebase/aico".to_string()),
             created_at: None,

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Settings, Shield, Server, Database, Sliders, FolderTree, Bell } from 'lucide-react';
+import { X, Settings, Shield, Server, Database, Sliders, FolderTree, Bell, RefreshCw, Layers } from 'lucide-react';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -22,6 +22,56 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     setNotificationsEnabled(next);
     if (typeof window !== 'undefined' && window.localStorage) {
       window.localStorage.setItem('aico-desktop-notifications-enabled', String(next));
+    }
+  };
+
+  const [isRebuildingGraph, setIsRebuildingGraph] = useState(false);
+  const [graphStatusMessage, setGraphStatusMessage] = useState<string | null>(null);
+
+  const [isReindexingVectors, setIsReindexingVectors] = useState(false);
+  const [vectorStatusMessage, setVectorStatusMessage] = useState<string | null>(null);
+
+  const handleRebuildGraph = async () => {
+    setIsRebuildingGraph(true);
+    setGraphStatusMessage(null);
+    try {
+      const res = await fetch('/api/v1/storage/rebuild-graph', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setGraphStatusMessage(`Rebuilt: ${data.nodes_count} nodes, ${data.edges_count} edges`);
+      } else {
+        setGraphStatusMessage('Failed to rebuild graph');
+      }
+    } catch {
+      setGraphStatusMessage('Network error');
+    } finally {
+      setIsRebuildingGraph(false);
+    }
+  };
+
+  const handleReindexVectors = async () => {
+    setIsReindexingVectors(true);
+    setVectorStatusMessage(null);
+    try {
+      const res = await fetch('/api/v1/storage/reindex', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setVectorStatusMessage(`Indexed: ${data.files_scanned} files, ${data.chunks_upserted} chunks`);
+      } else {
+        setVectorStatusMessage('Failed to reindex vectors');
+      }
+    } catch {
+      setVectorStatusMessage('Network error');
+    } finally {
+      setIsReindexingVectors(false);
     }
   };
 
@@ -124,6 +174,53 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 <span className="text-zinc-400">Specs Root:</span>
                 <span className="font-mono text-zinc-300">d:/aico/aico-specs</span>
               </div>
+            </div>
+
+            {/* Storage Maintenance Actions */}
+            {/* @implements spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-4::REQ-009 */}
+            {/* @implements spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-4::REQ-010 */}
+            <div className="bg-zinc-950/60 p-3 rounded-lg border border-zinc-800/80 space-y-2.5">
+              <span className="text-[11px] text-zinc-400 font-medium block">Storage Maintenance Actions</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  data-testid="rebuild-graph-btn"
+                  onClick={handleRebuildGraph}
+                  disabled={isRebuildingGraph}
+                  className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-200 rounded text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer border border-zinc-700/60"
+                  title="Force a complete rebuild and cache flush of the AICO property graph"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 text-amber-400 ${isRebuildingGraph ? 'animate-spin' : ''}`} />
+                  <span>{isRebuildingGraph ? 'Rebuilding Graph...' : 'Rebuild Lineage Graph'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  data-testid="reindex-vectors-btn"
+                  onClick={handleReindexVectors}
+                  disabled={isReindexingVectors}
+                  className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-200 rounded text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer border border-zinc-700/60"
+                  title="Re-crawl workspace specifications and codebase files to populate LanceDB vector embeddings"
+                >
+                  <Layers className={`w-3.5 h-3.5 text-indigo-400 ${isReindexingVectors ? 'animate-spin' : ''}`} />
+                  <span>{isReindexingVectors ? 'Reindexing Vectors...' : 'Reindex Vector Embeddings'}</span>
+                </button>
+              </div>
+
+              {(graphStatusMessage || vectorStatusMessage) && (
+                <div className="flex flex-col gap-1 pt-1 border-t border-zinc-800/60">
+                  {graphStatusMessage && (
+                    <span data-testid="graph-status-badge" className="text-[11px] font-mono text-emerald-400 bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-800/50 w-fit">
+                      ✓ {graphStatusMessage}
+                    </span>
+                  )}
+                  {vectorStatusMessage && (
+                    <span data-testid="vector-status-badge" className="text-[11px] font-mono text-indigo-300 bg-indigo-950/40 px-2 py-0.5 rounded border border-indigo-800/50 w-fit">
+                      ✓ {vectorStatusMessage}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </section>
 

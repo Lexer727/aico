@@ -3,6 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 
 // @verifies ft-core-discovery::TASK-CORE-004-2::REQ-001
+// @verifies spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-1::REQ-001
 #[test]
 fn test_root_scanner_discovers_specs_and_codebases() {
     let temp_root = std::env::temp_dir().join(format!("aico_test_root_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
@@ -21,6 +22,7 @@ fn test_root_scanner_discovers_specs_and_codebases() {
 
     let discovered = RootScanner::scan(&temp_root).expect("Scanner should discover projects");
     assert_eq!(discovered.len(), 1, "Should discover exactly 1 project");
+    assert_eq!(discovered[0].id, "alpha-specs", "Project ID should canonicalize to *-specs folder name");
     assert_eq!(discovered[0].name, "alpha");
     assert_eq!(discovered[0].specs_path, project_specs);
     assert_eq!(discovered[0].codebase_path, Some(codebase_dir));
@@ -41,6 +43,7 @@ fn test_workspace_registry_tracks_active_project() {
         codebase_path: Some(PathBuf::from("d:/aico/codebase/alpha")),
         manifest: ProjectManifest {
             name: "alpha".to_string(),
+            id: Some("alpha-specs".to_string()),
             version: Some("0.1.0".to_string()),
             codebase_path: Some("../codebase/alpha".to_string()),
             created_at: None,

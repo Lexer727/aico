@@ -196,6 +196,7 @@ async fn test_default_cwd_resolves_to_workspace_root_parent_of_specs_path() {
             codebase_path: Some(codebase_dir),
             manifest: ProjectManifest {
                 name: "aico".to_string(),
+                id: None,
                 version: Some("0.1.1".to_string()),
                 codebase_path: Some("../codebase/aico".to_string()),
                 created_at: None,

@@ -79,6 +79,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     *st = Some((*sm).clone());
                     println!("[*] Storage initialized for active project ({})", projects[0].id);
                 }
+
+                // @implements spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-3::REQ-004
+                let crawler_state = state.clone();
+                let active_specs = projects[0].specs_path.clone();
+                let active_codebase = projects[0].codebase_path.clone();
+                let active_id = projects[0].id.clone();
+                tokio::spawn(async move {
+                    if let Ok(storage) = crawler_state.storage_federation.register_project(&active_id, &active_specs).await {
+                        println!("[*] Starting background workspace vector indexing for ({})", active_id);
+                        match aico_server::crawler::WorkspaceCrawler::crawl_and_index(&storage, &active_specs, active_codebase.as_deref()).await {
+                            Ok(report) => {
+                                println!("[*] Background vector indexing complete: {} files, {} chunks indexed", report.files_scanned, report.chunks_upserted);
+                                crawler_state.ws_hub.broadcast("storage_updated", &active_id);
+                            }
+                            Err(e) => {
+                                eprintln!("[!] Background vector indexing note: {}", e);
+                            }
+                        }
+                    }
+                });
             }
         }
         Err(e) => {

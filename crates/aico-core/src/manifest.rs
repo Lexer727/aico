@@ -34,6 +34,8 @@ fn default_repo_type() -> String {
 pub struct ProjectManifest {
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub codebase_path: Option<String>,
@@ -122,8 +124,12 @@ impl ProjectManifest {
             }
         }
 
+        // @implements spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-1::REQ-001
+        let manifest_id = raw.id.clone();
+
         Ok(ProjectManifest {
             name: canonical_name,
+            id: manifest_id,
             version: raw.version,
             codebase_path: raw.codebase_path,
             created_at: raw.created_at,

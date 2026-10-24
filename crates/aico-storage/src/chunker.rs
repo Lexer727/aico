@@ -113,10 +113,11 @@ impl EmbeddingPipeline {
                 vec[dim] += sign * weight;
             }
 
-            // Also project 3-character n-grams for subword similarity
-            if token.len() >= 3 {
-                for i in 0..=token.len() - 3 {
-                    let sub = &token[i..i + 3];
+            // Also project 3-character n-grams for subword similarity using char boundaries
+            let chars: Vec<char> = token.chars().collect();
+            if chars.len() >= 3 {
+                for i in 0..=chars.len() - 3 {
+                    let sub: String = chars[i..i + 3].iter().collect();
                     let mut sub_hasher = Sha256::new();
                     sub_hasher.update(sub.as_bytes());
                     let sub_bytes = sub_hasher.finalize();
@@ -206,10 +207,14 @@ impl EmbeddingPipeline {
         score
     }
 
-    /// Ingest semantic code chunks into LanceDB vector store
-    // @implements ft-core-local-storage::TASK-CORE-003-4::REQ-004
-    // @implements ft-storage-lancedb-hybrid-search::TASK-STORAGE-002-1::REQ-001
-    pub async fn ingest_chunks(&self, storage: &StorageManager, chunks: &[CodeChunk]) -> Result<usize, StorageError> {
+    // @implements spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-2::REQ-003
+    pub async fn ingest_chunks_typed(
+        &self,
+        storage: &StorageManager,
+        chunks: &[CodeChunk],
+        language: &str,
+        doc_type: &str,
+    ) -> Result<usize, StorageError> {
         let vstore = storage.vector_store().read().await;
         let project_id = storage.project_id().to_string();
         let mut records = Vec::with_capacity(chunks.len());
@@ -226,12 +231,19 @@ impl EmbeddingPipeline {
                 file_path: chunk.file_path.clone(),
                 start_line: chunk.start_line,
                 end_line: chunk.end_line,
-                language: "rust".to_string(),
+                language: language.to_string(),
                 vector: vec,
-                doc_type: "code".to_string(),
+                doc_type: doc_type.to_string(),
                 project_id: project_id.clone(),
             });
         }
         vstore.upsert_records(&records).await
+    }
+
+    /// Ingest semantic code chunks into LanceDB vector store
+    // @implements ft-core-local-storage::TASK-CORE-003-4::REQ-004
+    // @implements ft-storage-lancedb-hybrid-search::TASK-STORAGE-002-1::REQ-001
+    pub async fn ingest_chunks(&self, storage: &StorageManager, chunks: &[CodeChunk]) -> Result<usize, StorageError> {
+        self.ingest_chunks_typed(storage, chunks, "rust", "code").await
     }
 }
