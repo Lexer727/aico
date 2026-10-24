@@ -35,12 +35,13 @@ fn calculate_dir_size(path: &Path) -> u64 {
 #[derive(Clone)]
 pub struct StorageManager {
     base_path: PathBuf,
+    project_id: String,
     vector_store: Arc<RwLock<LanceVectorStore>>,
     graph_store: Arc<RwLock<AicoGraphStore>>,
 }
 
 impl StorageManager {
-    /// Initialize dual embedded storage directories and drivers
+    /// Initialize dual embedded storage directories and drivers at `<base_path>/.aico/storage/`
     // @implements ft-core-local-storage::TASK-CORE-003-1::REQ-001
     // @implements ft-core-local-storage::TASK-CORE-003-1::REQ-002
     // @implements ft-core-local-storage::TASK-CORE-003-1::REQ-009
@@ -58,9 +59,43 @@ impl StorageManager {
 
         Ok(Self {
             base_path,
+            project_id: "default".to_string(),
             vector_store: Arc::new(RwLock::new(vector_store)),
             graph_store: Arc::new(RwLock::new(graph_store)),
         })
+    }
+
+    /// Initialize project-scoped storage sharing the unified workspace LanceVectorStore
+    /// and a dedicated per-project AicoGraphStore at `<workspace_root>/.aico/storage/graph/<project_id>/`
+    // @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-6::REQ-001
+    // @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-6::REQ-002
+    // @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-6::REQ-007
+    pub fn open_for_project(
+        workspace_root: impl AsRef<Path>,
+        project_id: &str,
+        shared_vector_store: Arc<RwLock<LanceVectorStore>>,
+    ) -> Result<Self, StorageError> {
+        let workspace_root = workspace_root.as_ref().to_path_buf();
+        let graph_path = workspace_root
+            .join(".aico")
+            .join("storage")
+            .join("graph")
+            .join(project_id);
+
+        std::fs::create_dir_all(&graph_path)?;
+        let graph_store = AicoGraphStore::open(&graph_path)?;
+
+        Ok(Self {
+            base_path: workspace_root,
+            project_id: project_id.to_string(),
+            vector_store: shared_vector_store,
+            graph_store: Arc::new(RwLock::new(graph_store)),
+        })
+    }
+
+    /// Return logical project identifier for this storage handle
+    pub fn project_id(&self) -> &str {
+        &self.project_id
     }
 
     /// Access thread-safe in-process vector store
@@ -68,9 +103,19 @@ impl StorageManager {
         &self.vector_store
     }
 
+    /// Access cloned Arc to shared vector store
+    pub fn vector_store_arc(&self) -> Arc<RwLock<LanceVectorStore>> {
+        self.vector_store.clone()
+    }
+
     /// Access thread-safe in-process graph store
     pub fn graph_store(&self) -> &RwLock<AicoGraphStore> {
         &self.graph_store
+    }
+
+    /// Access cloned Arc to graph store
+    pub fn graph_store_arc(&self) -> Arc<RwLock<AicoGraphStore>> {
+        self.graph_store.clone()
     }
 
     /// Return root storage base path
@@ -92,11 +137,23 @@ impl StorageManager {
         let storage_root = self.base_path.join(".aico").join("storage");
         let bytes = calculate_dir_size(&storage_root);
 
+        // If the in-memory graph is empty, check if a persisted snapshot exists on disk
+        let (mut nodes_count, mut edges_count) = (graph.node_count(), graph.edge_count());
+        if nodes_count == 0 && graph.file_path().exists() {
+            if let Ok(reopened) = AicoGraphStore::open(graph.file_path()) {
+                nodes_count = reopened.node_count();
+                edges_count = reopened.edge_count();
+            }
+        }
+
+        let proj_vecs = vector.record_count_for_project(project_id);
+        let vec_count = if proj_vecs > 0 { proj_vecs } else { vector.record_count() };
+
         StorageStats {
             project_id: project_id.to_string(),
-            graph_nodes_count: graph.node_count(),
-            graph_edges_count: graph.edge_count(),
-            vector_chunks_count: vector.record_count(),
+            graph_nodes_count: nodes_count,
+            graph_edges_count: edges_count,
+            vector_chunks_count: vec_count,
             cache_state: "ready".to_string(),
             storage_dir_bytes: bytes,
         }
@@ -116,6 +173,8 @@ pub struct StorageFederationManager {
 }
 
 struct StorageFederationInner {
+    workspace_root: Option<PathBuf>,
+    shared_vector_store: Option<Arc<RwLock<LanceVectorStore>>>,
     active_project_id: Option<String>,
     projects: HashMap<String, ProjectStorageContext>,
 }
@@ -130,16 +189,32 @@ impl StorageFederationManager {
     pub fn new() -> Self {
         Self {
             inner: Arc::new(RwLock::new(StorageFederationInner {
+                workspace_root: None,
+                shared_vector_store: None,
                 active_project_id: None,
                 projects: HashMap::new(),
             })),
         }
     }
 
-    /// Register or obtain an isolated StorageManager handle for a project
+    pub fn with_workspace_root(workspace_root: impl AsRef<Path>) -> Self {
+        Self {
+            inner: Arc::new(RwLock::new(StorageFederationInner {
+                workspace_root: Some(workspace_root.as_ref().to_path_buf()),
+                shared_vector_store: None,
+                active_project_id: None,
+                projects: HashMap::new(),
+            })),
+        }
+    }
+
+    /// Register a project with a per-project AicoGraphStore and the shared workspace LanceVectorStore
+    /// located under `<workspace-root>/.aico/storage/`
     // @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-1::REQ-001
     // @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-1::REQ-002
     // @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-1::REQ-007
+    // @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-6::REQ-001
+    // @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-6::REQ-002
     pub async fn register_project(
         &self,
         project_id: &str,
@@ -152,7 +227,30 @@ impl StorageFederationManager {
             return Ok(ctx.storage_manager.clone());
         }
 
-        let sm = Arc::new(StorageManager::open(&specs_path)?);
+        let ws_root = match inner.workspace_root {
+            Some(ref root) => root.clone(),
+            None => {
+                let inferred = specs_path
+                    .parent()
+                    .map(|p| p.to_path_buf())
+                    .unwrap_or_else(|| specs_path.clone());
+                inner.workspace_root = Some(inferred.clone());
+                inferred
+            }
+        };
+
+        let shared_vec = match inner.shared_vector_store {
+            Some(ref v) => v.clone(),
+            None => {
+                let vec_dir = ws_root.join(".aico").join("storage").join("vector");
+                std::fs::create_dir_all(&vec_dir)?;
+                let v = Arc::new(RwLock::new(LanceVectorStore::open(&vec_dir)?));
+                inner.shared_vector_store = Some(v.clone());
+                v
+            }
+        };
+
+        let sm = Arc::new(StorageManager::open_for_project(&ws_root, project_id, shared_vec)?);
         let ctx = ProjectStorageContext {
             project_id: project_id.to_string(),
             specs_path,
@@ -165,6 +263,18 @@ impl StorageFederationManager {
 
         inner.projects.insert(project_id.to_string(), ctx);
         Ok(sm)
+    }
+
+    /// Retrieve the shared workspace-wide LanceVectorStore
+    pub async fn shared_vector_store(&self) -> Option<Arc<RwLock<LanceVectorStore>>> {
+        let inner = self.inner.read().await;
+        inner.shared_vector_store.clone()
+    }
+
+    /// Retrieve the resolved workspace root path
+    pub async fn workspace_root(&self) -> Option<PathBuf> {
+        let inner = self.inner.read().await;
+        inner.workspace_root.clone()
     }
 
     /// Retrieve storage manager for a specific project

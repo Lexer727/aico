@@ -163,8 +163,18 @@ impl GraphCacheManager {
             new_manifest.insert(path, FileManifestEntry { mtime_nanos, sha256 });
         }
 
-        // Persist snapshot to <specs_root>/.aico/storage/graph/lineage_graph.json
-        let graph_storage_dir = specs_path.join(".aico").join("storage").join("graph");
+        // Persist snapshot to <workspace_root>/.aico/storage/graph/<project_id>/lineage_graph.json
+        // @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-6::REQ-002
+        let workspace_root = specs_path.parent().unwrap_or(specs_path);
+        let project_id = specs_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("default");
+        let graph_storage_dir = workspace_root
+            .join(".aico")
+            .join("storage")
+            .join("graph")
+            .join(project_id);
         let _ = std::fs::create_dir_all(&graph_storage_dir);
         let snapshot_file = graph_storage_dir.join("lineage_graph.json");
         if let Ok(serialized) = serde_json::to_string_pretty(&full_graph) {
@@ -2577,7 +2587,8 @@ async fn handle_create_project(
         ).into_response();
     }
 
-    let subdirs = [".aico", "adr", "epics", "features"];
+    // @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-6::REQ-002
+    let subdirs = ["adr", "epics", "features"];
     for sub in &subdirs {
         if let Err(e) = std::fs::create_dir_all(target_specs_dir.join(sub)) {
             return (

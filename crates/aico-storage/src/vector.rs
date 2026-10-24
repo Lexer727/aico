@@ -243,6 +243,19 @@ impl LanceVectorStore {
         query_vector: &[f32],
         top_k: usize,
     ) -> Result<Vec<VectorQueryResult>, StorageError> {
+        self.query_nearest_lance_filtered(query_vector, top_k, None).await
+    }
+
+    /// Query nearest neighbors via LanceDB vector index with optional project_id filter
+    // @implements ft-storage-lancedb-hybrid-search::TASK-STORAGE-002-1::REQ-001
+    // @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-6::REQ-001
+    // @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-6::REQ-006
+    pub async fn query_nearest_lance_filtered(
+        &self,
+        query_vector: &[f32],
+        top_k: usize,
+        project_id: Option<&str>,
+    ) -> Result<Vec<VectorQueryResult>, StorageError> {
         let table = self.ensure_table().await?;
         let mut q = query_vector.to_vec();
         if q.len() < 384 {
@@ -251,10 +264,18 @@ impl LanceVectorStore {
             q.truncate(384);
         }
 
-        let mut stream = table
+        let mut query_builder = table
             .query()
             .nearest_to(q.as_slice())?
-            .distance_type(lancedb::DistanceType::Cosine)
+            .distance_type(lancedb::DistanceType::Cosine);
+
+        if let Some(pid) = project_id {
+            if !pid.is_empty() && pid != "default" {
+                query_builder = query_builder.only_if(format!("project_id = '{}'", pid.replace('\'', "''")));
+            }
+        }
+
+        let mut stream = query_builder
             .limit(top_k)
             .execute()
             .await?;
@@ -267,6 +288,7 @@ impl LanceVectorStore {
             let path_col = batch.column_by_name("file_path").and_then(|c| c.as_any().downcast_ref::<StringArray>());
             let start_col = batch.column_by_name("start_line").and_then(|c| c.as_any().downcast_ref::<UInt32Array>());
             let end_col = batch.column_by_name("end_line").and_then(|c| c.as_any().downcast_ref::<UInt32Array>());
+            let proj_col = batch.column_by_name("project_id").and_then(|c| c.as_any().downcast_ref::<StringArray>());
 
             for i in 0..batch.num_rows() {
                 let id = id_col.map(|c| c.value(i).to_string()).unwrap_or_default();
@@ -277,6 +299,7 @@ impl LanceVectorStore {
                     "file_path": path_col.map(|c| c.value(i)).unwrap_or_default(),
                     "start_line": start_col.map(|c| c.value(i)).unwrap_or_default(),
                     "end_line": end_col.map(|c| c.value(i)).unwrap_or_default(),
+                    "project_id": proj_col.map(|c| c.value(i)).unwrap_or_default(),
                 });
                 results.push(VectorQueryResult {
                     id,
@@ -312,9 +335,29 @@ impl LanceVectorStore {
 
     /// Perform nearest neighbor vector similarity search over in-memory cache
     pub fn query_nearest(&self, query_vector: &[f32], top_k: usize) -> Result<Vec<VectorQueryResult>, StorageError> {
+        self.query_nearest_filtered(query_vector, top_k, None)
+    }
+
+    /// Perform nearest neighbor vector similarity search over in-memory cache with optional project_id filter
+    pub fn query_nearest_filtered(
+        &self,
+        query_vector: &[f32],
+        top_k: usize,
+        project_id: Option<&str>,
+    ) -> Result<Vec<VectorQueryResult>, StorageError> {
         let mem = self.records.read().unwrap();
         let mut scored: Vec<VectorQueryResult> = mem
             .values()
+            .filter(|rec| {
+                if let Some(pid) = project_id {
+                    if !pid.is_empty() && pid != "default" {
+                        if let Some(rec_pid) = rec.metadata.get("project_id").and_then(|v| v.as_str()) {
+                            return rec_pid == pid;
+                        }
+                    }
+                }
+                true
+            })
             .map(|rec| {
                 let dot: f32 = rec.vector.iter().zip(query_vector.iter()).map(|(a, b)| a * b).sum();
                 let mag_a: f32 = rec.vector.iter().map(|a| a * a).sum::<f32>().sqrt();
@@ -340,5 +383,21 @@ impl LanceVectorStore {
     /// Return total records stored in cache
     pub fn record_count(&self) -> usize {
         self.records.read().unwrap().len()
+    }
+
+    /// Return records stored in cache for a specific project_id
+    pub fn record_count_for_project(&self, project_id: &str) -> usize {
+        let mem = self.records.read().unwrap();
+        if project_id.is_empty() || project_id == "default" {
+            return mem.len();
+        }
+        mem.values()
+            .filter(|r| r.metadata.get("project_id").and_then(|v| v.as_str()) == Some(project_id))
+            .count()
+    }
+
+    /// Return underlying storage path
+    pub fn path(&self) -> &Path {
+        &self.path
     }
 }

@@ -37,8 +37,8 @@ async fn test_asset_storage_deduplication_and_indexing() {
     assert_eq!(asset1.sha256, asset2.sha256);
     assert_eq!(asset1.storage_path, asset2.storage_path);
 
-    // Verify only one physical file was created under .aico/assets/
-    let assets_dir = temp_dir.join(".aico").join("assets");
+    // Verify only one physical file was created under assets/
+    let assets_dir = temp_dir.join("assets");
     let file_count = fs::read_dir(&assets_dir).unwrap().count();
     assert_eq!(file_count, 1, "Expected exactly 1 deduplicated asset file");
 

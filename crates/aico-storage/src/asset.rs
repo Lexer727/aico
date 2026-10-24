@@ -29,9 +29,10 @@ impl AssetIngestionService {
         format!("{:x}", hasher.finalize())
     }
 
-    /// Ingest file bytes, deduplicate under `.aico/assets/<sha256>.<ext>`, and index into vector and graph stores
+    /// Ingest file bytes, deduplicate under `assets/<sha256>.<ext>`, and index into vector and graph stores
     // @implements ft-core-epic-hub::TASK-CORE-007-1::REQ-006
     // @implements ft-core-epic-hub::TASK-CORE-007-1::REQ-007
+    // @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-6::REQ-011
     pub async fn store_asset(
         &self,
         storage: &StorageManager,
@@ -46,7 +47,7 @@ impl AssetIngestionService {
             .and_then(|e| e.to_str())
             .unwrap_or("bin");
 
-        let assets_dir = storage.base_path().join(".aico").join("assets");
+        let assets_dir = storage.base_path().join("assets");
         fs::create_dir_all(&assets_dir)?;
 
         let target_filename = format!("{}.{}", sha256, ext);

@@ -69,9 +69,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if !projects.is_empty() {
                 reg.set_active(&projects[0].id);
                 println!("[*] Active project set to: {}", projects[0].id);
-                if let Ok(sm) = aico_storage::StorageManager::open(&projects[0].specs_path) {
+                drop(reg);
+                for p in &projects {
+                    let _ = state.storage_federation.register_project(&p.id, &p.specs_path).await;
+                }
+                if let Ok(sm) = state.storage_federation.register_project(&projects[0].id, &projects[0].specs_path).await {
+                    let _ = state.storage_federation.switch_project(&projects[0].id).await;
                     let mut st = state.storage.write().await;
-                    *st = Some(sm);
+                    *st = Some((*sm).clone());
                     println!("[*] Storage initialized for active project ({})", projects[0].id);
                 }
             }

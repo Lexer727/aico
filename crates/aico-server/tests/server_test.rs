@@ -101,7 +101,9 @@ async fn test_create_project_scaffolds_specs_and_inits_git() {
 
     let specs_dir = temp_dir.join("alpha-platform-specs");
     assert!(specs_dir.exists(), "Specs directory should be created");
-    assert!(specs_dir.join(".aico").exists());
+    assert!(!specs_dir.join(".aico").exists(), "Specs repo must not contain .aico folder");
+    assert!(temp_dir.join(".aico").join("storage").join("graph").join("alpha-platform-specs").exists(), "Workspace root .aico/storage/graph/<project_id> should exist");
+    assert!(temp_dir.join(".aico").join("storage").join("vector").exists(), "Workspace root .aico/storage/vector should exist");
     assert!(specs_dir.join("adr").exists());
     assert!(specs_dir.join("epics").exists());
     assert!(specs_dir.join("features").exists());
@@ -220,7 +222,8 @@ async fn test_graph_endpoint_returns_connected_lineage() {
     assert!(edge_relations.contains("verifies"));
 
     // Check persistence to .aico/storage/graph/lineage_graph.json
-    let snapshot_file = specs_dir.join(".aico").join("storage").join("graph").join("lineage_graph.json");
+    let snapshot_file = temp_dir.join(".aico").join("storage").join("graph").join("demo-app-specs").join("lineage_graph.json");
+    assert!(!specs_dir.join(".aico").exists(), "Specs directory must not contain .aico folder");
     assert!(snapshot_file.exists(), "Snapshot file should be created");
 
     // REQ-023: Verify that Blocked by and Rewrite Target did NOT declare false tasks

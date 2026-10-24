@@ -211,10 +211,15 @@ impl EmbeddingPipeline {
     // @implements ft-storage-lancedb-hybrid-search::TASK-STORAGE-002-1::REQ-001
     pub async fn ingest_chunks(&self, storage: &StorageManager, chunks: &[CodeChunk]) -> Result<usize, StorageError> {
         let vstore = storage.vector_store().read().await;
+        let project_id = storage.project_id().to_string();
         let mut records = Vec::with_capacity(chunks.len());
         for chunk in chunks {
             let vec = self.embed_text(&chunk.content);
-            let id = format!("{}:{}", chunk.file_path, chunk.start_line);
+            let id = if project_id == "default" {
+                format!("{}:{}", chunk.file_path, chunk.start_line)
+            } else {
+                format!("{}::{}:{}", project_id, chunk.file_path, chunk.start_line)
+            };
             records.push(crate::vector::VectorRecordInput {
                 id,
                 content: chunk.content.clone(),
@@ -224,7 +229,7 @@ impl EmbeddingPipeline {
                 language: "rust".to_string(),
                 vector: vec,
                 doc_type: "code".to_string(),
-                project_id: "default".to_string(),
+                project_id: project_id.clone(),
             });
         }
         vstore.upsert_records(&records).await
