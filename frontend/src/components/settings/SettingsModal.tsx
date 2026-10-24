@@ -118,7 +118,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-zinc-400">Knowledge Graph:</span>
-                <span className="font-mono text-zinc-300">Kùzu Property Graph (zero daemon)</span>
+                <span className="font-mono text-zinc-300">AICO Property Graph (zero daemon)</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-zinc-400">Specs Root:</span>

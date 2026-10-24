@@ -97,6 +97,46 @@ describe('DashboardView Component', () => {
     expect(onPopoutGraph).toHaveBeenCalledTimes(1);
   });
 
+  // @verifies spec-ft-storage-aico-graph-and-incremental-cache::TASK-STORAGE-001-1::REQ-005
+  it('renders Host Diagnostics with AICO Graph and LanceDB without Kùzu branding', () => {
+    render(
+      <DashboardView
+        onOpenEpic={vi.fn()}
+        onOpenSpec={vi.fn()}
+        projectName="aico"
+      />
+    );
+
+    expect(screen.getByText('Host Diagnostics')).toBeInTheDocument();
+    expect(screen.getByText('AICO Graph:')).toBeInTheDocument();
+    expect(screen.getByText('LanceDB:')).toBeInTheDocument();
+    expect(screen.queryByText(/Kùzu/i)).toBeNull();
+  });
+
+  // @verifies ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-4::REQ-004
+  it('renders live node and vector metrics in Host Diagnostics', () => {
+    const mockStats = {
+      project_id: 'aico-specs',
+      graph_nodes_count: 85,
+      graph_edges_count: 120,
+      vector_chunks_count: 450,
+      cache_state: 'ready',
+      storage_dir_bytes: 1048576,
+    };
+
+    render(
+      <DashboardView
+        onOpenEpic={vi.fn()}
+        onOpenSpec={vi.fn()}
+        projectName="aico"
+        storageStats={mockStats}
+      />
+    );
+
+    expect(screen.getByTestId('host-diag-graph')).toHaveTextContent('AICO Graph:Embedded OK (85 nodes)');
+    expect(screen.getByTestId('host-diag-lancedb')).toHaveTextContent('LanceDB:Embedded OK (450 vectors)');
+  });
+
   it('renders Ubiquitous Domain Terminology and allows expanding and searching', () => {
     const customTerms = [
       { term: 'Autonomous Orchestrator', definition: 'Local daemon executing SDD specs' },

@@ -2,8 +2,9 @@ use std::fs;
 use aico_storage::{StorageManager, SchemaMigrator, GraphNodeType, GraphRelationType};
 
 // @verifies ft-core-local-storage::TASK-CORE-003-2::REQ-006
+// @verifies spec-ft-storage-aico-graph-and-incremental-cache::TASK-STORAGE-001-1::REQ-001
 #[tokio::test]
-async fn test_kuzu_schema_migration_and_traceability() {
+async fn test_graph_schema_migration_and_traceability() {
     let temp_dir = std::env::temp_dir().join("aico_schema_test_1");
     let _ = fs::remove_dir_all(&temp_dir);
     fs::create_dir_all(&temp_dir).unwrap();

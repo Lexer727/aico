@@ -1,4 +1,4 @@
-use aico_storage::{HybridQueryEngine, HybridQueryResult, KuzuGraphStore, StorageManager};
+use aico_storage::{AicoGraphStore, HybridQueryEngine, HybridQueryResult, StorageManager};
 use serde::{Deserialize, Serialize};
 use crate::server::ToolError;
 
@@ -13,7 +13,8 @@ pub struct LineageSubgraphPayload {
 pub struct GraphToolHandler;
 
 impl GraphToolHandler {
-    /// Execute a 1-to-4 hop lineage query against Kùzu property graph
+    /// Execute a 1-to-4 hop lineage query against AICO property graph
+    // @implements spec-ft-storage-aico-graph-and-incremental-cache::TASK-STORAGE-001-1::REQ-001
     // @implements ft-core-mcp-tools::TASK-CORE-005-2::REQ-006
     // @implements spec-ft-tooling-mcp-repurpose::TASK-TOOL-002-2::REQ-004
     // @implements spec-ft-tooling-mcp-repurpose::TASK-TOOL-002-2::REQ-007
@@ -65,8 +66,8 @@ impl GraphToolHandler {
                         .execute_cypher(&cypher)
                         .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?
                 } else {
-                    let temp_path = std::env::temp_dir().join("aico_mcp_kuzu_query");
-                    let gstore = KuzuGraphStore::open(&temp_path)
+                    let temp_path = std::env::temp_dir().join("aico_mcp_graph_query");
+                    let gstore = AicoGraphStore::open(&temp_path)
                         .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
                     gstore
                         .execute_cypher(&cypher)
@@ -74,8 +75,8 @@ impl GraphToolHandler {
                 }
             }
             None => {
-                let temp_path = std::env::temp_dir().join("aico_mcp_kuzu_query");
-                let gstore = KuzuGraphStore::open(&temp_path)
+                let temp_path = std::env::temp_dir().join("aico_mcp_graph_query");
+                let gstore = AicoGraphStore::open(&temp_path)
                     .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
                 gstore
                     .execute_cypher(&cypher)

@@ -24,7 +24,10 @@ use crate::git::{
     GitRepoStatus,
 };
 use crate::ws::WebSocketHub;
+use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::path::{Path as StdPath, PathBuf};
+use std::time::SystemTime;
 
 #[derive(Error, Debug)]
 pub enum ServerError {
@@ -63,6 +66,161 @@ pub struct SetActiveProjectRequest {
     pub project_id: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct FileManifestEntry {
+    pub mtime_nanos: u128,
+    pub sha256: String,
+}
+
+#[derive(Debug, Default)]
+pub struct GraphCacheState {
+    pub cached_graph: Option<LineageGraphResponse>,
+    pub manifest: HashMap<PathBuf, FileManifestEntry>,
+    pub specs_path: PathBuf,
+}
+
+#[derive(Clone, Default)]
+pub struct GraphCacheManager {
+    inner: Arc<RwLock<GraphCacheState>>,
+}
+
+impl GraphCacheManager {
+    pub fn new() -> Self {
+        Self {
+            inner: Arc::new(RwLock::new(GraphCacheState::default())),
+        }
+    }
+
+    /// Retrieve the cached lineage graph if the manifest matches filesystem state;
+    /// otherwise, rebuild from markdown files, update manifest, and write snapshot.
+    // @implements spec-ft-storage-aico-graph-and-incremental-cache::TASK-STORAGE-001-3::REQ-006
+    // @implements spec-ft-storage-aico-graph-and-incremental-cache::TASK-STORAGE-001-3::REQ-007
+    // @implements spec-ft-storage-aico-graph-and-incremental-cache::TASK-STORAGE-001-3::REQ-008
+    pub async fn get_or_refresh_graph(&self, specs_path: &StdPath) -> LineageGraphResponse {
+        let md_files = Self::collect_markdown_files(specs_path);
+
+        // 1. Fast read-lock check: are all files unchanged?
+        {
+            let guard = self.inner.read().await;
+            if guard.specs_path == specs_path && guard.cached_graph.is_some() {
+                if guard.manifest.len() == md_files.len() {
+                    let mut is_dirty = false;
+                    for path in &md_files {
+                        let mtime = Self::get_mtime_nanos(path);
+                        if let Some(entry) = guard.manifest.get(path) {
+                            if entry.mtime_nanos != mtime {
+                                let sha = Self::compute_file_sha256(path);
+                                if sha.is_empty() || sha != entry.sha256 {
+                                    is_dirty = true;
+                                    break;
+                                }
+                            }
+                        } else {
+                            is_dirty = true;
+                            break;
+                        }
+                    }
+
+                    if !is_dirty {
+                        return guard.cached_graph.as_ref().unwrap().clone();
+                    }
+                }
+            }
+        }
+
+        // 2. Cache miss or dirty: acquire write lock
+        let mut guard = self.inner.write().await;
+        if guard.specs_path == specs_path && guard.cached_graph.is_some() && guard.manifest.len() == md_files.len() {
+            let mut is_dirty = false;
+            for path in &md_files {
+                let mtime = Self::get_mtime_nanos(path);
+                if let Some(entry) = guard.manifest.get(path) {
+                    if entry.mtime_nanos != mtime {
+                        let sha = Self::compute_file_sha256(path);
+                        if sha.is_empty() || sha != entry.sha256 {
+                            is_dirty = true;
+                            break;
+                        }
+                    }
+                } else {
+                    is_dirty = true;
+                    break;
+                }
+            }
+            if !is_dirty {
+                return guard.cached_graph.as_ref().unwrap().clone();
+            }
+        }
+
+        // Rebuild full graph from specs path
+        let full_graph = build_specs_lineage_graph(specs_path);
+
+        // Build new manifest
+        let mut new_manifest = HashMap::with_capacity(md_files.len());
+        for path in md_files {
+            let mtime_nanos = Self::get_mtime_nanos(&path);
+            let sha256 = Self::compute_file_sha256(&path);
+            new_manifest.insert(path, FileManifestEntry { mtime_nanos, sha256 });
+        }
+
+        // Persist snapshot to <specs_root>/.aico/storage/graph/lineage_graph.json
+        let graph_storage_dir = specs_path.join(".aico").join("storage").join("graph");
+        let _ = std::fs::create_dir_all(&graph_storage_dir);
+        let snapshot_file = graph_storage_dir.join("lineage_graph.json");
+        if let Ok(serialized) = serde_json::to_string_pretty(&full_graph) {
+            let _ = std::fs::write(snapshot_file, serialized);
+        }
+
+        guard.specs_path = specs_path.to_path_buf();
+        guard.manifest = new_manifest;
+        guard.cached_graph = Some(full_graph.clone());
+
+        full_graph
+    }
+
+    fn collect_markdown_files(specs_path: &StdPath) -> Vec<PathBuf> {
+        let mut files = Vec::new();
+        let subdirs = ["epics", "adr", "features"];
+        for sub in subdirs {
+            let dir = specs_path.join(sub);
+            if dir.is_dir() {
+                Self::collect_md_recursive(&dir, &mut files);
+            }
+        }
+        files
+    }
+
+    fn collect_md_recursive(dir: &StdPath, files: &mut Vec<PathBuf>) {
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    Self::collect_md_recursive(&path, files);
+                } else if path.extension().and_then(|e| e.to_str()).map(|e| e.eq_ignore_ascii_case("md")).unwrap_or(false) {
+                    files.push(path);
+                }
+            }
+        }
+    }
+
+    fn get_mtime_nanos(path: &StdPath) -> u128 {
+        std::fs::metadata(path)
+            .and_then(|m| m.modified())
+            .map(|t| t.duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_nanos())
+            .unwrap_or(0)
+    }
+
+    fn compute_file_sha256(path: &StdPath) -> String {
+        std::fs::read(path)
+            .map(|bytes| {
+                let mut hasher = Sha256::new();
+                hasher.update(&bytes);
+                format!("{:x}", hasher.finalize())
+            })
+            .unwrap_or_default()
+    }
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub start_time: Arc<Instant>,
@@ -73,6 +231,8 @@ pub struct AppState {
     pub quota_service: Arc<crate::quotas::QuotaDiscoveryService>,
     pub bound_port: Arc<std::sync::atomic::AtomicU16>,
     pub storage: Arc<RwLock<Option<aico_storage::StorageManager>>>,
+    pub storage_federation: Arc<aico_storage::StorageFederationManager>,
+    pub graph_cache: Arc<GraphCacheManager>,
 }
 
 impl Default for AppState {
@@ -86,6 +246,8 @@ impl Default for AppState {
             quota_service: Arc::new(crate::quotas::QuotaDiscoveryService::default()),
             bound_port: Arc::new(std::sync::atomic::AtomicU16::new(4242)),
             storage: Arc::new(RwLock::new(None)),
+            storage_federation: Arc::new(aico_storage::StorageFederationManager::new()),
+            graph_cache: Arc::new(GraphCacheManager::new()),
         }
     }
 }
@@ -177,6 +339,10 @@ impl HostServer {
             // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-4::REQ-007
             .route("/api/v1/projects", get(list_projects_handler).post(handle_create_project))
             .route("/api/v1/projects/active", post(set_active_project_handler))
+            // @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-2::REQ-005
+            .route("/api/v1/projects/switch", post(set_active_project_handler))
+            // @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-4::REQ-003
+            .route("/api/v1/storage/stats", get(get_storage_stats_handler))
             // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-5::REQ-006
             .route("/api/v1/graph", get(handle_get_graph))
             .route("/api/v1/epics", get(list_epics_handler))
@@ -207,6 +373,8 @@ impl HostServer {
             .route("/api/v1/code/files", get(list_code_files_handler))
             .route("/api/v1/raw", get(get_raw_file_handler))
             .route("/api/v1/search", get(search_handler))
+            // @implements ft-storage-lancedb-hybrid-search::TASK-STORAGE-002-5::REQ-007
+            .route("/api/v1/search/hybrid", post(handle_hybrid_search))
             // @implements ft-core-assets-manager::TASK-ASSET-004::REQ-004
             .route("/api/v1/epics/:id/assets", get(crate::assets::list_epic_assets_handler))
             // @implements ft-core-assets-manager::TASK-ASSET-004::REQ-005
@@ -409,7 +577,15 @@ async fn list_projects_handler(
     Json(registry.list_cloned())
 }
 
+#[derive(Debug, Deserialize)]
+pub struct StorageStatsQuery {
+    pub project_id: Option<String>,
+}
+
 // @implements ft-core-discovery::TASK-CORE-004-3::REQ-008
+// @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-2::REQ-005
+// @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-2::REQ-008
+// @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-2::REQ-010
 async fn set_active_project_handler(
     State(state): State<AppState>,
     Json(payload): Json<SetActiveProjectRequest>,
@@ -417,9 +593,10 @@ async fn set_active_project_handler(
     let mut registry = state.registry.write().await;
     if registry.set_active(&payload.project_id) {
         if let Some(active) = registry.get_active() {
-            if let Ok(sm) = aico_storage::StorageManager::open(&active.specs_path) {
+            if let Ok(sm) = state.storage_federation.register_project(&active.id, &active.specs_path).await {
+                let _ = state.storage_federation.switch_project(&active.id).await;
                 let mut st = state.storage.write().await;
-                *st = Some(sm);
+                *st = Some((*sm).clone());
             }
         }
         state.ws_hub.broadcast("active_project_changed", &payload.project_id);
@@ -429,6 +606,30 @@ async fn set_active_project_handler(
         })))
     } else {
         Err(StatusCode::NOT_FOUND)
+    }
+}
+
+// @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-4::REQ-003
+async fn get_storage_stats_handler(
+    State(state): State<AppState>,
+    Query(query): Query<StorageStatsQuery>,
+) -> Result<Json<aico_storage::StorageStats>, (StatusCode, String)> {
+    let registry = state.registry.read().await;
+    let target_proj = if let Some(ref pid) = query.project_id {
+        registry.list_cloned().into_iter().find(|p| p.id == *pid || p.name == *pid)
+    } else {
+        registry.get_active().cloned().or_else(|| registry.list_cloned().into_iter().next())
+    };
+
+    if let Some(proj) = target_proj {
+        let _ = state.storage_federation.register_project(&proj.id, &proj.specs_path).await;
+        let stats = state.storage_federation.telemetry_stats(Some(&proj.id)).await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        Ok(Json(stats))
+    } else {
+        let stats = state.storage_federation.telemetry_stats(query.project_id.as_deref()).await
+            .map_err(|_| (StatusCode::NOT_FOUND, "No project storage found".to_string()))?;
+        Ok(Json(stats))
     }
 }
 
@@ -2205,6 +2406,74 @@ async fn search_handler(
     Json(hits)
 }
 
+#[derive(Debug, Deserialize)]
+pub struct HybridSearchRequest {
+    pub query: String,
+    pub top_k: Option<usize>,
+    pub project_id: Option<String>,
+    pub scope: Option<String>,
+}
+
+// @implements ft-storage-lancedb-hybrid-search::TASK-STORAGE-002-5::REQ-007
+// @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-3::REQ-006
+async fn handle_hybrid_search(
+    State(state): State<AppState>,
+    Json(payload): Json<HybridSearchRequest>,
+) -> Result<Json<aico_storage::HybridQueryResult>, (StatusCode, String)> {
+    let top_k = payload.top_k.unwrap_or(10);
+    let trimmed = payload.query.trim();
+    if trimmed.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "Query must not be empty".to_string()));
+    }
+
+    let engine = aico_storage::HybridQueryEngine::new();
+
+    if payload.scope.as_deref() == Some("all") {
+        {
+            let registry = state.registry.read().await;
+            for p in registry.list_cloned() {
+                let _ = state.storage_federation.register_project(&p.id, &p.specs_path).await;
+            }
+        }
+        let hits = engine
+            .search_federated(&state.storage_federation, trimmed, top_k, aico_storage::SearchScope::All)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+        return Ok(Json(aico_storage::HybridQueryResult {
+            query: trimmed.to_string(),
+            hits,
+            vector_matches: Vec::new(),
+            graph_context: Vec::new(),
+        }));
+    }
+
+    let active_project = {
+        let registry = state.registry.read().await;
+        if let Some(ref pid) = payload.project_id {
+            registry.list_cloned().into_iter().find(|p| p.id == *pid || p.name == *pid)
+        } else {
+            registry.get_active().cloned().or_else(|| registry.list_cloned().into_iter().next())
+        }
+    };
+
+    let sm = if let Some(proj) = active_project {
+        state.storage_federation.register_project(&proj.id, &proj.specs_path).await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    } else {
+        let temp_path = std::env::temp_dir().join("aico_hybrid_search_temp");
+        state.storage_federation.register_project("temp", &temp_path).await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    };
+
+    let result = engine
+        .search(&sm, trimmed, top_k)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(result))
+}
+
 // ---------------------------------------------------------------------------
 // PROJECT CREATOR, LINEAGE GRAPH & GIT OPERATIONS ENDPOINTS
 // ---------------------------------------------------------------------------
@@ -2414,6 +2683,9 @@ async fn handle_create_project(
 
     state.ws_hub.broadcast("active_project_changed", &proj.id);
 
+    // @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-1::REQ-007
+    let _ = state.storage_federation.register_project(&proj.id, &proj.specs_path).await;
+
     (StatusCode::CREATED, Json(proj)).into_response()
 }
 
@@ -2470,15 +2742,10 @@ async fn handle_get_graph(
         None => return (StatusCode::OK, Json(LineageGraphResponse { nodes: vec![], edges: vec![] })).into_response(),
     };
 
-    let full_graph = build_specs_lineage_graph(&proj.specs_path);
-
-    // Persist snapshot to <specs_root>/.aico/storage/graph/lineage_graph.json
-    let graph_storage_dir = proj.specs_path.join(".aico").join("storage").join("graph");
-    let _ = std::fs::create_dir_all(&graph_storage_dir);
-    let snapshot_file = graph_storage_dir.join("lineage_graph.json");
-    if let Ok(serialized) = serde_json::to_string_pretty(&full_graph) {
-        let _ = std::fs::write(snapshot_file, serialized);
-    }
+    // @implements spec-ft-storage-aico-graph-and-incremental-cache::TASK-STORAGE-001-3::REQ-006
+    // @implements spec-ft-storage-aico-graph-and-incremental-cache::TASK-STORAGE-001-3::REQ-007
+    // @implements spec-ft-storage-aico-graph-and-incremental-cache::TASK-STORAGE-001-3::REQ-008
+    let full_graph = state.graph_cache.get_or_refresh_graph(&proj.specs_path).await;
 
     // Optional filtering by epic
     let epic_filter = query.epic.as_deref().unwrap_or("all");

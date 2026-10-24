@@ -1,7 +1,29 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, RwLock};
+use arrow_array::{
+    FixedSizeListArray, Float32Array, RecordBatch, StringArray, UInt32Array,
+    types::Float32Type,
+};
+use arrow_schema::{DataType, Field, Schema};
+use futures::TryStreamExt;
+use lancedb::query::{ExecutableQuery, QueryBase};
 use serde::{Deserialize, Serialize};
+use tokio::sync::Mutex as TokioMutex;
 use crate::error::StorageError;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VectorRecordInput {
+    pub id: String,
+    pub content: String,
+    pub file_path: String,
+    pub start_line: usize,
+    pub end_line: usize,
+    pub language: String,
+    pub vector: Vec<f32>,
+    pub doc_type: String,
+    pub project_id: String,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VectorRecord {
@@ -18,30 +40,266 @@ pub struct VectorQueryResult {
 }
 
 pub struct LanceVectorStore {
-    _path: PathBuf,
-    records: HashMap<String, VectorRecord>,
+    path: PathBuf,
+    records: RwLock<HashMap<String, VectorRecord>>,
+    db_conn: Arc<TokioMutex<Option<lancedb::Connection>>>,
+    table: Arc<TokioMutex<Option<lancedb::Table>>>,
 }
 
 impl LanceVectorStore {
-    /// Initialize embedded vector store connection
-    // @implements ft-core-local-storage::TASK-CORE-003-1::REQ-001
+    /// Return canonical Apache Arrow table schema for code and specification chunks
+    // @implements ft-storage-lancedb-hybrid-search::TASK-STORAGE-002-1::REQ-002
+    pub fn table_schema() -> Arc<Schema> {
+        Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Utf8, false),
+            Field::new("content", DataType::Utf8, false),
+            Field::new("file_path", DataType::Utf8, false),
+            Field::new("start_line", DataType::UInt32, false),
+            Field::new("end_line", DataType::UInt32, false),
+            Field::new("language", DataType::Utf8, false),
+            Field::new(
+                "vector",
+                DataType::FixedSizeList(Arc::new(Field::new("item", DataType::Float32, true)), 384),
+                false,
+            ),
+            Field::new("doc_type", DataType::Utf8, false),
+            Field::new("project_id", DataType::Utf8, false),
+        ]))
+    }
+
+    /// Initialize embedded persistent vector store connection directory
+    // @implements ft-storage-lancedb-hybrid-search::TASK-STORAGE-002-1::REQ-001
+    // @implements ft-storage-lancedb-hybrid-search::TASK-STORAGE-002-1::REQ-010
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StorageError> {
         let path = path.as_ref().to_path_buf();
         std::fs::create_dir_all(&path)?;
         Ok(Self {
-            _path: path,
-            records: HashMap::new(),
+            path,
+            records: RwLock::new(HashMap::new()),
+            db_conn: Arc::new(TokioMutex::new(None)),
+            table: Arc::new(TokioMutex::new(None)),
         })
     }
 
-    /// Upsert vector record into embedded index
+    /// Asynchronously open and connect to embedded LanceDB table
+    // @implements ft-storage-lancedb-hybrid-search::TASK-STORAGE-002-1::REQ-001
+    pub async fn open_async(path: impl AsRef<Path>) -> Result<Self, StorageError> {
+        let store = Self::open(path)?;
+        let _ = store.ensure_table().await?;
+        Ok(store)
+    }
+
+    /// Ensure table exists and return cached handle
+    pub async fn ensure_table(&self) -> Result<lancedb::Table, StorageError> {
+        let mut tbl_lock = self.table.lock().await;
+        if let Some(ref tbl) = *tbl_lock {
+            return Ok(tbl.clone());
+        }
+
+        let mut conn_lock = self.db_conn.lock().await;
+        let conn = match *conn_lock {
+            Some(ref c) => c.clone(),
+            None => {
+                let uri = self.path.to_string_lossy().to_string();
+                let c = lancedb::connect(&uri).execute().await?;
+                *conn_lock = Some(c.clone());
+                c
+            }
+        };
+
+        let table_names = conn.table_names().execute().await?;
+        let table = if table_names.iter().any(|t| t == "chunks") {
+            conn.open_table("chunks").execute().await?
+        } else {
+            conn.create_empty_table("chunks", Self::table_schema())
+                .execute()
+                .await?
+        };
+
+        *tbl_lock = Some(table.clone());
+        Ok(table)
+    }
+
+    /// Upsert vector records into LanceDB persistent columnar table
+    // @implements ft-storage-lancedb-hybrid-search::TASK-STORAGE-002-1::REQ-001
+    // @implements ft-storage-lancedb-hybrid-search::TASK-STORAGE-002-1::REQ-002
+    // @implements ft-storage-lancedb-hybrid-search::TASK-STORAGE-002-1::REQ-008
+    pub async fn upsert_records(&self, records: &[VectorRecordInput]) -> Result<usize, StorageError> {
+        if records.is_empty() {
+            return Ok(0);
+        }
+
+        let table = self.ensure_table().await?;
+
+        // 1. Build Arrow Arrays
+        let id_array = Arc::new(StringArray::from_iter_values(records.iter().map(|r| r.id.as_str())));
+        let content_array = Arc::new(StringArray::from_iter_values(records.iter().map(|r| r.content.as_str())));
+        let file_path_array = Arc::new(StringArray::from_iter_values(records.iter().map(|r| r.file_path.as_str())));
+        let start_line_array = Arc::new(UInt32Array::from_iter_values(records.iter().map(|r| r.start_line as u32)));
+        let end_line_array = Arc::new(UInt32Array::from_iter_values(records.iter().map(|r| r.end_line as u32)));
+        let language_array = Arc::new(StringArray::from_iter_values(records.iter().map(|r| r.language.as_str())));
+
+        let values: Vec<Option<Vec<Option<f32>>>> = records
+            .iter()
+            .map(|r| {
+                let mut v = r.vector.clone();
+                if v.len() < 384 {
+                    v.resize(384, 0.0);
+                } else if v.len() > 384 {
+                    v.truncate(384);
+                }
+                Some(v.into_iter().map(Some).collect())
+            })
+            .collect();
+        let vector_array = Arc::new(FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(values, 384));
+
+        let doc_type_array = Arc::new(StringArray::from_iter_values(records.iter().map(|r| r.doc_type.as_str())));
+        let project_id_array = Arc::new(StringArray::from_iter_values(records.iter().map(|r| r.project_id.as_str())));
+
+        let batch = RecordBatch::try_new(
+            Self::table_schema(),
+            vec![
+                id_array,
+                content_array,
+                file_path_array,
+                start_line_array,
+                end_line_array,
+                language_array,
+                vector_array,
+                doc_type_array,
+                project_id_array,
+            ],
+        )?;
+
+        // 2. Add batch to LanceDB table
+        table.add(batch).execute().await?;
+
+        // 3. Update fast in-memory cache
+        {
+            let mut mem = self.records.write().unwrap();
+            for r in records {
+                let metadata = serde_json::json!({
+                    "file_path": r.file_path,
+                    "start_line": r.start_line,
+                    "end_line": r.end_line,
+                    "language": r.language,
+                    "doc_type": r.doc_type,
+                    "project_id": r.project_id,
+                    "content": r.content,
+                });
+                mem.insert(
+                    r.id.clone(),
+                    VectorRecord {
+                        id: r.id.clone(),
+                        vector: r.vector.clone(),
+                        metadata,
+                    },
+                );
+            }
+        }
+
+        // 4. REQ-008: Check row count and maintain index if needed
+        if let Ok(count) = table.count_rows(None).await {
+            if count >= 1000 {
+                let _ = table.create_index(&["vector"], lancedb::index::Index::Auto).execute().await;
+            }
+        }
+
+        Ok(records.len())
+    }
+
+    /// Delete all chunks associated with a file path
+    // @implements ft-storage-lancedb-hybrid-search::TASK-STORAGE-002-1::REQ-006
+    pub async fn delete_by_path(&self, file_path: &str) -> Result<usize, StorageError> {
+        let table = self.ensure_table().await?;
+        let predicate = format!("file_path = '{}'", file_path.replace('\'', "''"));
+        let _ = table.delete(&predicate).await;
+
+        let mut mem = self.records.write().unwrap();
+        let mut removed = 0;
+        mem.retain(|_, v| {
+            if let Some(fp) = v.metadata.get("file_path").and_then(|f| f.as_str()) {
+                if fp == file_path {
+                    removed += 1;
+                    return false;
+                }
+            }
+            true
+        });
+        Ok(removed)
+    }
+
+    /// Query total row count in persistent LanceDB table
+    pub async fn count_rows(&self) -> Result<usize, StorageError> {
+        let table = self.ensure_table().await?;
+        let count = table.count_rows(None).await?;
+        Ok(count)
+    }
+
+    /// Query nearest neighbors via LanceDB vector index
+    // @implements ft-storage-lancedb-hybrid-search::TASK-STORAGE-002-1::REQ-001
+    pub async fn query_nearest_lance(
+        &self,
+        query_vector: &[f32],
+        top_k: usize,
+    ) -> Result<Vec<VectorQueryResult>, StorageError> {
+        let table = self.ensure_table().await?;
+        let mut q = query_vector.to_vec();
+        if q.len() < 384 {
+            q.resize(384, 0.0);
+        } else if q.len() > 384 {
+            q.truncate(384);
+        }
+
+        let mut stream = table
+            .query()
+            .nearest_to(q.as_slice())?
+            .distance_type(lancedb::DistanceType::Cosine)
+            .limit(top_k)
+            .execute()
+            .await?;
+
+        let mut results = Vec::new();
+        while let Some(batch) = stream.try_next().await? {
+            let id_col = batch.column_by_name("id").and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let dist_col = batch.column_by_name("_distance").and_then(|c| c.as_any().downcast_ref::<Float32Array>());
+            let content_col = batch.column_by_name("content").and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let path_col = batch.column_by_name("file_path").and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let start_col = batch.column_by_name("start_line").and_then(|c| c.as_any().downcast_ref::<UInt32Array>());
+            let end_col = batch.column_by_name("end_line").and_then(|c| c.as_any().downcast_ref::<UInt32Array>());
+
+            for i in 0..batch.num_rows() {
+                let id = id_col.map(|c| c.value(i).to_string()).unwrap_or_default();
+                let dist = dist_col.map(|c| c.value(i)).unwrap_or(1.0);
+                let score = 1.0 - (dist / 2.0).clamp(0.0, 1.0);
+                let metadata = serde_json::json!({
+                    "content": content_col.map(|c| c.value(i)).unwrap_or_default(),
+                    "file_path": path_col.map(|c| c.value(i)).unwrap_or_default(),
+                    "start_line": start_col.map(|c| c.value(i)).unwrap_or_default(),
+                    "end_line": end_col.map(|c| c.value(i)).unwrap_or_default(),
+                });
+                results.push(VectorQueryResult {
+                    id,
+                    score,
+                    metadata,
+                });
+            }
+        }
+
+        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        results.truncate(top_k);
+        Ok(results)
+    }
+
+    /// Synchronous upsert into vector store cache
     pub fn upsert_record(
         &mut self,
         id: &str,
         vector: Vec<f32>,
         metadata: serde_json::Value,
     ) -> Result<(), StorageError> {
-        self.records.insert(
+        let mut mem = self.records.write().unwrap();
+        mem.insert(
             id.to_string(),
             VectorRecord {
                 id: id.to_string(),
@@ -52,11 +310,10 @@ impl LanceVectorStore {
         Ok(())
     }
 
-    /// Perform nearest neighbor vector similarity search
-    // @implements ft-core-local-storage::TASK-CORE-003-1::REQ-003
+    /// Perform nearest neighbor vector similarity search over in-memory cache
     pub fn query_nearest(&self, query_vector: &[f32], top_k: usize) -> Result<Vec<VectorQueryResult>, StorageError> {
-        let mut scored: Vec<VectorQueryResult> = self
-            .records
+        let mem = self.records.read().unwrap();
+        let mut scored: Vec<VectorQueryResult> = mem
             .values()
             .map(|rec| {
                 let dot: f32 = rec.vector.iter().zip(query_vector.iter()).map(|(a, b)| a * b).sum();
@@ -80,8 +337,8 @@ impl LanceVectorStore {
         Ok(scored)
     }
 
-    /// Return total records stored
+    /// Return total records stored in cache
     pub fn record_count(&self) -> usize {
-        self.records.len()
+        self.records.read().unwrap().len()
     }
 }

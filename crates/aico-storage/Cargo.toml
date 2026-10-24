@@ -10,4 +10,9 @@ serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 sha2 = "0.10"
+lancedb = { version = "0.40.0", features = ["remote"] }
+arrow-schema = "58.4"
+arrow-array = "58.4"
+arrow = "58.4"
+futures = "0.3"
 

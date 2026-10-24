@@ -1,6 +1,6 @@
 use aico_storage::{
-    CodeChunker, EmbeddingPipeline, GraphEdge, GraphNode, HybridQueryEngine, KuzuGraphStore,
-    StorageManager,
+    AicoGraphStore, CodeChunker, EmbeddingPipeline, GraphEdge, GraphNode, HybridQueryEngine,
+    StorageManager, StorageFederationManager, SearchScope,
 };
 
 // @verifies ft-core-local-storage::TASK-CORE-003-6::REQ-007
@@ -33,17 +33,68 @@ async fn test_hybrid_vector_and_graph_query() {
     assert_eq!(result.query, "verify token signature");
 }
 
+// @verifies ft-storage-lancedb-hybrid-search::TASK-STORAGE-002-3::REQ-004
+// @verifies ft-storage-lancedb-hybrid-search::TASK-STORAGE-002-3::REQ-008
+// @verifies ft-storage-lancedb-hybrid-search::TASK-STORAGE-002-3::REQ-009
+#[tokio::test]
+async fn test_hybrid_rrf_scoring_and_ranking() {
+    let temp_dir = std::env::temp_dir().join("aico_hybrid_rrf_test");
+    let _ = std::fs::remove_dir_all(&temp_dir);
+    std::fs::create_dir_all(&temp_dir).unwrap();
+
+    let storage_mgr = StorageManager::open(&temp_dir).unwrap();
+    let chunker = CodeChunker::new();
+    let pipeline = EmbeddingPipeline::new();
+
+    let code1 = "pub fn authenticate_bearer_token(token: &str) -> bool { true }";
+    let code2 = "// REQ-002: Token authentication requirements\npub fn validate_req_002() {}";
+    let code3 = "pub fn render_canvas_widget() -> Canvas { Canvas::new() }";
+
+    let chunks1 = chunker.chunk_file("crates/auth/src/lib.rs", code1);
+    let chunks2 = chunker.chunk_file("crates/auth/src/req.rs", code2);
+    let chunks3 = chunker.chunk_file("crates/ui/src/canvas.rs", code3);
+
+    pipeline.ingest_chunks(&storage_mgr, &chunks1).await.unwrap();
+    pipeline.ingest_chunks(&storage_mgr, &chunks2).await.unwrap();
+    pipeline.ingest_chunks(&storage_mgr, &chunks3).await.unwrap();
+
+    let engine = HybridQueryEngine::new();
+    let result = engine
+        .search(&storage_mgr, "authenticate token REQ-002", 3)
+        .await
+        .expect("Hybrid query failed");
+
+    assert!(!result.hits.is_empty(), "Must return fused search hits");
+    assert!(result.hits.len() <= 3);
+
+    // Verify top hit has highest RRF score
+    let top_hit = &result.hits[0];
+    assert!(top_hit.rrf_score > 0.0);
+    assert!(
+        top_hit.file_path.contains("crates/auth"),
+        "Top hit should be an auth file, got {}",
+        top_hit.file_path
+    );
+
+    // Verify RRF combines vector and lexical
+    for hit in &result.hits {
+        assert!(hit.rrf_score <= 1.0);
+    }
+}
+
+
 // @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-3::REQ-003
 // @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-4::REQ-004
+// @verifies spec-ft-storage-aico-graph-and-incremental-cache::TASK-STORAGE-001-1::REQ-001
 #[tokio::test]
-async fn test_kuzu_graph_store_persistence_and_traversal() {
-    let temp_dir = std::env::temp_dir().join("aico_kuzu_lineage_persistence_test");
+async fn test_aico_graph_store_persistence_and_traversal() {
+    let temp_dir = std::env::temp_dir().join("aico_graph_lineage_persistence_test");
     let _ = std::fs::remove_dir_all(&temp_dir);
     std::fs::create_dir_all(&temp_dir).unwrap();
 
     let graph_dir = temp_dir.join(".aico").join("storage").join("graph");
     {
-        let mut store = KuzuGraphStore::open(&graph_dir).expect("open KuzuGraphStore");
+        let mut store = AicoGraphStore::open(&graph_dir).expect("open AicoGraphStore");
 
         // 1. Insert ADR, Epic, Feature, Spec, Plan via upsert_node / upsert_edge
         store
@@ -148,7 +199,7 @@ async fn test_kuzu_graph_store_persistence_and_traversal() {
     let json_path = graph_dir.join("lineage_graph.json");
     assert!(json_path.exists(), "lineage_graph.json must be persisted to disk");
 
-    let reopened = KuzuGraphStore::open(&graph_dir).expect("reopen KuzuGraphStore");
+    let reopened = AicoGraphStore::open(&graph_dir).expect("reopen AicoGraphStore");
     assert_eq!(reopened.node_count(), 8);
     assert_eq!(reopened.edge_count(), 8);
 
@@ -187,5 +238,53 @@ async fn test_kuzu_graph_store_persistence_and_traversal() {
         .collect();
     assert!(cypher_ids.contains(&"ft-core-workspace-graph-and-project-creator"));
     assert!(cypher_ids.contains(&"spec-ft-core-workspace-graph-and-project-creator"));
+}
+
+// @verifies ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-3::REQ-006
+#[tokio::test]
+async fn test_federated_hybrid_search_across_projects() {
+    let base_temp = std::env::temp_dir().join("aico_federated_search_test");
+    let _ = std::fs::remove_dir_all(&base_temp);
+
+    let proj1_dir = base_temp.join("proj_core");
+    let proj2_dir = base_temp.join("proj_ui");
+    std::fs::create_dir_all(&proj1_dir).unwrap();
+    std::fs::create_dir_all(&proj2_dir).unwrap();
+
+    let federation = StorageFederationManager::new();
+    let mgr1 = federation.register_project("proj-core", &proj1_dir).await.unwrap();
+    let mgr2 = federation.register_project("proj-ui", &proj2_dir).await.unwrap();
+
+    let chunker = CodeChunker::new();
+    let pipeline = EmbeddingPipeline::new();
+
+    // Project 1 code: backend database queries
+    let code_core = "pub fn query_database_pool() -> Connection { Connection::open() }";
+    let chunks_core = chunker.chunk_file("crates/db/src/pool.rs", code_core);
+    pipeline.ingest_chunks(&mgr1, &chunks_core).await.unwrap();
+
+    // Project 2 code: frontend canvas rendering
+    let code_ui = "pub fn render_database_canvas() -> Widget { Widget::new() }";
+    let chunks_ui = chunker.chunk_file("src/components/canvas.tsx", code_ui);
+    pipeline.ingest_chunks(&mgr2, &chunks_ui).await.unwrap();
+
+    let engine = HybridQueryEngine::new();
+
+    // Query with scope: Active (active is proj-core)
+    let active_hits = engine.search_federated(&federation, "database", 5, SearchScope::Active).await.unwrap();
+    assert!(!active_hits.is_empty(), "Active hits must not be empty");
+    for hit in &active_hits {
+        assert_eq!(hit.project_id.as_deref(), Some("proj-core"));
+    }
+
+    // Query with scope: All
+    let all_hits = engine.search_federated(&federation, "database", 5, SearchScope::All).await.unwrap();
+    assert!(all_hits.len() >= 2, "Cross-project search must find hits across both projects");
+
+    let pids: std::collections::HashSet<String> = all_hits.iter().filter_map(|h| h.project_id.clone()).collect();
+    assert!(pids.contains("proj-core"), "Hits must contain proj-core");
+    assert!(pids.contains("proj-ui"), "Hits must contain proj-ui");
+
+    let _ = std::fs::remove_dir_all(&base_temp);
 }
 

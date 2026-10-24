@@ -438,3 +438,188 @@ async fn test_windows_popup_notification_endpoint() {
 
     server_task.abort();
 }
+
+
+// @verifies ft-storage-lancedb-hybrid-search::TASK-STORAGE-002-5::REQ-007
+#[tokio::test]
+async fn test_hybrid_search_endpoint() {
+    let mut config = ServerConfig::default();
+    config.base_port = 4345;
+
+    let mut server = HostServer::new(config);
+    let addr = server.bind().await.expect("Server should bind successfully");
+
+    let server_task = tokio::spawn(async move {
+        server.serve().await.expect("Server should run cleanly");
+    });
+
+    let client = reqwest::Client::new();
+    let url = format!("http://{}/api/v1/search/hybrid", addr);
+
+    // Empty query returns 400 Bad Request
+    let bad_res = client.post(&url)
+        .json(&serde_json::json!({ "query": "  " }))
+        .send()
+        .await
+        .expect("Search request should complete");
+    assert_eq!(bad_res.status(), 400);
+
+    // Valid query returns 200 with hits array
+    let res = client.post(&url)
+        .json(&serde_json::json!({
+            "query": "AicoGraphStore lineage",
+            "top_k": 5
+        }))
+        .send()
+        .await
+        .expect("Valid search request should complete");
+    assert_eq!(res.status(), 200);
+
+    let body: serde_json::Value = res.json().await.expect("Response should parse as JSON");
+    assert_eq!(body["query"], "AicoGraphStore lineage");
+    assert!(body["hits"].is_array());
+
+    server_task.abort();
+}
+
+// @verifies ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-2::REQ-005
+// @verifies ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-2::REQ-008
+// @verifies ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-2::REQ-010
+#[tokio::test]
+async fn test_dynamic_project_storage_switching() {
+    let mut config = ServerConfig::default();
+    config.base_port = 4350;
+
+    let temp_root = std::env::temp_dir().join(format!("aico_switch_test_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+    let p1_dir = temp_root.join("project-one-specs");
+    let p2_dir = temp_root.join("project-two-specs");
+    std::fs::create_dir_all(&p1_dir).unwrap();
+    std::fs::create_dir_all(&p2_dir).unwrap();
+
+    let state = AppState::default();
+    {
+        let mut reg = state.registry.write().await;
+        reg.register(aico_core::DiscoveredProject {
+            id: "project-one-specs".to_string(),
+            name: "Project One Specs".to_string(),
+            specs_path: p1_dir.clone(),
+            codebase_path: None,
+            manifest: aico_core::ProjectManifest {
+                name: "project-one".to_string(),
+                version: Some("0.1.0".to_string()),
+                codebase_path: None,
+                created_at: None,
+                repositories: None,
+            },
+            status: aico_core::ProjectStatus::Active,
+        });
+        reg.register(aico_core::DiscoveredProject {
+            id: "project-two-specs".to_string(),
+            name: "Project Two Specs".to_string(),
+            specs_path: p2_dir.clone(),
+            codebase_path: None,
+            manifest: aico_core::ProjectManifest {
+                name: "project-two".to_string(),
+                version: Some("0.1.0".to_string()),
+                codebase_path: None,
+                created_at: None,
+                repositories: None,
+            },
+            status: aico_core::ProjectStatus::Active,
+        });
+        reg.set_active("project-one-specs");
+    }
+
+    let mut server = HostServer::with_state(config, state);
+    let addr = server.bind().await.expect("Server should bind successfully");
+
+    let server_task = tokio::spawn(async move {
+        server.serve().await.expect("Server should run cleanly");
+    });
+
+    let client = reqwest::Client::new();
+    let switch_url = format!("http://{}/api/v1/projects/switch", addr);
+
+    // 1. Switch to project-two
+    let switch_res2 = client.post(&switch_url)
+        .json(&serde_json::json!({ "project_id": "project-two-specs" }))
+        .send().await.unwrap();
+    assert_eq!(switch_res2.status(), 200);
+    let body2: serde_json::Value = switch_res2.json().await.unwrap();
+    assert_eq!(body2["status"], "ok");
+    assert_eq!(body2["active_project"], "project-two-specs");
+
+    // 2. Switch back to project-one
+    let switch_res1 = client.post(&switch_url)
+        .json(&serde_json::json!({ "project_id": "project-one-specs" }))
+        .send().await.unwrap();
+    assert_eq!(switch_res1.status(), 200);
+    let body1: serde_json::Value = switch_res1.json().await.unwrap();
+    assert_eq!(body1["active_project"], "project-one-specs");
+
+    // 3. Switch to non-existent project returns 404 (REQ-010)
+    let switch_res_bad = client.post(&switch_url)
+        .json(&serde_json::json!({ "project_id": "non-existent-proj" }))
+        .send().await.unwrap();
+    assert_eq!(switch_res_bad.status(), 404);
+
+    server_task.abort();
+    let _ = std::fs::remove_dir_all(&temp_root);
+}
+
+// @verifies ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-4::REQ-003
+#[tokio::test]
+async fn test_storage_stats_endpoint() {
+    let mut config = ServerConfig::default();
+    config.base_port = 4355;
+
+    let temp_root = std::env::temp_dir().join(format!("aico_stats_test_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+    let p_dir = temp_root.join("telemetry-project-specs");
+    std::fs::create_dir_all(&p_dir).unwrap();
+
+    let state = AppState::default();
+    {
+        let mut reg = state.registry.write().await;
+        reg.register(aico_core::DiscoveredProject {
+            id: "telemetry-project-specs".to_string(),
+            name: "Telemetry Project Specs".to_string(),
+            specs_path: p_dir.clone(),
+            codebase_path: None,
+            manifest: aico_core::ProjectManifest {
+                name: "telemetry-project".to_string(),
+                version: Some("0.1.0".to_string()),
+                codebase_path: None,
+                created_at: None,
+                repositories: None,
+            },
+            status: aico_core::ProjectStatus::Active,
+        });
+        reg.set_active("telemetry-project-specs");
+    }
+
+    let mut server = HostServer::with_state(config, state);
+    let addr = server.bind().await.expect("Server should bind successfully");
+
+    let server_task = tokio::spawn(async move {
+        server.serve().await.expect("Server should run cleanly");
+    });
+
+    let client = reqwest::Client::new();
+
+    // Call /api/v1/storage/stats
+    let stats_url = format!("http://{}/api/v1/storage/stats", addr);
+    let stats_res = client.get(&stats_url)
+        .send().await.unwrap();
+    assert_eq!(stats_res.status(), 200);
+
+    let stats_body: serde_json::Value = stats_res.json().await.unwrap();
+    assert_eq!(stats_body["project_id"], "telemetry-project-specs");
+    assert!(stats_body["graph_nodes_count"].is_number());
+    assert!(stats_body["graph_edges_count"].is_number());
+    assert!(stats_body["vector_chunks_count"].is_number());
+    assert_eq!(stats_body["cache_state"], "ready");
+    assert!(stats_body["storage_dir_bytes"].is_number());
+
+    server_task.abort();
+    let _ = std::fs::remove_dir_all(&temp_root);
+}

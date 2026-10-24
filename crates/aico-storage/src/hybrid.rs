@@ -1,12 +1,35 @@
+use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use crate::chunker::EmbeddingPipeline;
 use crate::error::StorageError;
 use crate::manager::StorageManager;
 use crate::vector::VectorQueryResult;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SearchScope {
+    Active,
+    All,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchHit {
+    pub id: String,
+    pub file_path: String,
+    pub start_line: usize,
+    pub end_line: usize,
+    pub content: String,
+    pub rrf_score: f32,
+    pub vector_rank: Option<usize>,
+    pub lexical_rank: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_id: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HybridQueryResult {
     pub query: String,
+    pub hits: Vec<SearchHit>,
     pub vector_matches: Vec<VectorQueryResult>,
     pub graph_context: Vec<String>,
 }
@@ -21,20 +44,133 @@ impl HybridQueryEngine {
         Self::default()
     }
 
-    /// Perform unified hybrid query across LanceDB vector store and Kùzu property graph
-    // @implements ft-core-local-storage::TASK-CORE-003-6::REQ-007
+    /// Perform unified hybrid search fusing dense vectors and BM25 using Reciprocal Rank Fusion (RRF)
+    // @implements ft-storage-lancedb-hybrid-search::TASK-STORAGE-002-3::REQ-004
+    // @implements ft-storage-lancedb-hybrid-search::TASK-STORAGE-002-3::REQ-008
+    // @implements ft-storage-lancedb-hybrid-search::TASK-STORAGE-002-3::REQ-009
     pub async fn search(
         &self,
         storage: &StorageManager,
         query: &str,
         top_k: usize,
     ) -> Result<HybridQueryResult, StorageError> {
-        // 1. Vector nearest neighbor query
-        let query_vec = self.pipeline.embed_text(query);
         let vstore = storage.vector_store().read().await;
-        let vector_matches = vstore.query_nearest(&query_vec, top_k)?;
 
-        // 2. Graph neighborhood lookup
+        // 1. Dense vector nearest neighbor query via LanceDB
+        let query_vec = self.pipeline.embed_text(query);
+        let vector_candidates = match vstore.query_nearest_lance(&query_vec, top_k * 4).await {
+            Ok(res) if !res.is_empty() => res,
+            _ => vstore.query_nearest(&query_vec, top_k * 4).unwrap_or_default(),
+        };
+
+        let mut vector_ranks: HashMap<String, usize> = HashMap::new();
+        for (idx, hit) in vector_candidates.iter().enumerate() {
+            vector_ranks.insert(hit.id.clone(), idx + 1);
+        }
+
+        // 2. Lexical BM25 token matching
+        let query_tokens = EmbeddingPipeline::tokenize_lexical(query);
+        let mut lexical_scores: Vec<(String, f32, String, String, usize, usize)> = Vec::new();
+
+        // Examine candidates from vector store cache
+        let all_records = vstore.query_nearest(&query_vec, 1000).unwrap_or_default();
+        let total_docs = all_records.len().max(1);
+
+        for rec in &all_records {
+            let content = rec.metadata.get("content").and_then(|c| c.as_str()).unwrap_or("");
+            let file_path = rec.metadata.get("file_path").and_then(|f| f.as_str()).unwrap_or("");
+            let start_line = rec.metadata.get("start_line").and_then(|s| s.as_u64()).unwrap_or(1) as usize;
+            let end_line = rec.metadata.get("end_line").and_then(|e| e.as_u64()).unwrap_or(1) as usize;
+
+            let doc_tokens = EmbeddingPipeline::tokenize_lexical(content);
+            let score = EmbeddingPipeline::calculate_bm25(
+                &query_tokens,
+                &doc_tokens,
+                15.0,
+                total_docs,
+                query_tokens.len().max(1),
+            );
+
+            // Exact keyword bonus for requirement IDs or exact function names
+            let exact_match_bonus = if query_tokens.iter().any(|q| content.to_lowercase().contains(q)) {
+                2.0f32
+            } else {
+                0.0f32
+            };
+
+            let total_score = score + exact_match_bonus;
+            if total_score > 0.0 {
+                lexical_scores.push((rec.id.clone(), total_score, file_path.to_string(), content.to_string(), start_line, end_line));
+            }
+        }
+
+        lexical_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        let mut lexical_ranks: HashMap<String, usize> = HashMap::new();
+        for (idx, (id, _, _, _, _, _)) in lexical_scores.iter().enumerate() {
+            lexical_ranks.insert(id.clone(), idx + 1);
+        }
+
+        // 3. Reciprocal Rank Fusion (RRF): RRF(d) = (0.6 / (60 + r_vec)) + (0.4 / (60 + r_lex))
+        let k = 60.0f32;
+        let w_vec = 0.6f32;
+        let w_lex = 0.4f32;
+
+        let mut fused_map: HashMap<String, SearchHit> = HashMap::new();
+
+        // Process vector candidates
+        for hit in &vector_candidates {
+            let r_vec = *vector_ranks.get(&hit.id).unwrap_or(&999);
+            let r_lex = lexical_ranks.get(&hit.id).copied();
+
+            let vec_score = w_vec / (k + r_vec as f32);
+            let lex_score = r_lex.map(|r| w_lex / (k + r as f32)).unwrap_or(0.0);
+            let rrf = vec_score + lex_score;
+
+            let file_path = hit.metadata.get("file_path").and_then(|f| f.as_str()).unwrap_or("").to_string();
+            let start_line = hit.metadata.get("start_line").and_then(|s| s.as_u64()).unwrap_or(1) as usize;
+            let end_line = hit.metadata.get("end_line").and_then(|e| e.as_u64()).unwrap_or(1) as usize;
+            let content = hit.metadata.get("content").and_then(|c| c.as_str()).unwrap_or("").to_string();
+
+            fused_map.insert(
+                hit.id.clone(),
+                SearchHit {
+                    id: hit.id.clone(),
+                    file_path,
+                    start_line,
+                    end_line,
+                    content,
+                    rrf_score: rrf,
+                    vector_rank: Some(r_vec),
+                    lexical_rank: r_lex,
+                    project_id: None,
+                },
+            );
+        }
+
+        // Process lexical hits not already in vector candidates
+        for (id, _, file_path, content, start_line, end_line) in lexical_scores {
+            if let std::collections::hash_map::Entry::Vacant(e) = fused_map.entry(id.clone()) {
+                let r_lex = *lexical_ranks.get(&id).unwrap_or(&999);
+                let lex_score = w_lex / (k + r_lex as f32);
+                e.insert(SearchHit {
+                    id,
+                    file_path,
+                    start_line,
+                    end_line,
+                    content,
+                    rrf_score: lex_score,
+                    vector_rank: None,
+                    lexical_rank: Some(r_lex),
+                    project_id: None,
+                });
+            }
+        }
+
+        let mut hits: Vec<SearchHit> = fused_map.into_values().collect();
+        hits.sort_by(|a, b| b.rrf_score.partial_cmp(&a.rrf_score).unwrap_or(std::cmp::Ordering::Equal));
+        hits.truncate(top_k);
+
+        // 4. Graph context query
         let mut graph_context = Vec::new();
         let mut gstore = storage.graph_store().write().await;
         let cypher = format!(
@@ -47,8 +183,54 @@ impl HybridQueryEngine {
 
         Ok(HybridQueryResult {
             query: query.to_string(),
-            vector_matches,
+            hits,
+            vector_matches: vector_candidates,
             graph_context,
         })
+    }
+
+    /// Perform cross-project federated search across registered projects in StorageFederationManager
+    // @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-3::REQ-006
+    pub async fn search_federated(
+        &self,
+        federation: &crate::manager::StorageFederationManager,
+        query: &str,
+        top_k: usize,
+        scope: SearchScope,
+    ) -> Result<Vec<SearchHit>, StorageError> {
+        let targets = match scope {
+            SearchScope::Active => {
+                if let Some(active_id) = federation.get_active_project_id().await {
+                    if let Some(mgr) = federation.get_project(&active_id).await {
+                        vec![(active_id, mgr)]
+                    } else {
+                        vec![]
+                    }
+                } else {
+                    vec![]
+                }
+            }
+            SearchScope::All => {
+                let contexts = federation.list_projects().await;
+                contexts.into_iter().map(|c| (c.project_id, c.storage_manager)).collect()
+            }
+        };
+
+        if targets.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut all_hits = Vec::new();
+        for (pid, mgr) in targets {
+            let res = self.search(&mgr, query, top_k * 2).await?;
+            for mut hit in res.hits {
+                hit.project_id = Some(pid.clone());
+                all_hits.push(hit);
+            }
+        }
+
+        all_hits.sort_by(|a, b| b.rrf_score.partial_cmp(&a.rrf_score).unwrap_or(std::cmp::Ordering::Equal));
+        all_hits.truncate(top_k);
+        Ok(all_hits)
     }
 }

@@ -50,6 +50,7 @@ fn test_search_hybrid_tool() {
         .expect("search_hybrid should succeed");
 
     assert_eq!(res["query"], "session token authentication");
+    assert!(res["hits"].is_array());
     assert!(res["vector_matches"].is_array());
     assert!(res["graph_context"].is_array());
 
@@ -67,14 +68,44 @@ fn test_search_hybrid_tool() {
     assert!(matches!(err_zero_k, Err(ToolError::InvalidParameters(_, _))));
 }
 
+// @verifies spec-ft-storage-lancedb-hybrid-search::TASK-STORAGE-002-5::REQ-007
+#[tokio::test]
+async fn test_mcp_search_hybrid_tool_formatted_hits() {
+    use aico_mcp::HybridToolHandler;
+    use aico_storage::{CodeChunker, EmbeddingPipeline, StorageManager};
+
+    let temp_dir = std::env::temp_dir().join("aico_mcp_hybrid_hits_test");
+    let _ = std::fs::remove_dir_all(&temp_dir);
+    std::fs::create_dir_all(&temp_dir).unwrap();
+
+    let storage = StorageManager::open(&temp_dir).expect("open StorageManager");
+    let chunker = CodeChunker::new();
+    let pipeline = EmbeddingPipeline::new();
+
+    let code = "pub fn verify_mcp_session(token: &str) -> bool { token == \"valid\" }";
+    let chunks = chunker.chunk_file("crates/mcp/src/auth.rs", code);
+    pipeline.ingest_chunks(&storage, &chunks).await.unwrap();
+
+    let result = HybridToolHandler::search_hybrid_async("verify mcp session token", 5, Some(&storage))
+        .await
+        .expect("search_hybrid_async");
+
+    assert_eq!(result.query, "verify mcp session token");
+    assert!(!result.hits.is_empty(), "Must return formatted search hits");
+    assert_eq!(result.hits[0].file_path, "crates/mcp/src/auth.rs");
+    assert!(result.hits[0].rrf_score > 0.0);
+}
+
+
 // @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-3::REQ-003
 // @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-4::REQ-004
+// @verifies spec-ft-storage-aico-graph-and-incremental-cache::TASK-STORAGE-001-1::REQ-001
 #[tokio::test]
-async fn test_query_lineage_graph_with_persisted_kuzu_nodes_and_edges() {
+async fn test_query_lineage_graph_with_persisted_aico_nodes_and_edges() {
     use aico_mcp::GraphToolHandler;
     use aico_storage::{GraphEdge, GraphNode, StorageManager};
 
-    let temp_dir = std::env::temp_dir().join("aico_mcp_kuzu_persisted_lineage_test");
+    let temp_dir = std::env::temp_dir().join("aico_mcp_aico_persisted_lineage_test");
     let _ = std::fs::remove_dir_all(&temp_dir);
     std::fs::create_dir_all(&temp_dir).unwrap();
 

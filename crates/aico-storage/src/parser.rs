@@ -41,7 +41,7 @@ impl CodeSymbolParser {
     pub fn parse_symbols(&self, code: &str, lang: LanguageKind) -> Vec<CodeSymbol> {
         let lines: Vec<&str> = code.lines().collect();
         let mut symbols = Vec::new();
-        let mut current_doc = None;
+        let mut current_doc: Option<String> = None;
 
         for (idx, raw_line) in lines.iter().enumerate() {
             let line = raw_line.trim();
@@ -56,7 +56,12 @@ impl CodeSymbolParser {
                     .trim_start_matches('#')
                     .trim();
                 if !doc.is_empty() {
-                    current_doc = Some(doc.to_string());
+                    if let Some(ref mut existing) = current_doc {
+                        existing.push('\n');
+                        existing.push_str(doc);
+                    } else {
+                        current_doc = Some(doc.to_string());
+                    }
                 }
                 continue;
             }
@@ -163,7 +168,8 @@ impl CodeSymbolParser {
         symbols
     }
 
-    /// Batch ingest parsed symbols and call graph relationships into Kùzu property graph
+    /// Batch ingest parsed symbols and call graph relationships into AICO property graph
+    // @implements spec-ft-storage-aico-graph-and-incremental-cache::TASK-STORAGE-001-4::REQ-009
     // @implements ft-core-local-storage::TASK-CORE-003-3::REQ-005
     pub async fn ingest_symbols_into_graph(
         &self,
@@ -171,22 +177,7 @@ impl CodeSymbolParser {
         file_path: &str,
         symbols: &[CodeSymbol],
     ) -> Result<usize, StorageError> {
-        let mut gstore = storage.graph_store().write().await;
-        for s in symbols {
-            let cypher_node = format!(
-                "CREATE (s:Symbol {{name: '{}', file: '{}', kind: '{:?}'}})",
-                s.name, file_path, s.kind
-            );
-            gstore.execute_query(&cypher_node)?;
-
-            for callee in &s.calls {
-                let cypher_rel = format!(
-                    "MATCH (caller:Symbol {{name: '{}'}}), (callee:Symbol {{name: '{}'}}) CREATE (caller)-[:CALLS]->(callee)",
-                    s.name, callee
-                );
-                let _ = gstore.execute_query(&cypher_rel);
-            }
-        }
-        Ok(symbols.len())
+        let gstore = storage.graph_store().read().await;
+        gstore.ingest_code_symbols(file_path, symbols)
     }
 }

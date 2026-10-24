@@ -37,7 +37,7 @@ impl McpServerManager {
         vec![
             ToolDefinition {
                 name: "query_lineage_graph".to_string(),
-                description: "Execute a 1-to-4 hop Kùzu property graph lineage and caller query".to_string(),
+                description: "Execute a 1-to-4 hop AICO property graph lineage and caller query".to_string(),
                 input_schema: serde_json::json!({
                     "type": "object",
                     "properties": {

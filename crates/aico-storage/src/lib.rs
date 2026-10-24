@@ -10,15 +10,15 @@ pub mod indexer;
 pub mod hybrid;
 
 pub use error::StorageError;
-pub use vector::{LanceVectorStore, VectorRecord, VectorQueryResult};
-pub use graph::{KuzuGraphStore, GraphNode, GraphEdge, GraphSnapshot};
-pub use manager::StorageManager;
+pub use vector::{LanceVectorStore, VectorRecord, VectorRecordInput, VectorQueryResult};
+pub use graph::{AicoGraphStore, KuzuGraphStore, GraphNode, GraphEdge, GraphSnapshot};
+pub use manager::{StorageManager, StorageFederationManager, ProjectStorageContext, StorageStats};
 pub use schema::{SchemaMigrator, GraphNodeType, GraphRelationType};
 pub use asset::{AssetIngestionService, StoredAsset};
 pub use parser::{CodeSymbolParser, CodeSymbol, SymbolKind, LanguageKind};
 pub use chunker::{CodeChunker, CodeChunk, EmbeddingPipeline};
-pub use indexer::DifferentialIndexer;
-pub use hybrid::{HybridQueryEngine, HybridQueryResult};
+pub use indexer::{DifferentialIndexer, IndexReport};
+pub use hybrid::{HybridQueryEngine, HybridQueryResult, SearchHit, SearchScope};
 
 
 

@@ -4,6 +4,7 @@ use std::sync::RwLock;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use crate::error::StorageError;
+use crate::parser::CodeSymbol;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GraphNode {
@@ -63,14 +64,100 @@ pub struct GraphSnapshot {
     pub edges: Vec<GraphEdge>,
 }
 
-pub struct KuzuGraphStore {
-    _path: PathBuf,
-    file_path: PathBuf,
-    state: RwLock<GraphSnapshot>,
+/// In-memory graph index with dual adjacency sets for $O(1)$ edge lookups and BFS traversals
+#[derive(Debug, Clone, Default)]
+pub struct AicoGraphIndex {
+    pub snapshot: GraphSnapshot,
+    pub node_indices: HashMap<String, usize>,
+    pub outgoing: HashMap<String, Vec<usize>>,
+    pub incoming: HashMap<String, Vec<usize>>,
+    pub dirty: bool,
 }
 
-impl KuzuGraphStore {
-    /// Initialize embedded openCypher property graph database backed by lineage_graph.json
+impl AicoGraphIndex {
+    pub fn from_snapshot(snapshot: GraphSnapshot) -> Self {
+        let mut idx = Self {
+            snapshot,
+            node_indices: HashMap::new(),
+            outgoing: HashMap::new(),
+            incoming: HashMap::new(),
+            dirty: false,
+        };
+        idx.rebuild_indices();
+        idx
+    }
+
+    pub fn rebuild_indices(&mut self) {
+        self.node_indices.clear();
+        for (i, node) in self.snapshot.nodes.iter().enumerate() {
+            self.node_indices.insert(node.id.clone(), i);
+        }
+
+        self.outgoing.clear();
+        self.incoming.clear();
+        for (i, edge) in self.snapshot.edges.iter().enumerate() {
+            self.outgoing.entry(edge.source.clone()).or_default().push(i);
+            self.incoming.entry(edge.target.clone()).or_default().push(i);
+        }
+    }
+
+    pub fn upsert_node(&mut self, node: GraphNode) {
+        if let Some(&idx) = self.node_indices.get(&node.id) {
+            let existing = &mut self.snapshot.nodes[idx];
+            if !node.label.is_empty() {
+                existing.label = node.label;
+            }
+            if !node.title.is_empty() {
+                existing.title = node.title;
+            }
+            if !node.status.is_empty() {
+                existing.status = node.status;
+            }
+            for (k, v) in node.properties {
+                existing.properties.insert(k, v);
+            }
+        } else {
+            let idx = self.snapshot.nodes.len();
+            self.node_indices.insert(node.id.clone(), idx);
+            self.snapshot.nodes.push(node);
+        }
+        self.dirty = true;
+    }
+
+    pub fn upsert_edge(&mut self, edge: GraphEdge) -> bool {
+        if let Some(edge_indices) = self.outgoing.get(&edge.source) {
+            for &idx in edge_indices {
+                let e = &self.snapshot.edges[idx];
+                if e.target == edge.target && e.relation == edge.relation {
+                    return false;
+                }
+            }
+        }
+
+        let edge_idx = self.snapshot.edges.len();
+        self.outgoing.entry(edge.source.clone()).or_default().push(edge_idx);
+        self.incoming.entry(edge.target.clone()).or_default().push(edge_idx);
+        self.snapshot.edges.push(edge);
+        self.dirty = true;
+        true
+    }
+}
+
+pub struct AicoGraphStore {
+    _path: PathBuf,
+    file_path: PathBuf,
+    state: RwLock<AicoGraphIndex>,
+}
+
+/// Backward compatibility alias for AicoGraphStore
+pub type KuzuGraphStore = AicoGraphStore;
+
+impl AicoGraphStore {
+    /// Initialize embedded AICO property graph database backed by lineage_graph.json
+    // @implements spec-ft-storage-aico-graph-and-incremental-cache::TASK-STORAGE-001-1::REQ-001
+    // @implements spec-ft-storage-aico-graph-and-incremental-cache::TASK-STORAGE-001-2::REQ-002
+    // @implements spec-ft-storage-aico-graph-and-incremental-cache::TASK-STORAGE-001-2::REQ-003
+    // @implements spec-ft-storage-aico-graph-and-incremental-cache::TASK-STORAGE-001-2::REQ-012
     // @implements ft-core-local-storage::TASK-CORE-003-1::REQ-002
     // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-3::REQ-003
     // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-4::REQ-004
@@ -97,7 +184,13 @@ impl KuzuGraphStore {
         let snapshot = if file_path.exists() {
             match std::fs::read_to_string(&file_path) {
                 Ok(content) if !content.trim().is_empty() => {
-                    serde_json::from_str::<GraphSnapshot>(&content).unwrap_or_default()
+                    match serde_json::from_str::<GraphSnapshot>(&content) {
+                        Ok(s) => s,
+                        Err(err) => {
+                            eprintln!("Warning: Malformed graph snapshot at {:?}: {}. Initializing clean snapshot.", file_path, err);
+                            GraphSnapshot::default()
+                        }
+                    }
                 }
                 _ => GraphSnapshot::default(),
             }
@@ -105,10 +198,12 @@ impl KuzuGraphStore {
             GraphSnapshot::default()
         };
 
+        let index = AicoGraphIndex::from_snapshot(snapshot);
+
         Ok(Self {
             _path: dir_path,
             file_path,
-            state: RwLock::new(snapshot),
+            state: RwLock::new(index),
         })
     }
 
@@ -116,28 +211,20 @@ impl KuzuGraphStore {
         &self.file_path
     }
 
-    /// Load persisted property graph snapshot from disk (or memory if not yet flushed)
+    /// Load persisted property graph snapshot from memory or disk
+    // @implements spec-ft-storage-aico-graph-and-incremental-cache::TASK-STORAGE-001-2::REQ-002
     // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-3::REQ-003
     // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-4::REQ-004
     pub fn load_snapshot(&self) -> Result<GraphSnapshot, StorageError> {
-        if self.file_path.exists() {
-            let content = std::fs::read_to_string(&self.file_path)?;
-            if !content.trim().is_empty() {
-                let disk_snapshot: GraphSnapshot = serde_json::from_str(&content)?;
-                if let Ok(mut guard) = self.state.write() {
-                    *guard = disk_snapshot.clone();
-                }
-                return Ok(disk_snapshot);
-            }
-        }
         let guard = self
             .state
             .read()
             .map_err(|e| StorageError::QueryError(format!("Graph state lock poisoned: {}", e)))?;
-        Ok(guard.clone())
+        Ok(guard.snapshot.clone())
     }
 
     /// Persist property graph snapshot to lineage_graph.json
+    // @implements spec-ft-storage-aico-graph-and-incremental-cache::TASK-STORAGE-001-2::REQ-003
     // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-3::REQ-003
     // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-4::REQ-004
     pub fn save_snapshot(&self, snapshot: &GraphSnapshot) -> Result<(), StorageError> {
@@ -147,50 +234,138 @@ impl KuzuGraphStore {
         let serialized = serde_json::to_string_pretty(snapshot)?;
         std::fs::write(&self.file_path, serialized)?;
         if let Ok(mut guard) = self.state.write() {
-            *guard = snapshot.clone();
+            *guard = AicoGraphIndex::from_snapshot(snapshot.clone());
         }
         Ok(())
     }
 
+    /// Internal helper to persist the in-memory index when write lock is held
+    fn persist_index_locked(&self, index: &mut AicoGraphIndex) -> Result<(), StorageError> {
+        if let Some(parent) = self.file_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let serialized = serde_json::to_string_pretty(&index.snapshot)?;
+        std::fs::write(&self.file_path, serialized)?;
+        index.dirty = false;
+        Ok(())
+    }
+
     /// Insert or update a node in the property graph and persist to disk
+    // @implements spec-ft-storage-aico-graph-and-incremental-cache::TASK-STORAGE-001-2::REQ-002
     // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-3::REQ-003
     // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-4::REQ-004
     pub fn upsert_node(&self, node: GraphNode) -> Result<(), StorageError> {
-        let mut snapshot = self.load_snapshot()?;
-        if let Some(existing) = snapshot.nodes.iter_mut().find(|n| n.id == node.id) {
-            if !node.label.is_empty() {
-                existing.label = node.label;
-            }
-            if !node.title.is_empty() {
-                existing.title = node.title;
-            }
-            if !node.status.is_empty() {
-                existing.status = node.status;
-            }
-            for (k, v) in node.properties {
-                existing.properties.insert(k, v);
-            }
-        } else {
-            snapshot.nodes.push(node);
-        }
-        self.save_snapshot(&snapshot)
+        let mut guard = self
+            .state
+            .write()
+            .map_err(|e| StorageError::QueryError(format!("Graph state lock poisoned: {}", e)))?;
+        guard.upsert_node(node);
+        self.persist_index_locked(&mut guard)
     }
 
     /// Insert or update a directed edge in the property graph and persist to disk
+    // @implements spec-ft-storage-aico-graph-and-incremental-cache::TASK-STORAGE-001-2::REQ-002
     // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-3::REQ-003
     // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-4::REQ-004
     pub fn upsert_edge(&self, edge: GraphEdge) -> Result<(), StorageError> {
-        let mut snapshot = self.load_snapshot()?;
-        let exists = snapshot.edges.iter().any(|e| {
-            e.source == edge.source && e.target == edge.target && e.relation == edge.relation
-        });
-        if !exists {
-            snapshot.edges.push(edge);
+        let mut guard = self
+            .state
+            .write()
+            .map_err(|e| StorageError::QueryError(format!("Graph state lock poisoned: {}", e)))?;
+        if guard.upsert_edge(edge) {
+            self.persist_index_locked(&mut guard)?;
         }
-        self.save_snapshot(&snapshot)
+        Ok(())
     }
 
-    /// Multi-hop BFS lineage traversal along upstream, downstream, or both directions
+    /// Batch upsert multiple nodes and edges with a single disk flush
+    // @implements spec-ft-storage-aico-graph-and-incremental-cache::TASK-STORAGE-001-2::REQ-003
+    // @implements spec-ft-storage-aico-graph-and-incremental-cache::TASK-STORAGE-001-2::REQ-011
+    pub fn batch_upsert(
+        &self,
+        nodes: Vec<GraphNode>,
+        edges: Vec<GraphEdge>,
+    ) -> Result<(), StorageError> {
+        let mut guard = self
+            .state
+            .write()
+            .map_err(|e| StorageError::QueryError(format!("Graph state lock poisoned: {}", e)))?;
+        for node in nodes {
+            guard.upsert_node(node);
+        }
+        for edge in edges {
+            guard.upsert_edge(edge);
+        }
+        self.persist_index_locked(&mut guard)
+    }
+
+    /// Flush in-memory changes to disk if dirty
+    // @implements spec-ft-storage-aico-graph-and-incremental-cache::TASK-STORAGE-001-2::REQ-003
+    pub fn flush(&self) -> Result<(), StorageError> {
+        let mut guard = self
+            .state
+            .write()
+            .map_err(|e| StorageError::QueryError(format!("Graph state lock poisoned: {}", e)))?;
+        if guard.dirty {
+            self.persist_index_locked(&mut guard)?;
+        }
+        Ok(())
+    }
+
+    /// Ingest parsed code symbols, calls, and in-band annotations directly into the graph
+    // @implements spec-ft-storage-aico-graph-and-incremental-cache::TASK-STORAGE-001-4::REQ-009
+    pub fn ingest_code_symbols(
+        &self,
+        file_path: &str,
+        symbols: &[CodeSymbol],
+    ) -> Result<usize, StorageError> {
+        let mut nodes = Vec::new();
+        let mut edges = Vec::new();
+
+        for s in symbols {
+            let symbol_id = format!("{}:{}", file_path, s.name);
+            let mut props = Map::new();
+            props.insert("name".to_string(), Value::String(s.name.clone()));
+            props.insert("file".to_string(), Value::String(file_path.to_string()));
+            props.insert("kind".to_string(), Value::String(format!("{:?}", s.kind)));
+            props.insert("start_line".to_string(), Value::from(s.start_line));
+            props.insert("end_line".to_string(), Value::from(s.end_line));
+            if let Some(ref doc) = s.doc_comment {
+                props.insert("doc".to_string(), Value::String(doc.clone()));
+
+                // Check for in-band @implements and @verifies tags in doc comment
+                for token in doc.split_whitespace() {
+                    let cleaned = token.trim_matches(|c: char| !c.is_alphanumeric() && c != ':' && c != '-' && c != '@');
+                    if let Some(target) = cleaned.strip_prefix("@implements:") {
+                        edges.push(GraphEdge::new(&symbol_id, target, "implements"));
+                    } else if let Some(target) = cleaned.strip_prefix("@verifies:") {
+                        edges.push(GraphEdge::new(&symbol_id, target, "verifies"));
+                    }
+                }
+            }
+
+            nodes.push(GraphNode {
+                id: symbol_id.clone(),
+                label: format!("{:?}", s.kind),
+                title: s.name.clone(),
+                status: "Active".to_string(),
+                properties: props,
+            });
+
+            for callee in &s.calls {
+                let callee_id = format!("{}:{}", file_path, callee);
+                edges.push(GraphEdge::new(&symbol_id, &callee_id, "calls"));
+                edges.push(GraphEdge::new(&s.name, callee, "calls"));
+            }
+        }
+
+        self.batch_upsert(nodes, edges)?;
+        Ok(symbols.len())
+    }
+
+    /// Multi-hop BFS lineage traversal along upstream, downstream, or both directions using $O(1)$ indexed adjacency
+    // @implements spec-ft-storage-aico-graph-and-incremental-cache::TASK-STORAGE-001-2::REQ-002
+    // @implements spec-ft-storage-aico-graph-and-incremental-cache::TASK-STORAGE-001-2::REQ-010
     // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-3::REQ-003
     // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-4::REQ-004
     pub fn query_lineage(
@@ -199,27 +374,33 @@ impl KuzuGraphStore {
         direction: &str,
         depth: usize,
     ) -> Result<Vec<Value>, StorageError> {
-        let snapshot = self.load_snapshot()?;
+        let guard = self
+            .state
+            .read()
+            .map_err(|e| StorageError::QueryError(format!("Graph state lock poisoned: {}", e)))?;
+
         let max_depth = depth.max(1);
         let dir_norm = direction.trim().to_ascii_lowercase();
 
-        let anchor_id = snapshot
-            .nodes
-            .iter()
-            .find(|n| {
-                n.id == target_id
-                    || n.title == target_id
-                    || n.properties
-                        .get("name")
-                        .and_then(|v| v.as_str())
-                        .map(|s| s == target_id)
-                        .unwrap_or(false)
-            })
-            .map(|n| n.id.clone())
-            .unwrap_or_else(|| target_id.to_string());
-
-        let node_map: HashMap<&str, &GraphNode> =
-            snapshot.nodes.iter().map(|n| (n.id.as_str(), n)).collect();
+        let anchor_id = if let Some(&idx) = guard.node_indices.get(target_id) {
+            guard.snapshot.nodes[idx].id.clone()
+        } else {
+            guard
+                .snapshot
+                .nodes
+                .iter()
+                .find(|n| {
+                    n.id == target_id
+                        || n.title == target_id
+                        || n.properties
+                            .get("name")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s == target_id)
+                            .unwrap_or(false)
+                })
+                .map(|n| n.id.clone())
+                .unwrap_or_else(|| target_id.to_string())
+        };
 
         let mut visited: HashSet<String> = HashSet::new();
         visited.insert(anchor_id.clone());
@@ -234,62 +415,73 @@ impl KuzuGraphStore {
                 continue;
             }
 
-            for edge in &snapshot.edges {
-                let mut candidate: Option<(&str, &str)> = None;
-
-                match dir_norm.as_str() {
-                    "downstream" | "out" | "outgoing" | "forward" => {
-                        if edge.source == curr_id {
-                            candidate = Some((edge.target.as_str(), "downstream"));
-                        }
-                    }
-                    "upstream" | "in" | "incoming" | "backward" => {
-                        if edge.target == curr_id {
-                            candidate = Some((edge.source.as_str(), "upstream"));
-                        }
-                    }
-                    _ => {
-                        if edge.source == curr_id {
-                            candidate = Some((edge.target.as_str(), "downstream"));
-                        } else if edge.target == curr_id {
-                            candidate = Some((edge.source.as_str(), "upstream"));
-                        }
-                    }
+            let edges_to_check: Vec<(usize, &str)> = match dir_norm.as_str() {
+                "downstream" | "out" | "outgoing" | "forward" => {
+                    guard
+                        .outgoing
+                        .get(&curr_id)
+                        .map(|indices| indices.iter().map(|&i| (i, "downstream")).collect())
+                        .unwrap_or_default()
                 }
-
-                if let Some((neighbor_id, hop_dir)) = candidate {
-                    if visited.insert(neighbor_id.to_string()) {
-                        let next_hop = curr_hop + 1;
-                        let item = if let Some(node) = node_map.get(neighbor_id) {
-                            json!({
-                                "id": node.id,
-                                "label": node.label,
-                                "title": node.title,
-                                "status": node.status,
-                                "relation": edge.relation,
-                                "direction": hop_dir,
-                                "source": edge.source,
-                                "target": edge.target,
-                                "hop": next_hop,
-                                "properties": node.properties,
-                            })
-                        } else {
-                            json!({
-                                "id": neighbor_id,
-                                "label": "Node",
-                                "title": neighbor_id,
-                                "status": "Active",
-                                "relation": edge.relation,
-                                "direction": hop_dir,
-                                "source": edge.source,
-                                "target": edge.target,
-                                "hop": next_hop,
-                                "properties": {},
-                            })
-                        };
-                        results.push(item);
-                        queue.push_back((neighbor_id.to_string(), next_hop));
+                "upstream" | "in" | "incoming" | "backward" => {
+                    guard
+                        .incoming
+                        .get(&curr_id)
+                        .map(|indices| indices.iter().map(|&i| (i, "upstream")).collect())
+                        .unwrap_or_default()
+                }
+                _ => {
+                    let mut edges = Vec::new();
+                    if let Some(out_indices) = guard.outgoing.get(&curr_id) {
+                        edges.extend(out_indices.iter().map(|&i| (i, "downstream")));
                     }
+                    if let Some(in_indices) = guard.incoming.get(&curr_id) {
+                        edges.extend(in_indices.iter().map(|&i| (i, "upstream")));
+                    }
+                    edges
+                }
+            };
+
+            for (edge_idx, hop_dir) in edges_to_check {
+                let edge = &guard.snapshot.edges[edge_idx];
+                let neighbor_id = if hop_dir == "downstream" {
+                    edge.target.as_str()
+                } else {
+                    edge.source.as_str()
+                };
+
+                if visited.insert(neighbor_id.to_string()) {
+                    let next_hop = curr_hop + 1;
+                    let item = if let Some(&node_idx) = guard.node_indices.get(neighbor_id) {
+                        let node = &guard.snapshot.nodes[node_idx];
+                        json!({
+                            "id": node.id,
+                            "label": node.label,
+                            "title": node.title,
+                            "status": node.status,
+                            "relation": edge.relation,
+                            "direction": hop_dir,
+                            "source": edge.source,
+                            "target": edge.target,
+                            "hop": next_hop,
+                            "properties": node.properties,
+                        })
+                    } else {
+                        json!({
+                            "id": neighbor_id,
+                            "label": "Node",
+                            "title": neighbor_id,
+                            "status": "Active",
+                            "relation": edge.relation,
+                            "direction": hop_dir,
+                            "source": edge.source,
+                            "target": edge.target,
+                            "hop": next_hop,
+                            "properties": {},
+                        })
+                    };
+                    results.push(item);
+                    queue.push_back((neighbor_id.to_string(), next_hop));
                 }
             }
         }

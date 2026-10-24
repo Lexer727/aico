@@ -27,6 +27,15 @@ import { TagBadge } from '../../components/common/TagBadge';
 import { InlineMarkdown } from '../../components/common/MarkdownView';
 import { VisualLineageCanvas } from '../epic-hub/VisualLineageCanvas';
 
+export interface StorageStatsInfo {
+  project_id: string;
+  graph_nodes_count: number;
+  graph_edges_count: number;
+  vector_chunks_count: number;
+  cache_state: string;
+  storage_dir_bytes: number;
+}
+
 interface DashboardViewProps {
   epics?: DiscoveredEpic[];
   adrs?: DiscoveredAdr[];
@@ -39,6 +48,7 @@ interface DashboardViewProps {
   onOpenNode?: (node: any) => void;
   onPopoutGraph?: () => void;
   ubiquitousLanguage?: TermInfo[];
+  storageStats?: StorageStatsInfo;
 }
 
 const defaultTerms: TermInfo[] = [
@@ -87,8 +97,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenNode,
   onPopoutGraph,
   ubiquitousLanguage,
+  storageStats: initialStorageStats,
 }) => {
   const activeEpics = epics || [];
+  const [stats, setStats] = useState<StorageStatsInfo | null>(initialStorageStats || null);
+
+  useEffect(() => {
+    if (initialStorageStats) {
+      setStats(initialStorageStats);
+      return;
+    }
+    fetch('/api/v1/storage/stats')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) setStats(data);
+      })
+      .catch(() => {});
+  }, [initialStorageStats]);
+
   const [terms, setTerms] = useState<TermInfo[]>(
     ubiquitousLanguage && ubiquitousLanguage.length > 0 ? ubiquitousLanguage : defaultTerms
   );
@@ -582,13 +608,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <span className="text-zinc-400">WebSocket:</span>
               <span className="font-mono text-emerald-400">Active (/ws)</span>
             </div>
-            <div className="p-2.5 bg-zinc-950 rounded border border-zinc-800 flex justify-between">
+            {/* @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-4::REQ-004 */}
+            <div className="p-2.5 bg-zinc-950 rounded border border-zinc-800 flex justify-between" data-testid="host-diag-lancedb">
               <span className="text-zinc-400">LanceDB:</span>
-              <span className="font-mono text-zinc-200">Embedded OK</span>
+              <span className="font-mono text-zinc-200">
+                {stats ? `Embedded OK (${stats.vector_chunks_count} vectors)` : 'Embedded OK'}
+              </span>
             </div>
-            <div className="p-2.5 bg-zinc-950 rounded border border-zinc-800 flex justify-between">
-              <span className="text-zinc-400">Kùzu Graph:</span>
-              <span className="font-mono text-zinc-200">Embedded OK</span>
+            <div className="p-2.5 bg-zinc-950 rounded border border-zinc-800 flex justify-between" data-testid="host-diag-graph">
+              <span className="text-zinc-400">AICO Graph:</span>
+              <span className="font-mono text-zinc-200">
+                {stats ? `Embedded OK (${stats.graph_nodes_count} nodes)` : 'Embedded OK'}
+              </span>
             </div>
           </div>
         </div>
