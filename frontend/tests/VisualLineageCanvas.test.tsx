@@ -319,13 +319,13 @@ describe('VisualLineageCanvas Component', () => {
     expect(screen.getByText('SharedTest.tsx')).toBeInTheDocument();
     expect(screen.getByText('SearchOnly.tsx')).toBeInTheDocument();
 
-    // REQ-024: ft-hub and its child task MUST NOT be pulled in even though it shares SharedTest.tsx
-    expect(screen.queryByTestId('node-Feature Hub')).toBeNull();
+    // REQ-024 & REQ-025: ft-hub remains visible as a same-tier node, but its child task MUST NOT be pulled in
+    expect(screen.getByTestId('node-Feature Hub')).toBeInTheDocument();
     expect(screen.queryByText('TASK-HUB-01')).toBeNull();
   });
 
   // @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-16::REQ-025
-  it('focuses workspace lineage graph on selected epic, isolating governing ADRs and child features while omitting unrelated epics, with reset to overview', () => {
+  it('focuses workspace lineage graph on selected epic, preserving upstream and same-tier nodes while filtering downstream tiers to connected nodes and isolating edges', () => {
     const multiEpicNodes = [
       { id: 'ADR-0001', type: 'adr', label: 'ADR-0001: Core Architecture' },
       { id: 'ADR-0011', type: 'adr', label: 'ADR-0011: Native Storage' },
@@ -346,70 +346,120 @@ describe('VisualLineageCanvas Component', () => {
       { id: 'e6', source: 'ft-storage-vector', target: 'code:vector.rs' },
     ];
 
-    render(
+    const { container } = render(
       <VisualLineageCanvas
         nodes={multiEpicNodes}
         edges={multiEpicEdges}
       />
     );
 
-    // Initial Overview: both epics and their features are visible
+    // Initial Overview: all ADRs, epics, features, and code seams are visible
+    expect(screen.getByText('ADR-0001: Core Architecture')).toBeInTheDocument();
+    expect(screen.getByText('ADR-0011: Native Storage')).toBeInTheDocument();
     expect(screen.getByTestId('node-Epic ec-core')).toBeInTheDocument();
     expect(screen.getByTestId('node-Epic ec-storage')).toBeInTheDocument();
     expect(screen.getByTestId('node-Feature Discovery')).toBeInTheDocument();
     expect(screen.getByTestId('node-Feature Vector')).toBeInTheDocument();
+    expect(screen.getByText('core.rs')).toBeInTheDocument();
+    expect(screen.getByText('vector.rs')).toBeInTheDocument();
     expect(screen.getByTestId('epic-focus-select')).toBeInTheDocument();
+
+    // In Overview: all adjacent edges are rendered
+    expect(container.querySelector('[data-source="ADR-0001"][data-target="ec-core"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-source="ADR-0011"][data-target="ec-storage"]')).toBeInTheDocument();
 
     // 1. Click on Epic ec-storage node to focus
     const storageEpicNode = screen.getByTestId('node-Epic ec-storage');
     fireEvent.click(storageEpicNode);
 
-    // REQ-025: Strictly ONLY ec-storage and its direct child feature are shown (pure 2-column focus)
+    // REQ-025: Upstream and same-tier nodes (tier <= 1) remain visible:
+    // ADRs (tier 0) and both Epics (tier 1) stay in place!
+    expect(screen.getByText('ADR-0001: Core Architecture')).toBeInTheDocument();
+    expect(screen.getByText('ADR-0011: Native Storage')).toBeInTheDocument();
+    expect(screen.getByTestId('node-Epic ec-core')).toBeInTheDocument();
     expect(screen.getByTestId('node-Epic ec-storage')).toBeInTheDocument();
+
+    // REQ-025: Downstream tiers (tier > 1) strictly display only connected nodes:
+    // Only ec-storage's child feature and code are shown; ec-core's child feature and code are omitted!
     expect(screen.getByTestId('node-Feature Vector')).toBeInTheDocument();
+    expect(screen.getByText('vector.rs')).toBeInTheDocument();
+    expect(screen.queryByTestId('node-Feature Discovery')).toBeNull();
+    expect(screen.queryByText('core.rs')).toBeNull();
+
+    // Status badges and reset buttons are present
     expect(screen.getByTestId('epic-focus-status-badge')).toBeInTheDocument();
     expect(screen.getByTestId('reset-epic-focus-btn')).toBeInTheDocument();
 
-    // REQ-025: Code seams, ADRs, and other epics/features are omitted from epic focus
-    expect(screen.queryByText('vector.rs')).toBeNull();
-    expect(screen.queryByText('ADR-0011: Native Storage')).toBeNull();
-    expect(screen.queryByTestId('node-Epic ec-core')).toBeNull();
-    expect(screen.queryByTestId('node-Feature Discovery')).toBeNull();
-    expect(screen.queryByText('core.rs')).toBeNull();
-    expect(screen.queryByText('ADR-0001: Core Architecture')).toBeNull();
+    // REQ-025: Edge isolation: only connections linked to ec-storage are rendered
+    expect(container.querySelector('[data-source="ADR-0011"][data-target="ec-storage"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-source="ec-storage"][data-target="ft-storage-vector"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-source="ft-storage-vector"][data-target="code:vector.rs"]')).toBeInTheDocument();
+    // Unrelated edges (e.g. ADR-0001 -> ec-core) are suppressed completely!
+    expect(container.querySelector('[data-source="ADR-0001"][data-target="ec-core"]')).toBeNull();
 
-    // 2. Click on child feature to hierarchically drill down: [Epic] -> [Feature] -> [Code]
+    // 2. Click on child feature to focus: [Feature Vector]
     const featVectorNode = screen.getByTestId('node-Feature Vector');
     fireEvent.click(featVectorNode);
 
+    // Upstream and same-tier nodes (tier <= 2: ADRs, Epics, Features) remain visible
+    expect(screen.getByText('ADR-0001: Core Architecture')).toBeInTheDocument();
+    expect(screen.getByText('ADR-0011: Native Storage')).toBeInTheDocument();
+    expect(screen.getByTestId('node-Epic ec-core')).toBeInTheDocument();
     expect(screen.getByTestId('node-Epic ec-storage')).toBeInTheDocument();
     expect(screen.getByTestId('node-Feature Vector')).toBeInTheDocument();
+    // Note: Sibling feature ft-core-discovery is in the same column (tier 2), so it is kept!
+    expect(screen.getByTestId('node-Feature Discovery')).toBeInTheDocument();
+
+    // Downstream of feature (tier 4: Code): strictly vector.rs is visible, core.rs is omitted
     expect(screen.getByText('vector.rs')).toBeInTheDocument();
-    expect(screen.getByTestId('drilldown-status-badge')).toBeInTheDocument();
+    expect(screen.queryByText('core.rs')).toBeNull();
 
-    // 3. Reset back to workspace overview via reset button
-    const resetEpicBtn = screen.getByTestId('reset-epic-focus-btn');
-    fireEvent.click(resetEpicBtn);
+    // 3. Click canvas background ("clicking nothing") to unselect and restore overview
+    const viewport = screen.getByTestId('lineage-canvas-viewport');
+    fireEvent.click(viewport);
 
-    // All epics and features are visible again
+    // All epics, features, and code seams are restored to overview
     expect(screen.getByTestId('node-Epic ec-core')).toBeInTheDocument();
     expect(screen.getByTestId('node-Epic ec-storage')).toBeInTheDocument();
     expect(screen.getByTestId('node-Feature Discovery')).toBeInTheDocument();
     expect(screen.getByTestId('node-Feature Vector')).toBeInTheDocument();
+    expect(screen.getByText('core.rs')).toBeInTheDocument();
+    expect(screen.getByText('vector.rs')).toBeInTheDocument();
 
-    // 4. Test selection via Epic Focus Dropdown
+    // Normal edges are restored
+    expect(container.querySelector('[data-source="ADR-0001"][data-target="ec-core"]')).toBeInTheDocument();
+
+    // 4. Test clicking the same node again to toggle off selection
+    const coreEpicNode = screen.getByTestId('node-Epic ec-core');
+    fireEvent.click(coreEpicNode); // select ec-core
+    expect(screen.queryByTestId('node-Feature Vector')).toBeNull(); // downstream vector omitted
+
+    fireEvent.click(coreEpicNode); // toggle off
+    expect(screen.getByTestId('node-Feature Vector')).toBeInTheDocument(); // overview restored
+
+    // 5. Test selection via Epic Focus Dropdown
     const epicSelect = screen.getByTestId('epic-focus-select');
     fireEvent.change(epicSelect, { target: { value: 'ec-core' } });
 
+    // Upstream and same-tier nodes stay visible
+    expect(screen.getByText('ADR-0001: Core Architecture')).toBeInTheDocument();
+    expect(screen.getByText('ADR-0011: Native Storage')).toBeInTheDocument();
     expect(screen.getByTestId('node-Epic ec-core')).toBeInTheDocument();
+    expect(screen.getByTestId('node-Epic ec-storage')).toBeInTheDocument();
+
+    // Downstream strictly filters to ec-core's feature and code
     expect(screen.getByTestId('node-Feature Discovery')).toBeInTheDocument();
-
-    // Code seams and ADRs omitted in epic focus
-    expect(screen.queryByText('core.rs')).toBeNull();
-    expect(screen.queryByText('ADR-0001: Core Architecture')).toBeNull();
-
-    expect(screen.queryByTestId('node-Epic ec-storage')).toBeNull();
+    expect(screen.getByText('core.rs')).toBeInTheDocument();
     expect(screen.queryByTestId('node-Feature Vector')).toBeNull();
     expect(screen.queryByText('vector.rs')).toBeNull();
+
+    // Reset button restores overview
+    const resetEpicBtn = screen.getByTestId('reset-epic-focus-btn');
+    fireEvent.click(resetEpicBtn);
+
+    expect(screen.getByTestId('node-Feature Discovery')).toBeInTheDocument();
+    expect(screen.getByTestId('node-Feature Vector')).toBeInTheDocument();
+    expect(screen.getByText('core.rs')).toBeInTheDocument();
+    expect(screen.getByText('vector.rs')).toBeInTheDocument();
   });
 });

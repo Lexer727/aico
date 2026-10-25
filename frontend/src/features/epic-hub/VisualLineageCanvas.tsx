@@ -88,6 +88,7 @@ const getTierIndex = (type: string): number => {
 // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-12::REQ-021
 // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-13::REQ-022
 // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-15::REQ-024
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-16::REQ-025
 export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
   nodes: initialNodes,
   edges: initialEdges,
@@ -295,17 +296,24 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
     return featureList;
   }, [featureList, drilledEpicId, drilledEpicChildFeatureIds]);
 
-  // Determine all node IDs connected to the drilled feature using BFS
-  // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-9::REQ-018
-  // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-11::REQ-020
-  // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-15::REQ-024
-  const drilledFeatureNodeIds = useMemo(() => {
-    if (!drilledFeatureId) return null;
-    const set = new Set<string>([drilledFeatureId]);
-    const queue = [drilledFeatureId];
+  // Active selected node across direct click, epic focus, or feature drilldown
+  // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-16::REQ-025
+  const selectedNode = useMemo(() => {
+    const activeId = selectedNodeId || drilledFeatureId || drilledEpicId;
+    if (!activeId) return null;
+    return rawNodes.find((n) => n.id === activeId) || null;
+  }, [selectedNodeId, drilledFeatureId, drilledEpicId, rawNodes]);
 
-    // REQ-024: Strictly traverse downstream directed edges from the drilled feature
-    // Do not traverse backwards through shared code verification seams into other features
+  // Downstream reachable node IDs from the active node strictly following directed downstream edges
+  // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-15::REQ-024
+  // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-16::REQ-025
+  const selectedDownstreamNodeIds = useMemo(() => {
+    if (!selectedNode) return null;
+    const set = new Set<string>([selectedNode.id]);
+    const queue = [selectedNode.id];
+
+    // REQ-024: Strictly traverse downstream directed edges (edge.source === current)
+    // Prevents backward traversal through shared code verification seams into other features
     while (queue.length > 0) {
       const current = queue.shift()!;
       for (const edge of effectiveEdges) {
@@ -317,7 +325,7 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
     }
 
     return set;
-  }, [drilledFeatureId, effectiveEdges]);
+  }, [selectedNode, effectiveEdges]);
 
   // Available unique types for filter pills ordered by left-to-right architectural columns
   // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-7::REQ-014
@@ -371,12 +379,14 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
     }
   };
 
-  // Filter nodes by selected multi-select type pills and feature drill-down
+  // Filter nodes by selected multi-select type pills and tier-based lineage isolation
   // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-9::REQ-017
   // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-9::REQ-018
   // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-10::REQ-019
   // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-11::REQ-020
   // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-12::REQ-021
+  // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-15::REQ-024
+  // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-16::REQ-025
   const visibleNodes = useMemo(() => {
     // Empty view: all unselected -> 0 visible nodes
     if (!isAllSelected && selectedTypes.length === 0) {
@@ -386,28 +396,27 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
     // REQ-020 & REQ-021: Omit brainstorm, deepdive, spec, plan, and requirement from visual DAG
     let base = rawNodes.filter((n) => !OMITTED_NODE_TYPES.has(n.type.toLowerCase()));
 
-    // REQ-025: When an epic is focused, isolate strictly to [Epic] -> [Child Features]
-    // If a child feature is subsequently drilled, expand hierarchically to [Epic] -> [Feature] -> [Tasks] -> [Code]
-    if (drilledEpicId && drilledEpicChildFeatureIds) {
-      if (drilledFeatureId && drilledFeatureNodeIds) {
-        base = base.filter((n) => n.id === drilledEpicId || drilledFeatureNodeIds.has(n.id));
-      } else {
-        base = base.filter((n) => n.id === drilledEpicId || drilledEpicChildFeatureIds.has(n.id));
-      }
-    } else if (drilledFeatureId && drilledFeatureNodeIds) {
-      // Standalone Feature drilldown (without epic focus)
+    // REQ-025: When a node is selected (at tier C):
+    // Upstream and same-tier nodes stay visible (tier <= C).
+    // Downstream tiers (tier > C) strictly display only nodes connected downstream from the selected node.
+    if (selectedNode && selectedDownstreamNodeIds) {
+      const selectedTier = getTierIndex(selectedNode.type);
       base = base.filter((n) => {
-        const t = n.type.toLowerCase();
-        if (t === 'adr' || t === 'epic') return true;
-        return drilledFeatureNodeIds.has(n.id);
+        const nTier = getTierIndex(n.type);
+        if (nTier <= selectedTier) return true;
+        return selectedDownstreamNodeIds.has(n.id);
       });
-    } else {
-      // Full overview mode: hide task nodes if features are present
-      if (featureList.length > 0) {
-        const taskToggledExplicitly = !isAllSelected && selectedTypes.includes('task');
-        if (!taskToggledExplicitly) {
-          base = base.filter((n) => n.type.toLowerCase() !== 'task');
-        }
+    }
+
+    // Default overview / epic view: hide task nodes if features are present, unless a feature or task is selected, or task is explicitly toggled
+    if (featureList.length > 0) {
+      const isFeatureOrTaskSelected =
+        (selectedNode &&
+          (selectedNode.type.toLowerCase() === 'feature' || selectedNode.type.toLowerCase() === 'task')) ||
+        Boolean(drilledFeatureId);
+      const taskToggledExplicitly = !isAllSelected && selectedTypes.includes('task');
+      if (!isFeatureOrTaskSelected && !taskToggledExplicitly) {
+        base = base.filter((n) => n.type.toLowerCase() !== 'task');
       }
     }
 
@@ -417,11 +426,8 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
     rawNodes,
     selectedTypes,
     isAllSelected,
-    drilledEpicId,
-    drilledEpicChildFeatureIds,
-    drilledFeatureId,
-    drilledFeatureNodeIds,
-    featureList.length,
+    selectedNode,
+    selectedDownstreamNodeIds,
   ]);
 
   const visibleNodeIdSet = useMemo(() => new Set(visibleNodes.map((n) => n.id)), [visibleNodes]);
@@ -621,17 +627,25 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
 
   // REQ-015: Left click only toggles selection / highlights provenance & blast-radius
   // REQ-018: Clicking a feature node toggles drill-down for that feature
-  // REQ-025: Clicking an epic node toggles focus/drill-down for that epic
+  // REQ-025: Clicking an epic or feature node toggles focus / lineage isolation
   const handleNodeClick = (node: GraphNode) => {
-    setSelectedNodeId((prev) => (prev === node.id ? null : node.id));
-    const nodeType = node.type.toLowerCase();
-    if (nodeType === 'epic') {
-      setDrilledEpicId((prev) => (prev === node.id ? null : node.id));
-      setDrilledFeatureId(null);
-    } else if (nodeType === 'feature') {
-      setDrilledFeatureId((prev) => (prev === node.id ? null : node.id));
+    const isCurrentlySelected = selectedNodeId === node.id;
+    if (isCurrentlySelected) {
+      setSelectedNodeId(null);
+      if (drilledEpicId === node.id) setDrilledEpicId(null);
+      if (drilledFeatureId === node.id) setDrilledFeatureId(null);
+      onSelectNode?.('');
+    } else {
+      setSelectedNodeId(node.id);
+      const nodeType = node.type.toLowerCase();
+      if (nodeType === 'epic') {
+        setDrilledEpicId(node.id);
+        setDrilledFeatureId(null);
+      } else if (nodeType === 'feature') {
+        setDrilledFeatureId(node.id);
+      }
+      onSelectNode?.(node.id);
     }
-    onSelectNode?.(node.id);
     onNodeClick?.(node);
   };
 
@@ -662,13 +676,40 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
     }
   };
 
-  // Pan interaction
+  // Pan interaction & canvas background unselect
+  // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-16::REQ-025
   const handleMouseDown = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('[data-node-id]') || (e.target as HTMLElement).closest('button')) {
+    if (
+      (e.target as HTMLElement).closest('[data-node-id]') ||
+      (e.target as HTMLElement).closest('button') ||
+      (e.target as HTMLElement).closest('select')
+    ) {
       return;
+    }
+    if (selectedNodeId || drilledEpicId || drilledFeatureId) {
+      setSelectedNodeId(null);
+      setDrilledEpicId(null);
+      setDrilledFeatureId(null);
+      onSelectNode?.('');
     }
     setIsPanning(true);
     panStartRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+  };
+
+  const handleCanvasClick = (e: React.MouseEvent) => {
+    if (
+      (e.target as HTMLElement).closest('[data-node-id]') ||
+      (e.target as HTMLElement).closest('button') ||
+      (e.target as HTMLElement).closest('select')
+    ) {
+      return;
+    }
+    if (selectedNodeId || drilledEpicId || drilledFeatureId) {
+      setSelectedNodeId(null);
+      setDrilledEpicId(null);
+      setDrilledFeatureId(null);
+      onSelectNode?.('');
+    }
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
@@ -760,8 +801,11 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
                 data-testid="epic-focus-select"
                 value={drilledEpicId || ''}
                 onChange={(e) => {
-                  setDrilledEpicId(e.target.value || null);
+                  const val = e.target.value || null;
+                  setDrilledEpicId(val);
+                  setSelectedNodeId(val);
                   setDrilledFeatureId(null);
+                  onSelectNode?.(val || '');
                 }}
                 className="bg-zinc-800 text-zinc-200 text-[11px] rounded px-1.5 py-0.5 border border-zinc-700 focus:outline-none focus:border-indigo-500 cursor-pointer max-w-[210px] truncate"
               >
@@ -778,7 +822,9 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
                   data-testid="reset-epic-focus-btn"
                   onClick={() => {
                     setDrilledEpicId(null);
+                    setSelectedNodeId(null);
                     setDrilledFeatureId(null);
+                    onSelectNode?.('');
                   }}
                   className="px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-950/80 border border-indigo-700/60 text-indigo-300 hover:bg-indigo-900 hover:text-indigo-100 transition-colors cursor-pointer"
                   title="Reset to Workspace Overview"
@@ -795,7 +841,12 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
               <select
                 data-testid="feature-drilldown-select"
                 value={drilledFeatureId || ''}
-                onChange={(e) => setDrilledFeatureId(e.target.value || null)}
+                onChange={(e) => {
+                  const val = e.target.value || null;
+                  setDrilledFeatureId(val);
+                  setSelectedNodeId(val || drilledEpicId || null);
+                  if (val) onSelectNode?.(val);
+                }}
                 className="bg-zinc-800 text-zinc-200 text-[11px] rounded px-1.5 py-0.5 border border-zinc-700 focus:outline-none focus:border-indigo-500 cursor-pointer max-w-[210px] truncate"
               >
                 <option value="">Epic Overview (All Features)</option>
@@ -809,7 +860,11 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
                 <button
                   type="button"
                   data-testid="reset-drilldown-btn"
-                  onClick={() => setDrilledFeatureId(null)}
+                  onClick={() => {
+                    setDrilledFeatureId(null);
+                    setSelectedNodeId(drilledEpicId || null);
+                    onSelectNode?.(drilledEpicId || '');
+                  }}
                   className="px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-950/80 border border-indigo-700/60 text-indigo-300 hover:bg-indigo-900 hover:text-indigo-100 transition-colors cursor-pointer"
                   title="Reset to Epic Overview"
                 >
@@ -877,6 +932,7 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
         data-testid="lineage-canvas-viewport"
         className="relative flex-1 overflow-auto cursor-grab active:cursor-grabbing bg-zinc-950"
         onMouseDown={handleMouseDown}
+        onClick={handleCanvasClick}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
@@ -986,6 +1042,12 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
               const isHovered =
                 hoveredNodeId && (edge.source === hoveredNodeId || edge.target === hoveredNodeId);
 
+              // REQ-025: When a node is selected, suppress unrelated edges completely
+              // Only render connections linked to the active node (upstream provenance or downstream blast-radius)
+              if (selectedNodeId && !isUp && !isDown && !isHovered) {
+                return null;
+              }
+
               const dx = isSameCol ? 28 : Math.max(30, Math.abs(x2 - x1) * 0.5);
               const pathD = isSameCol
                 ? `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 + dx} ${y2}, ${x2} ${y2}`
@@ -1008,10 +1070,6 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
                 stroke = '#818cf8';
                 strokeWidth = 2;
                 markerEnd = 'url(#arrowhead-hover)';
-              } else if (selectedNodeId) {
-                stroke = '#3f3f46';
-                strokeWidth = 1;
-                strokeDasharray = '4 4';
               }
 
               return (
@@ -1158,7 +1216,12 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
               <span className="text-amber-400 font-semibold">({downstreamEdges.size} Down)</span>
               <button
                 type="button"
-                onClick={() => setSelectedNodeId(null)}
+                onClick={() => {
+                  setSelectedNodeId(null);
+                  setDrilledEpicId(null);
+                  setDrilledFeatureId(null);
+                  onSelectNode?.('');
+                }}
                 className="text-[10px] text-zinc-400 hover:text-zinc-200 underline ml-1 cursor-pointer"
               >
                 Clear
