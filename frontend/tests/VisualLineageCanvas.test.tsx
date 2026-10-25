@@ -125,11 +125,9 @@ describe('VisualLineageCanvas Component', () => {
     );
     expect(overviewFeatToCodeEdge).toBeInTheDocument();
 
-    // REQ-018, REQ-021, REQ-022: Feature drilldown selector expands child TASK column between Feature and Code
-    const drilldownSelect = screen.getByTestId('feature-drilldown-select');
-    expect(drilldownSelect).toBeInTheDocument();
-
-    fireEvent.change(drilldownSelect, { target: { value: 'ft-core-graph' } });
+    // REQ-018, REQ-021, REQ-022, REQ-025: Clicking Feature node drills down and expands child TASK column between Feature and Code
+    const featNode = screen.getByTestId('node-Feature ft-core-graph');
+    fireEvent.click(featNode);
 
     // In drilled mode: TASK-CORE-017-5 is now visible in dedicated Task column, while REQ-001 remains omitted
     expect(screen.queryByText('REQ-001')).toBeNull();
@@ -157,8 +155,8 @@ describe('VisualLineageCanvas Component', () => {
     // Drilldown status badge is visible
     expect(screen.getByTestId('drilldown-status-badge')).toHaveTextContent('ft-core-graph');
 
-    // Reset button returns to 4-column Epic overview
-    const resetBtn = screen.getByTestId('reset-drilldown-btn');
+    // Reset focus button returns to 4-column Epic overview
+    const resetBtn = screen.getByTestId('reset-focus-btn');
     fireEvent.click(resetBtn);
 
     expect(screen.queryByText('REQ-001')).toBeNull();
@@ -171,7 +169,7 @@ describe('VisualLineageCanvas Component', () => {
       container.querySelector('[data-source="ft-core-graph"][data-target="code:VisualLineageCanvas.tsx"]')
     ).toBeInTheDocument();
 
-    // Clicking feature node also toggles drilldown
+    // Clicking feature node again toggles drilldown on
     fireEvent.click(screen.getByTestId('node-Feature ft-core-graph'));
     expect(onNodeClick).toHaveBeenCalled();
     expect(screen.queryByText('REQ-001')).toBeNull();
@@ -309,9 +307,9 @@ describe('VisualLineageCanvas Component', () => {
     expect(screen.getByTestId('node-Feature Search')).toBeInTheDocument();
     expect(screen.getByTestId('node-Feature Hub')).toBeInTheDocument();
 
-    // Drill down into ft-search
-    const drilldownSelect = screen.getByTestId('feature-drilldown-select');
-    fireEvent.change(drilldownSelect, { target: { value: 'ft-search' } });
+    // Drill down into ft-search by clicking feature node
+    const searchFeatNode = screen.getByTestId('node-Feature Search');
+    fireEvent.click(searchFeatNode);
 
     // REQ-024: ft-search, its task, and its code seams are visible
     expect(screen.getByTestId('node-Feature Search')).toBeInTheDocument();
@@ -362,7 +360,8 @@ describe('VisualLineageCanvas Component', () => {
     expect(screen.getByTestId('node-Feature Vector')).toBeInTheDocument();
     expect(screen.getByText('core.rs')).toBeInTheDocument();
     expect(screen.getByText('vector.rs')).toBeInTheDocument();
-    expect(screen.getByTestId('epic-focus-select')).toBeInTheDocument();
+    expect(screen.queryByTestId('epic-focus-select')).toBeNull();
+    expect(screen.queryByTestId('feature-drilldown-select')).toBeNull();
 
     // In Overview: all adjacent edges are rendered
     expect(container.querySelector('[data-source="ADR-0001"][data-target="ec-core"]')).toBeInTheDocument();
@@ -386,9 +385,9 @@ describe('VisualLineageCanvas Component', () => {
     expect(screen.queryByTestId('node-Feature Discovery')).toBeNull();
     expect(screen.queryByText('core.rs')).toBeNull();
 
-    // Status badges and reset buttons are present
+    // Status badge and reset button in breadcrumb are present
     expect(screen.getByTestId('epic-focus-status-badge')).toBeInTheDocument();
-    expect(screen.getByTestId('reset-epic-focus-btn')).toBeInTheDocument();
+    expect(screen.getByTestId('reset-focus-btn')).toBeInTheDocument();
 
     // REQ-025: Edge isolation: only connections linked to ec-storage are rendered
     expect(container.querySelector('[data-source="ADR-0011"][data-target="ec-storage"]')).toBeInTheDocument();
@@ -401,14 +400,18 @@ describe('VisualLineageCanvas Component', () => {
     const featVectorNode = screen.getByTestId('node-Feature Vector');
     fireEvent.click(featVectorNode);
 
-    // Upstream and same-tier nodes (tier <= 2: ADRs, Epics, Features) remain visible
+    // Both the parent Epic and child Feature are selected in the cascading path
+    expect(screen.getByTestId('node-Epic ec-storage').getAttribute('data-selected')).toBe('true');
+    expect(screen.getByTestId('node-Feature Vector').getAttribute('data-selected')).toBe('true');
+
+    // Upstream nodes (tier <= 2: ADRs, Epics) remain visible
     expect(screen.getByText('ADR-0001: Core Architecture')).toBeInTheDocument();
     expect(screen.getByText('ADR-0011: Native Storage')).toBeInTheDocument();
     expect(screen.getByTestId('node-Epic ec-core')).toBeInTheDocument();
     expect(screen.getByTestId('node-Epic ec-storage')).toBeInTheDocument();
     expect(screen.getByTestId('node-Feature Vector')).toBeInTheDocument();
-    // Note: Sibling feature ft-core-discovery is in the same column (tier 2), so it is kept!
-    expect(screen.getByTestId('node-Feature Discovery')).toBeInTheDocument();
+    // REQ-025: Feature column stays strictly focused on ec-storage's child features! ft-core-discovery remains excluded!
+    expect(screen.queryByTestId('node-Feature Discovery')).toBeNull();
 
     // Downstream of feature (tier 4: Code): strictly vector.rs is visible, core.rs is omitted
     expect(screen.getByText('vector.rs')).toBeInTheDocument();
@@ -422,6 +425,8 @@ describe('VisualLineageCanvas Component', () => {
     fireEvent.click(viewport);
 
     // Selected state and filtered downstream view must be retained after pan drag!
+    expect(screen.getByTestId('node-Feature Vector').getAttribute('data-selected')).toBe('true');
+    expect(screen.getByTestId('node-Epic ec-storage').getAttribute('data-selected')).toBe('true');
     expect(screen.getByTestId('node-Feature Vector')).toBeInTheDocument();
     expect(screen.getByText('vector.rs')).toBeInTheDocument();
     expect(screen.queryByText('core.rs')).toBeNull();
@@ -450,9 +455,8 @@ describe('VisualLineageCanvas Component', () => {
     fireEvent.click(coreEpicNode); // toggle off
     expect(screen.getByTestId('node-Feature Vector')).toBeInTheDocument(); // overview restored
 
-    // 5. Test selection via Epic Focus Dropdown
-    const epicSelect = screen.getByTestId('epic-focus-select');
-    fireEvent.change(epicSelect, { target: { value: 'ec-core' } });
+    // 5. Test cascading selection and upstream switching directly via node clicks
+    fireEvent.click(coreEpicNode); // select ec-core at Tier 1
 
     // Upstream and same-tier nodes stay visible
     expect(screen.getByText('ADR-0001: Core Architecture')).toBeInTheDocument();
@@ -466,9 +470,9 @@ describe('VisualLineageCanvas Component', () => {
     expect(screen.queryByTestId('node-Feature Vector')).toBeNull();
     expect(screen.queryByText('vector.rs')).toBeNull();
 
-    // Reset button restores overview
-    const resetEpicBtn = screen.getByTestId('reset-epic-focus-btn');
-    fireEvent.click(resetEpicBtn);
+    // Reset focus button in breadcrumb restores overview
+    const resetFocusBtn = screen.getByTestId('reset-focus-btn');
+    fireEvent.click(resetFocusBtn);
 
     expect(screen.getByTestId('node-Feature Discovery')).toBeInTheDocument();
     expect(screen.getByTestId('node-Feature Vector')).toBeInTheDocument();
@@ -539,5 +543,107 @@ describe('VisualLineageCanvas Component', () => {
 
     // Feature node is deselected
     expect(featNode.getAttribute('data-selected')).toBe('false');
+  });
+
+  // @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-18::REQ-025
+  it('supports full multi-tier cascading selection from ADR through Epic, Feature, and Task to Code, resetting downstream on upstream change', () => {
+    const cascadeNodes = [
+      { id: 'ADR-1', type: 'adr', label: 'ADR-1' },
+      { id: 'ADR-2', type: 'adr', label: 'ADR-2' },
+      { id: 'ec-1', type: 'epic', label: 'Epic 1' },
+      { id: 'ec-2', type: 'epic', label: 'Epic 2' },
+      { id: 'ft-1a', type: 'feature', label: 'Feature 1A' },
+      { id: 'ft-1b', type: 'feature', label: 'Feature 1B' },
+      { id: 'ft-2a', type: 'feature', label: 'Feature 2A' },
+      { id: 'task-1a1', type: 'task', label: 'Task 1A1' },
+      { id: 'task-1a2', type: 'task', label: 'Task 1A2' },
+      { id: 'code-1a1', type: 'code', label: 'file1a1.rs' },
+      { id: 'code-1a2', type: 'code', label: 'file1a2.rs' },
+      { id: 'code-2a', type: 'code', label: 'file2a.rs' },
+    ];
+
+    const cascadeEdges = [
+      { id: 'e1', source: 'ADR-1', target: 'ec-1' },
+      { id: 'e2', source: 'ADR-2', target: 'ec-2' },
+      { id: 'e3', source: 'ec-1', target: 'ft-1a' },
+      { id: 'e4', source: 'ec-1', target: 'ft-1b' },
+      { id: 'e5', source: 'ec-2', target: 'ft-2a' },
+      { id: 'e6', source: 'ft-1a', target: 'task-1a1' },
+      { id: 'e7', source: 'ft-1a', target: 'task-1a2' },
+      { id: 'e8', source: 'task-1a1', target: 'code-1a1' },
+      { id: 'e9', source: 'task-1a2', target: 'code-1a2' },
+      { id: 'e10', source: 'ft-2a', target: 'code-2a' },
+    ];
+
+    render(<VisualLineageCanvas nodes={cascadeNodes} edges={cascadeEdges} />);
+
+    // Step 1: Click ADR-1 (Tier 0)
+    fireEvent.click(screen.getByTestId('node-ADR-1'));
+    expect(screen.getByTestId('node-ADR-1').getAttribute('data-selected')).toBe('true');
+    // Epics: only ec-1 is downstream of ADR-1; ec-2 is omitted
+    expect(screen.getByTestId('node-Epic 1')).toBeInTheDocument();
+    expect(screen.queryByTestId('node-Epic 2')).toBeNull();
+    // Features: ft-1a and ft-1b visible; ft-2a omitted
+    expect(screen.getByTestId('node-Feature 1A')).toBeInTheDocument();
+    expect(screen.getByTestId('node-Feature 1B')).toBeInTheDocument();
+    expect(screen.queryByTestId('node-Feature 2A')).toBeNull();
+
+    // Step 2: Click Epic 1 (Tier 1)
+    fireEvent.click(screen.getByTestId('node-Epic 1'));
+    // Both ADR-1 and Epic 1 are selected and highlighted
+    expect(screen.getByTestId('node-ADR-1').getAttribute('data-selected')).toBe('true');
+    expect(screen.getByTestId('node-Epic 1').getAttribute('data-selected')).toBe('true');
+    // Features of Epic 1 remain visible
+    expect(screen.getByTestId('node-Feature 1A')).toBeInTheDocument();
+    expect(screen.getByTestId('node-Feature 1B')).toBeInTheDocument();
+
+    // Step 3: Click Feature 1A (Tier 2)
+    fireEvent.click(screen.getByTestId('node-Feature 1A'));
+    // ADR-1, Epic 1, and Feature 1A are all selected
+    expect(screen.getByTestId('node-ADR-1').getAttribute('data-selected')).toBe('true');
+    expect(screen.getByTestId('node-Epic 1').getAttribute('data-selected')).toBe('true');
+    expect(screen.getByTestId('node-Feature 1A').getAttribute('data-selected')).toBe('true');
+    // Sibling Feature 1B of Epic 1 stays visible in the feature column
+    expect(screen.getByTestId('node-Feature 1B')).toBeInTheDocument();
+    // Tasks: child tasks of Feature 1A are expanded!
+    expect(screen.getByTestId('node-Task 1A1')).toBeInTheDocument();
+    expect(screen.getByTestId('node-Task 1A2')).toBeInTheDocument();
+
+    // Step 4: Click Task 1A1 (Tier 3)
+    fireEvent.click(screen.getByTestId('node-Task 1A1'));
+    // All 4 nodes are selected
+    expect(screen.getByTestId('node-Task 1A1').getAttribute('data-selected')).toBe('true');
+    // Code: strictly file1a1.rs is visible; file1a2.rs is omitted
+    expect(screen.getByText('file1a1.rs')).toBeInTheDocument();
+    expect(screen.queryByText('file1a2.rs')).toBeNull();
+
+    // Step 5: Upstream switch - Click Feature 1B (Tier 2)
+    fireEvent.click(screen.getByTestId('node-Feature 1B'));
+    // Feature 1B is selected; Task 1A1 selection is reset
+    expect(screen.getByTestId('node-Feature 1B').getAttribute('data-selected')).toBe('true');
+    expect(screen.getByTestId('node-Feature 1A').getAttribute('data-selected')).toBe('false');
+    expect(screen.queryByTestId('node-Task 1A1')).toBeNull();
+
+    // Step 6: Upstream switch - Click ADR-2 (Tier 0)
+    fireEvent.click(screen.getByTestId('node-ADR-2'));
+    // ADR-2 is selected; all downstream tiers are reset to ADR-2's lineage
+    expect(screen.getByTestId('node-ADR-2').getAttribute('data-selected')).toBe('true');
+    expect(screen.getByTestId('node-Epic 2')).toBeInTheDocument();
+    expect(screen.queryByTestId('node-Epic 1')).toBeNull();
+    expect(screen.getByTestId('node-Feature 2A')).toBeInTheDocument();
+    expect(screen.queryByTestId('node-Feature 1A')).toBeNull();
+    expect(screen.getByText('file2a.rs')).toBeInTheDocument();
+    expect(screen.queryByText('file1a1.rs')).toBeNull();
+
+    // Step 7: Clear via reset button in toolbar breadcrumb
+    const resetBtn = screen.getByTestId('reset-focus-btn');
+    fireEvent.click(resetBtn);
+    // Overview restored: all ADRs and Epics visible
+    expect(screen.getByTestId('node-ADR-1')).toBeInTheDocument();
+    expect(screen.getByTestId('node-ADR-2')).toBeInTheDocument();
+    expect(screen.getByTestId('node-Epic 1')).toBeInTheDocument();
+    expect(screen.getByTestId('node-Epic 2')).toBeInTheDocument();
+    expect(screen.getByTestId('node-ADR-1').getAttribute('data-selected')).toBe('false');
+    expect(screen.getByTestId('node-ADR-2').getAttribute('data-selected')).toBe('false');
   });
 });
