@@ -3,7 +3,6 @@ import {
   Layers,
   ShieldCheck,
   CheckCircle2,
-  ArrowRight,
   BookOpen,
   Activity,
   ChevronDown,
@@ -394,6 +393,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* Architecture Decision Records (ADRs) Accordion */}
+      {/* @implements spec-ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-9::REQ-012 */}
       <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
         <div
           data-testid="toggle-dashboard-adrs"
@@ -414,9 +414,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               — Governance decisions and architectural rationale from specs/adr
             </span>
           </div>
-          <span className="text-xs text-zinc-400 font-mono px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700/60">
-            {isAdrsOpen ? 'Collapse' : 'Expand'}
-          </span>
         </div>
 
         {isAdrsOpen && (
@@ -475,6 +472,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* Ubiquitous Domain Terminology Accordion */}
+      {/* @implements spec-ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-9::REQ-012 */}
       <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-900/50">
         <div
           data-testid="toggle-dashboard-terminology"
@@ -495,24 +493,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               — Shared domain language and concepts from GLOSSARY.md
             </span>
           </div>
-          <div className="flex items-center gap-2">
-            {onOpenGlossary && (
-              <button
-                data-testid="open-full-glossary"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenGlossary();
-                }}
-                className="text-xs px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 transition-colors flex items-center gap-1"
-              >
-                <span>Open Full Page</span>
-                <ArrowRight className="w-3 h-3 text-zinc-400" />
-              </button>
-            )}
-            <span className="text-xs text-zinc-400 font-mono px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700/60">
-              {isTerminologyOpen ? 'Collapse' : 'Expand'}
-            </span>
-          </div>
+          {onOpenGlossary && (
+            <button
+              type="button"
+              data-testid="open-full-glossary"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenGlossary();
+              }}
+              title="Open in separate tab"
+              className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors shrink-0"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         {isTerminologyOpen && (

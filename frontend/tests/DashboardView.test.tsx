@@ -9,6 +9,7 @@ import { DashboardView } from '../src/features/dashboard/DashboardView';
 // @verifies ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-7::REQ-009
 // @verifies ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-7::REQ-010
 // @verifies ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-8::REQ-011
+// @verifies spec-ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-9::REQ-012
 // @verifies ft-core-epic-hub::TASK-CORE-007-1::REQ-007
 describe('DashboardView Component', () => {
   it('renders workspace overview without hardcoded root path and displays zero-mock empty state', () => {
@@ -190,7 +191,7 @@ describe('DashboardView Component', () => {
     // Now expanded, default term visible
     expect(screen.getByText('Codebase Root')).toBeInTheDocument();
 
-    // Click Open Full Page button
+    // Click Open Full Page / popout icon button
     const openFullBtn = screen.getByTestId('open-full-glossary');
     fireEvent.click(openFullBtn);
     expect(onOpenGlossary).toHaveBeenCalledTimes(1);
@@ -198,5 +199,43 @@ describe('DashboardView Component', () => {
     // Click stat card again to collapse
     fireEvent.click(statCard);
     expect(screen.queryByText('Codebase Root')).toBeNull();
+  });
+
+  it('omits redundant Expand/Collapse text badges from ADR and Terminology headers, and renders icon-only glossary popout (REQ-012)', () => {
+    const onOpenGlossary = vi.fn();
+    render(
+      <DashboardView
+        onOpenEpic={vi.fn()}
+        onOpenSpec={vi.fn()}
+        onOpenGlossary={onOpenGlossary}
+      />
+    );
+
+    // Check ADR header
+    const adrToggle = screen.getByTestId('toggle-dashboard-adrs');
+    expect(adrToggle).toBeInTheDocument();
+    expect(adrToggle).not.toHaveTextContent('Expand');
+    expect(adrToggle).not.toHaveTextContent('Collapse');
+
+    // Check Terminology header
+    const termToggle = screen.getByTestId('toggle-dashboard-terminology');
+    expect(termToggle).toBeInTheDocument();
+    expect(termToggle).not.toHaveTextContent('Expand');
+    expect(termToggle).not.toHaveTextContent('Collapse');
+
+    // Check glossary popout button is icon-only with title
+    const popoutBtn = screen.getByTestId('open-full-glossary');
+    expect(popoutBtn).toHaveAttribute('title', 'Open in separate tab');
+    expect(popoutBtn).not.toHaveTextContent('Open Full Page');
+
+    fireEvent.click(popoutBtn);
+    expect(onOpenGlossary).toHaveBeenCalledTimes(1);
+
+    // Toggle ADR and Terminology open, verify Expand/Collapse text remains absent
+    fireEvent.click(adrToggle);
+    expect(adrToggle).not.toHaveTextContent('Collapse');
+
+    fireEvent.click(termToggle);
+    expect(termToggle).not.toHaveTextContent('Collapse');
   });
 });
