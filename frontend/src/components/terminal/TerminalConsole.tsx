@@ -44,6 +44,25 @@ export interface TerminalConsoleProps {
   targetWindowId?: string;
 }
 
+// @implements spec-ft-terminal-native-hook-gate-bridge::TASK-HOOK-001-3::REQ-004
+// @implements spec-ft-terminal-native-hook-gate-bridge::TASK-HOOK-001-3::REQ-005
+// @implements spec-ft-terminal-native-hook-gate-bridge::TASK-HOOK-001-3::REQ-007
+export function resolveTargetAiTab(
+  tabs: TerminalTab[],
+  tabId?: string,
+  activeTabId?: string
+): TerminalTab | undefined {
+  if (tabId) {
+    const matched = tabs.find((t) => t.id === tabId || t.name === tabId);
+    if (matched) return matched;
+  }
+  if (activeTabId) {
+    const activeAi = tabs.find((t) => t.id === activeTabId && (t.shell === 'agy' || t.shell === 'claude'));
+    if (activeAi) return activeAi;
+  }
+  return tabs.find((t) => t.shell === 'agy' || t.shell === 'claude');
+}
+
 // @implements spec-ft-terminal-quotas-gates-and-notifications::TASK-TERMINAL-007-2::REQ-002
 // @implements spec-ft-terminal-quotas-gates-and-notifications::TASK-TERMINAL-007-2::REQ-004
 // @implements spec-ft-terminal-quotas-gates-and-notifications::TASK-TERMINAL-007-2::REQ-007
@@ -689,6 +708,71 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({
     },
     [tabs, scheduleWorkingToFinished]
   );
+
+  // @implements spec-ft-terminal-native-hook-gate-bridge::TASK-HOOK-001-3::REQ-004
+  // @implements spec-ft-terminal-native-hook-gate-bridge::TASK-HOOK-001-3::REQ-005
+  // @implements spec-ft-terminal-native-hook-gate-bridge::TASK-HOOK-001-3::REQ-007
+  useEffect(() => {
+    if (!lastMessage || typeof lastMessage !== 'object') return;
+    const msg = lastMessage as { topic?: string; payload?: unknown };
+    if (msg.topic === 'ai_status_update') {
+      try {
+        const payload = typeof msg.payload === 'string' ? JSON.parse(msg.payload) : msg.payload;
+        if (!payload || !payload.state) return;
+
+        const targetTab = resolveTargetAiTab(tabs, payload.tab_id, activeTabId);
+        if (!targetTab) return;
+        const targetTabId = targetTab.id;
+
+        if (payload.state === 'waiting_for_input') {
+          if (workingTimerRef.current[targetTabId]) {
+            clearTimeout(workingTimerRef.current[targetTabId]);
+          }
+          awaitingAiResponseRef.current[targetTabId] = false;
+          waitingGateLockRef.current[targetTabId] = true;
+          setAiTabStatuses((prev) => ({
+            ...prev,
+            [targetTabId]: {
+              state: 'waiting_for_input',
+              reason: payload.reason || 'Waiting for confirmation / input (ask_question)',
+            },
+          }));
+          triggerDesktopPopupNotification(targetTab.name || 'AI Terminal', 'waiting_for_input');
+        } else if (payload.state === 'working') {
+          waitingGateLockRef.current[targetTabId] = false;
+          setAiTabStatuses((prev) => ({
+            ...prev,
+            [targetTabId]: {
+              state: 'working',
+              reason: payload.reason || 'LLM is working',
+            },
+          }));
+          scheduleWorkingToFinished(targetTabId, 1200);
+        } else if (payload.state === 'finished') {
+          waitingGateLockRef.current[targetTabId] = false;
+          setAiTabStatuses((prev) => ({
+            ...prev,
+            [targetTabId]: {
+              state: 'finished',
+              reason: payload.reason || 'Finished — ready for prompt',
+            },
+          }));
+          triggerDesktopPopupNotification(targetTab.name || 'AI Terminal', 'finished');
+        } else if (payload.state === 'error') {
+          waitingGateLockRef.current[targetTabId] = false;
+          setAiTabStatuses((prev) => ({
+            ...prev,
+            [targetTabId]: {
+              state: 'error',
+              reason: payload.reason || 'Error in AI session',
+            },
+          }));
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }, [lastMessage, tabs, activeTabId, scheduleWorkingToFinished]);
 
   // Mount (or retrieve) the xterm instance for `tabId` and wire its WebSocket.
   const ensureSession = useCallback(

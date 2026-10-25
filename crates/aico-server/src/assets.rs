@@ -26,7 +26,13 @@ pub async fn static_asset_handler(uri: Uri) -> impl IntoResponse {
     };
 
     // 1. Try reading exact asset from disk if present (allows live updates from frontend builds)
-    for base in &["frontend/dist", "../frontend/dist", "../../frontend/dist", "dist"] {
+    for base in &[
+        "codebase/aico/frontend/dist",
+        "frontend/dist",
+        "../frontend/dist",
+        "../../frontend/dist",
+        "dist",
+    ] {
         let disk_path = StdPath::new(base).join(asset_path);
         if disk_path.is_file() {
             if let Ok(bytes) = std::fs::read(&disk_path) {
@@ -59,7 +65,13 @@ pub async fn static_asset_handler(uri: Uri) -> impl IntoResponse {
     }
 
     // 3. SPA Wildcard Fallback: for non-API client routes, check disk index.html first
-    for base in &["frontend/dist", "../frontend/dist", "../../frontend/dist", "dist"] {
+    for base in &[
+        "codebase/aico/frontend/dist",
+        "frontend/dist",
+        "../frontend/dist",
+        "../../frontend/dist",
+        "dist",
+    ] {
         let disk_path = StdPath::new(base).join("index.html");
         if disk_path.is_file() {
             if let Ok(bytes) = std::fs::read(&disk_path) {

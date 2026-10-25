@@ -321,4 +321,21 @@ describe('Browser Tab Title Terminal AI Status Indicator (ft-terminal-tab-title-
     // Back to Antigravity only
     expect(document.title).toBe('AICO 🟢');
   });
+
+  // @verifies spec-ft-terminal-native-hook-gate-bridge::TASK-HOOK-001-4::REQ-001
+  // @verifies spec-ft-terminal-native-hook-gate-bridge::TASK-HOOK-001-4::REQ-004
+  // @verifies spec-ft-terminal-native-hook-gate-bridge::TASK-HOOK-001-4::REQ-005
+  // @verifies spec-ft-terminal-native-hook-gate-bridge::TASK-HOOK-001-4::REQ-007
+  it('updates document.title and tab glyph to blue circle on waiting_for_input', () => {
+    const agyTabs: TerminalTab[] = [
+      { id: 'tab-agy', name: 'Antigravity', shortName: 'AGY', shell: 'agy' },
+    ];
+    const statuses: Record<string, AiTabStatus> = {
+      'tab-agy': { state: 'waiting_for_input', reason: 'Waiting for interactive choice (ask_question)' },
+    };
+
+    const title = formatTerminalTitle(agyTabs, statuses);
+    expect(title).toBe('AICO 🔵');
+    expect(getGlyphForStatus(statuses['tab-agy'])).toBe('🔵');
+  });
 });

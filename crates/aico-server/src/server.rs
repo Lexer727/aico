@@ -393,6 +393,9 @@ impl HostServer {
             .route("/api/v1/git/clone", post(handle_git_clone))
             // @implements spec-ft-terminal-quotas-gates-and-notifications::TASK-TERMINAL-007-3::REQ-005
             .route("/api/v1/notifications/popup", post(handle_popup_notification))
+            // @implements spec-ft-terminal-native-hook-gate-bridge::TASK-HOOK-001-1::REQ-001
+            // @implements spec-ft-terminal-native-hook-gate-bridge::TASK-HOOK-001-1::REQ-003
+            .route("/api/v1/terminal/ai-status", post(handle_ai_status))
             // @implements ft-core-omni-search-fulltext::TASK-CORE-009-7::REQ-010
             .route("/api/v1/code/files", get(list_code_files_handler))
             .route("/api/v1/raw", get(get_raw_file_handler))
@@ -3798,6 +3801,36 @@ async fn handle_popup_notification(
         })),
     )
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AiStatusRequest {
+    #[serde(default)]
+    pub tab_id: Option<String>,
+    pub state: String,
+    #[serde(default)]
+    pub reason: Option<String>,
+}
+
+// @implements spec-ft-terminal-native-hook-gate-bridge::TASK-HOOK-001-1::REQ-001
+// @implements spec-ft-terminal-native-hook-gate-bridge::TASK-HOOK-001-1::REQ-003
+async fn handle_ai_status(
+    State(state): State<AppState>,
+    Json(payload): Json<AiStatusRequest>,
+) -> impl IntoResponse {
+    let payload_str = serde_json::to_string(&payload).unwrap_or_default();
+    state.ws_hub.broadcast("ai_status_update", &payload_str);
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "status": "ok",
+            "state": payload.state,
+            "tab_id": payload.tab_id,
+            "reason": payload.reason
+        })),
+    )
+}
+
 
 
 

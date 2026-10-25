@@ -445,6 +445,43 @@ async fn test_windows_popup_notification_endpoint() {
 }
 
 
+// @verifies spec-ft-terminal-native-hook-gate-bridge::TASK-HOOK-001-1::REQ-001
+// @verifies spec-ft-terminal-native-hook-gate-bridge::TASK-HOOK-001-1::REQ-003
+#[tokio::test]
+async fn test_ai_status_endpoint() {
+    let mut config = ServerConfig::default();
+    config.base_port = 4345;
+
+    let mut server = HostServer::new(config);
+    let addr = server.bind().await.expect("Server should bind successfully");
+
+    let server_task = tokio::spawn(async move {
+        server.serve().await.expect("Server should run cleanly");
+    });
+
+    let client = reqwest::Client::new();
+    let url = format!("http://{}/api/v1/terminal/ai-status", addr);
+
+    let res = client.post(&url)
+        .json(&serde_json::json!({
+            "tab_id": "term-test-1",
+            "state": "waiting_for_input",
+            "reason": "Waiting for user input (ask_question)"
+        }))
+        .send()
+        .await
+        .expect("AI status request should succeed");
+
+    assert_eq!(res.status(), 200);
+    let body: serde_json::Value = res.json().await.expect("Response should parse as JSON");
+    assert_eq!(body["status"], "ok");
+    assert_eq!(body["state"], "waiting_for_input");
+    assert_eq!(body["tab_id"], "term-test-1");
+    assert_eq!(body["reason"], "Waiting for user input (ask_question)");
+
+    server_task.abort();
+}
+
 // @verifies ft-storage-lancedb-hybrid-search::TASK-STORAGE-002-5::REQ-007
 #[tokio::test]
 async fn test_hybrid_search_endpoint() {

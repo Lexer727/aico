@@ -7,6 +7,8 @@ import {
   detectGateOrWaitingState,
   analyzeAiOutputChunk,
   triggerDesktopPopupNotification,
+  resolveTargetAiTab,
+  type TerminalTab,
 } from '../TerminalConsole';
 import { AiStatusMonitor } from '../../layout/AiStatusMonitor';
 import { SettingsModal } from '../../settings/SettingsModal';
@@ -215,5 +217,26 @@ describe('TerminalGateAndQuota Seam Tests', () => {
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute('aria-checked', 'true');
     expect(localStorage.getItem('aico-desktop-notifications-enabled')).toBe('true');
+  });
+
+  // @verifies spec-ft-terminal-native-hook-gate-bridge::TASK-HOOK-001-3::REQ-004
+  // @verifies spec-ft-terminal-native-hook-gate-bridge::TASK-HOOK-001-3::REQ-005
+  // @verifies spec-ft-terminal-native-hook-gate-bridge::TASK-HOOK-001-3::REQ-007
+  it('resolves target AI tab accurately from tabId, activeTabId, or fallback', () => {
+    const tabs: TerminalTab[] = [
+      { id: 'tab-ps', name: 'PowerShell', shortName: 'PS', shell: 'powershell' },
+      { id: 'tab-agy-1', name: 'Antigravity 1', shortName: 'AGY1', shell: 'agy' },
+      { id: 'tab-claude', name: 'Claude', shortName: 'CL', shell: 'claude' },
+    ];
+
+    // Explicit tabId
+    expect(resolveTargetAiTab(tabs, 'tab-claude')).toEqual(tabs[2]);
+    expect(resolveTargetAiTab(tabs, 'Antigravity 1')).toEqual(tabs[1]);
+
+    // Active AI tab when tabId is undefined
+    expect(resolveTargetAiTab(tabs, undefined, 'tab-claude')).toEqual(tabs[2]);
+
+    // Fallback to first available AI tab when active tab is non-AI (e.g. powershell)
+    expect(resolveTargetAiTab(tabs, undefined, 'tab-ps')).toEqual(tabs[1]);
   });
 });
