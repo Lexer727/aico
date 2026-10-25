@@ -469,39 +469,188 @@ impl HostServer {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LanCandidate {
+    pub ip: String,
+    pub interface_name: String,
+    pub is_preferred: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PairingResponse {
     pub lan_ip: String,
     pub port: u16,
     pub token: String,
     pub pairing_url: String,
+    pub candidate_ips: Vec<LanCandidate>,
 }
 
-pub fn get_lan_ip() -> String {
-    if let Ok(socket) = std::net::UdpSocket::bind("0.0.0.0:0") {
-        if socket.connect("8.8.8.8:80").is_ok() {
-            if let Ok(addr) = socket.local_addr() {
-                let ip = addr.ip().to_string();
-                if ip != "0.0.0.0" {
-                    return ip;
+fn is_virtual_or_vpn_interface(name: &str) -> bool {
+    const PATTERNS: &[&str] = &[
+        "vpn",
+        "proton",
+        "wireguard",
+        "nord",
+        "tailscale",
+        "tun",
+        "tap",
+        "vethernet",
+        "wsl",
+        "vbox",
+        "virtualbox",
+        "vmware",
+        "docker",
+        "bridge",
+        "bluetooth",
+        "loopback",
+        "dummy",
+    ];
+    PATTERNS.iter().any(|pat| name.contains(pat))
+}
+
+// @implements spec-ft-core-lan-ip-vpn-pairing-resolver::TASK-CORE-019-1::REQ-001
+// @implements spec-ft-core-lan-ip-vpn-pairing-resolver::TASK-CORE-019-1::REQ-002
+// @implements spec-ft-core-lan-ip-vpn-pairing-resolver::TASK-CORE-019-1::REQ-003
+// @implements spec-ft-core-lan-ip-vpn-pairing-resolver::TASK-CORE-019-1::REQ-006
+// @implements spec-ft-core-lan-ip-vpn-pairing-resolver::TASK-CORE-019-2::REQ-004
+pub fn detect_lan_ip_candidates() -> Vec<LanCandidate> {
+    // REQ-003: Check environment override AICO_LAN_IP first
+    if let Ok(override_ip) = std::env::var("AICO_LAN_IP") {
+        let trimmed = override_ip.trim();
+        if !trimmed.is_empty() && trimmed.parse::<std::net::Ipv4Addr>().is_ok() {
+            return vec![LanCandidate {
+                ip: trimmed.to_string(),
+                interface_name: "Environment (AICO_LAN_IP)".to_string(),
+                is_preferred: true,
+            }];
+        }
+    }
+
+    let mut raw_candidates: Vec<(String, String, bool)> = Vec::new();
+
+    if let Ok(interfaces) = get_if_addrs::get_if_addrs() {
+        for iface in interfaces {
+            if let get_if_addrs::IfAddr::V4(v4) = iface.addr {
+                let ip = v4.ip;
+                // Exclude loopback (127.0.0.0/8), link-local (169.254.0.0/16), and unspecified (0.0.0.0)
+                if ip.is_loopback() || ip.is_link_local() || ip.is_unspecified() {
+                    continue;
+                }
+
+                let name_lower = iface.name.to_lowercase();
+                let is_vpn = is_virtual_or_vpn_interface(&name_lower);
+                raw_candidates.push((ip.to_string(), iface.name, is_vpn));
+            }
+        }
+    }
+
+    // Fallback if no network interfaces found via get_if_addrs: try socket probe
+    if raw_candidates.is_empty() {
+        if let Ok(socket) = std::net::UdpSocket::bind("0.0.0.0:0") {
+            if socket.connect("8.8.8.8:80").is_ok() {
+                if let Ok(addr) = socket.local_addr() {
+                    let ip = addr.ip().to_string();
+                    if ip != "0.0.0.0" && ip != "127.0.0.1" {
+                        raw_candidates.push((ip, "Default Route".to_string(), false));
+                    }
                 }
             }
         }
     }
-    "127.0.0.1".to_string()
+
+    // Final fallback
+    if raw_candidates.is_empty() {
+        return vec![LanCandidate {
+            ip: "127.0.0.1".to_string(),
+            interface_name: "Loopback".to_string(),
+            is_preferred: true,
+        }];
+    }
+
+    // Deduplicate by IP while preserving interface name
+    let mut seen_ips = std::collections::HashSet::new();
+    let mut deduped = Vec::new();
+    for (ip, name, is_vpn) in raw_candidates {
+        if seen_ips.insert(ip.clone()) {
+            deduped.push((ip, name, is_vpn));
+        }
+    }
+
+    // Rank candidate IPs:
+    // Rank 1: Non-VPN Class C private (192.168.x.x)
+    // Rank 2: Non-VPN Class A private (10.x.x.x)
+    // Rank 3: Non-VPN Class B private (172.16-31.x.x)
+    // Rank 4: Other non-VPN IPv4
+    // Rank 5: Virtual / VPN Class C (192.168.x.x)
+    // Rank 6: Virtual / VPN Class A (10.x.x.x)
+    // Rank 7: Virtual / VPN Class B (172.16-31.x.x)
+    // Rank 8: Any other IPv4
+    fn get_rank(ip_str: &str, is_vpn: bool) -> u8 {
+        let octets: Vec<u8> = ip_str.split('.').filter_map(|s| s.parse().ok()).collect();
+        if octets.len() != 4 {
+            return 99;
+        }
+
+        let is_class_c = octets[0] == 192 && octets[1] == 168;
+        let is_class_a = octets[0] == 10;
+        let is_class_b = octets[0] == 172 && (16..=31).contains(&octets[1]);
+
+        match (is_vpn, is_class_c, is_class_a, is_class_b) {
+            (false, true, _, _) => 1,
+            (false, _, true, _) => 2,
+            (false, _, _, true) => 3,
+            (false, false, false, false) => 4,
+            (true, true, _, _) => 5,
+            (true, _, true, _) => 6,
+            (true, _, _, true) => 7,
+            (true, false, false, false) => 8,
+        }
+    }
+
+    deduped.sort_by_key(|(ip, _, is_vpn)| get_rank(ip, *is_vpn));
+
+    let mut result = Vec::with_capacity(deduped.len());
+    for (idx, (ip, name, _)) in deduped.into_iter().enumerate() {
+        result.push(LanCandidate {
+            ip,
+            interface_name: name,
+            is_preferred: idx == 0,
+        });
+    }
+
+    result
+}
+
+// @implements spec-ft-core-lan-ip-vpn-pairing-resolver::TASK-CORE-019-1::REQ-001
+// @implements spec-ft-core-lan-ip-vpn-pairing-resolver::TASK-CORE-019-1::REQ-002
+// @implements spec-ft-core-lan-ip-vpn-pairing-resolver::TASK-CORE-019-1::REQ-006
+pub fn get_lan_ip() -> String {
+    let candidates = detect_lan_ip_candidates();
+    candidates
+        .into_iter()
+        .find(|c| c.is_preferred)
+        .map(|c| c.ip)
+        .unwrap_or_else(|| "127.0.0.1".to_string())
 }
 
 // @implements ft-core-webui-shell::TASK-CORE-006-17::REQ-019
+// @implements spec-ft-core-lan-ip-vpn-pairing-resolver::TASK-CORE-019-2::REQ-004
 async fn get_pairing_handler(
     State(state): State<AppState>,
 ) -> Json<PairingResponse> {
     let port = state.bound_port.load(std::sync::atomic::Ordering::Relaxed);
-    let lan_ip = get_lan_ip();
+    let candidates = detect_lan_ip_candidates();
+    let lan_ip = candidates
+        .iter()
+        .find(|c| c.is_preferred)
+        .map(|c| c.ip.clone())
+        .unwrap_or_else(|| "127.0.0.1".to_string());
     let pairing_url = state.auth.pairing_url(&lan_ip, port);
     Json(PairingResponse {
         lan_ip,
         port,
         token: state.auth.token().to_string(),
         pairing_url,
+        candidate_ips: candidates,
     })
 }
 

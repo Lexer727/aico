@@ -8,20 +8,29 @@ export interface MobilePairingModalProps {
   windowId: string;
 }
 
+export interface LanCandidate {
+  ip: string;
+  interface_name: string;
+  is_preferred: boolean;
+}
+
 interface PairingData {
   lan_ip: string;
   port: number;
   token: string;
   pairing_url: string;
+  candidate_ips?: LanCandidate[];
 }
 
 // @implements ft-core-webui-shell::TASK-CORE-006-17::REQ-019
+// @implements spec-ft-core-lan-ip-vpn-pairing-resolver::TASK-CORE-019-3::REQ-005
 export const MobilePairingModal: React.FC<MobilePairingModalProps> = ({
   isOpen,
   onClose,
   windowId,
 }) => {
   const [pairingData, setPairingData] = useState<PairingData | null>(null);
+  const [selectedIp, setSelectedIp] = useState<string>('');
   const [qrSvg, setQrSvg] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -39,30 +48,10 @@ export const MobilePairingModal: React.FC<MobilePairingModalProps> = ({
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
       })
-      .then(async (data: PairingData) => {
+      .then((data: PairingData) => {
         if (!mounted) return;
         setPairingData(data);
-        const fullUrl = `${data.pairing_url}&win=${encodeURIComponent(windowId)}`;
-        try {
-          const svg = await QRCode.toString(fullUrl, {
-            type: 'svg',
-            margin: 1,
-            width: 220,
-            color: {
-              dark: '#000000',
-              light: '#ffffff',
-            },
-          });
-          if (mounted) {
-            setQrSvg(svg);
-            setLoading(false);
-          }
-        } catch (e) {
-          if (mounted) {
-            setError('Failed to generate QR code');
-            setLoading(false);
-          }
-        }
+        setSelectedIp(data.lan_ip || '');
       })
       .catch((err) => {
         if (mounted) {
@@ -74,13 +63,57 @@ export const MobilePairingModal: React.FC<MobilePairingModalProps> = ({
     return () => {
       mounted = false;
     };
-  }, [isOpen, windowId]);
+  }, [isOpen]);
+
+  const fullUrl = React.useMemo(() => {
+    if (!pairingData) return '';
+    const hostIp = selectedIp || pairingData.lan_ip;
+    const baseUrl = `http://${hostIp}:${pairingData.port}/?token=${encodeURIComponent(pairingData.token)}`;
+    return `${baseUrl}&win=${encodeURIComponent(windowId)}`;
+  }, [pairingData, selectedIp, windowId]);
+
+  useEffect(() => {
+    if (!fullUrl) return;
+    let mounted = true;
+
+    QRCode.toString(fullUrl, {
+      type: 'svg',
+      margin: 1,
+      width: 220,
+      color: {
+        dark: '#000000',
+        light: '#ffffff',
+      },
+    })
+      .then((svg) => {
+        if (mounted) {
+          setQrSvg(svg);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setError('Failed to generate QR code');
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [fullUrl]);
 
   if (!isOpen) return null;
 
-  const fullUrl = pairingData
-    ? `${pairingData.pairing_url}&win=${encodeURIComponent(windowId)}`
-    : '';
+  const getDisplayName = (candidate: LanCandidate) => {
+    if (candidate.interface_name && !candidate.interface_name.startsWith('{')) {
+      return candidate.interface_name;
+    }
+    if (candidate.ip.startsWith('192.168.')) return 'Local Wi-Fi / Ethernet';
+    if (candidate.ip.startsWith('10.')) return 'Local Network (10.x)';
+    if (candidate.ip.startsWith('172.')) return 'Local Network (172.x)';
+    return 'Network Adapter';
+  };
 
   const handleCopy = () => {
     if (!fullUrl) return;
@@ -148,6 +181,32 @@ export const MobilePairingModal: React.FC<MobilePairingModalProps> = ({
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                 Target Window: <span className="text-zinc-200 font-semibold">{windowId}</span>
               </div>
+            </div>
+          )}
+
+          {pairingData?.candidate_ips && pairingData.candidate_ips.length > 1 && (
+            <div className="w-full space-y-1.5 text-xs">
+              <div className="flex items-center justify-between text-zinc-400 font-medium">
+                <span>Network Interface (LAN):</span>
+                <span className="text-[10px] text-zinc-500 font-mono">
+                  {(() => {
+                    const found = pairingData.candidate_ips.find((c) => c.ip === selectedIp);
+                    return found ? getDisplayName(found) : '';
+                  })()}
+                </span>
+              </div>
+              <select
+                data-testid="network-interface-select"
+                value={selectedIp}
+                onChange={(e) => setSelectedIp(e.target.value)}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500 cursor-pointer"
+              >
+                {pairingData.candidate_ips.map((candidate) => (
+                  <option key={candidate.ip} value={candidate.ip}>
+                    {getDisplayName(candidate)} ({candidate.ip}) {candidate.is_preferred ? '★ Recommended' : ''}
+                  </option>
+                ))}
+              </select>
             </div>
           )}
 

@@ -146,6 +146,46 @@ describe('Mobile Pairing and Window/Terminal Synchronization', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  // @verifies spec-ft-core-lan-ip-vpn-pairing-resolver::TASK-CORE-019-3::REQ-005
+  it('renders network interface selector when multiple candidates exist and dynamically updates QR code and pairing URL', async () => {
+    const multiCandidatePairingData = {
+      lan_ip: '192.168.178.190',
+      port: 4242,
+      token: 'vpn-test-token',
+      pairing_url: 'http://192.168.178.190:4242/?token=vpn-test-token',
+      candidate_ips: [
+        { ip: '192.168.178.190', interface_name: 'Ethernet 5', is_preferred: true },
+        { ip: '10.2.0.2', interface_name: 'ProtonVPN', is_preferred: false },
+      ],
+    };
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => multiCandidatePairingData,
+    }));
+
+    render(
+      <MobilePairingModal
+        isOpen={true}
+        onClose={vi.fn()}
+        windowId="win-vpn-test"
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('network-interface-select')).toBeInTheDocument();
+    });
+
+    const input = screen.getByTestId('pairing-url-input') as HTMLInputElement;
+    expect(input.value).toBe('http://192.168.178.190:4242/?token=vpn-test-token&win=win-vpn-test');
+
+    // Switch interface to ProtonVPN
+    const select = screen.getByTestId('network-interface-select');
+    fireEvent.change(select, { target: { value: '10.2.0.2' } });
+
+    expect(input.value).toBe('http://10.2.0.2:4242/?token=vpn-test-token&win=win-vpn-test');
+  });
+
   // @verifies ft-core-webui-shell::TASK-CORE-006-17::REQ-019
   it('automatically dismisses desktop pairing modal when companion_paired message is received', async () => {
     const mockPairingData = {

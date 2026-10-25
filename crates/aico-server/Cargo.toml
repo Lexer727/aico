@@ -24,6 +24,7 @@ portable-pty = "0.9"
 reqwest.workspace = true
 regex.workspace = true
 sha2 = "0.10"
+get_if_addrs = "0.5"
 
 [dev-dependencies]
 reqwest.workspace = true
