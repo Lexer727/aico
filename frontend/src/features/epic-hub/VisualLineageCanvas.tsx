@@ -260,44 +260,40 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
     return edgeList;
   }, [rawNodes, rawEdges]);
 
-  // Determine all node IDs connected to the focused epic using BFS (governing ADRs + epic + child features + code seams)
+  // Determine child feature IDs belonging to the focused epic (strictly direct child features)
   // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-16::REQ-025
-  const drilledEpicNodeIds = useMemo(() => {
+  const drilledEpicChildFeatureIds = useMemo(() => {
     if (!drilledEpicId) return null;
-    const set = new Set<string>([drilledEpicId]);
+    const featureSet = new Set<string>();
+    const visited = new Set<string>([drilledEpicId]);
     const queue = [drilledEpicId];
 
-    // Downstream traversal: follow directed edges from the epic
     while (queue.length > 0) {
-      const current = queue.shift()!;
+      const cur = queue.shift()!;
       for (const edge of effectiveEdges) {
-        if (edge.source === current && !set.has(edge.target)) {
-          set.add(edge.target);
-          queue.push(edge.target);
+        if (edge.source === cur && !visited.has(edge.target)) {
+          visited.add(edge.target);
+          const tgtNode = rawNodes.find((n) => n.id === edge.target);
+          if (tgtNode && tgtNode.type.toLowerCase() === 'feature') {
+            featureSet.add(tgtNode.id);
+          } else {
+            // Traverse intermediate non-feature nodes if any (e.g. brainstorm/deepdive)
+            queue.push(edge.target);
+          }
         }
       }
     }
 
-    // Upstream traversal: include governing ADRs that point to the epic or to any node within the epic's subtree
-    for (const edge of effectiveEdges) {
-      if (set.has(edge.target)) {
-        const srcNode = rawNodes.find((n) => n.id === edge.source);
-        if (srcNode && srcNode.type.toLowerCase() === 'adr') {
-          set.add(edge.source);
-        }
-      }
-    }
-
-    return set;
+    return featureSet;
   }, [drilledEpicId, effectiveEdges, rawNodes]);
 
   // Dynamic features list scoped to active epic (if focused)
   const activeFeatures = useMemo(() => {
-    if (drilledEpicId && drilledEpicNodeIds) {
-      return featureList.filter((f) => drilledEpicNodeIds.has(f.id));
+    if (drilledEpicId && drilledEpicChildFeatureIds) {
+      return featureList.filter((f) => drilledEpicChildFeatureIds.has(f.id));
     }
     return featureList;
-  }, [featureList, drilledEpicId, drilledEpicNodeIds]);
+  }, [featureList, drilledEpicId, drilledEpicChildFeatureIds]);
 
   // Determine all node IDs connected to the drilled feature using BFS
   // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-9::REQ-018
@@ -390,25 +386,23 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
     // REQ-020 & REQ-021: Omit brainstorm, deepdive, spec, plan, and requirement from visual DAG
     let base = rawNodes.filter((n) => !OMITTED_NODE_TYPES.has(n.type.toLowerCase()));
 
-    // REQ-025: Isolate graph to focused epic ecosystem
-    if (drilledEpicId && drilledEpicNodeIds) {
-      base = base.filter((n) => drilledEpicNodeIds.has(n.id));
-    }
-
-    if (drilledFeatureId && drilledFeatureNodeIds) {
-      // In drilled mode: show ADRs, Epic, and all nodes belonging to the drilled feature (including its TASKs!)
+    // REQ-025: When an epic is focused, isolate strictly to [Epic] -> [Child Features]
+    // If a child feature is subsequently drilled, expand hierarchically to [Epic] -> [Feature] -> [Tasks] -> [Code]
+    if (drilledEpicId && drilledEpicChildFeatureIds) {
+      if (drilledFeatureId && drilledFeatureNodeIds) {
+        base = base.filter((n) => n.id === drilledEpicId || drilledFeatureNodeIds.has(n.id));
+      } else {
+        base = base.filter((n) => n.id === drilledEpicId || drilledEpicChildFeatureIds.has(n.id));
+      }
+    } else if (drilledFeatureId && drilledFeatureNodeIds) {
+      // Standalone Feature drilldown (without epic focus)
       base = base.filter((n) => {
         const t = n.type.toLowerCase();
-        if (t === 'adr' || t === 'epic') {
-          if (drilledEpicId && drilledEpicNodeIds) {
-            return drilledEpicNodeIds.has(n.id);
-          }
-          return true;
-        }
+        if (t === 'adr' || t === 'epic') return true;
         return drilledFeatureNodeIds.has(n.id);
       });
     } else {
-      // In Epic overview mode: hide task nodes if features are present
+      // Full overview mode: hide task nodes if features are present
       if (featureList.length > 0) {
         const taskToggledExplicitly = !isAllSelected && selectedTypes.includes('task');
         if (!taskToggledExplicitly) {
@@ -424,7 +418,7 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
     selectedTypes,
     isAllSelected,
     drilledEpicId,
-    drilledEpicNodeIds,
+    drilledEpicChildFeatureIds,
     drilledFeatureId,
     drilledFeatureNodeIds,
     featureList.length,

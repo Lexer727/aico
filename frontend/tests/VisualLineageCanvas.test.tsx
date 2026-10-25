@@ -364,21 +364,30 @@ describe('VisualLineageCanvas Component', () => {
     const storageEpicNode = screen.getByTestId('node-Epic ec-storage');
     fireEvent.click(storageEpicNode);
 
-    // REQ-025: ec-storage, its governing ADR-0011, child feature, and code seam are isolated
+    // REQ-025: Strictly ONLY ec-storage and its direct child feature are shown (pure 2-column focus)
     expect(screen.getByTestId('node-Epic ec-storage')).toBeInTheDocument();
     expect(screen.getByTestId('node-Feature Vector')).toBeInTheDocument();
-    expect(screen.getByText('vector.rs')).toBeInTheDocument();
-    expect(screen.getByText('ADR-0011: Native Storage')).toBeInTheDocument();
     expect(screen.getByTestId('epic-focus-status-badge')).toBeInTheDocument();
     expect(screen.getByTestId('reset-epic-focus-btn')).toBeInTheDocument();
 
-    // REQ-025: Unrelated ec-core and its child features are omitted
+    // REQ-025: Code seams, ADRs, and other epics/features are omitted from epic focus
+    expect(screen.queryByText('vector.rs')).toBeNull();
+    expect(screen.queryByText('ADR-0011: Native Storage')).toBeNull();
     expect(screen.queryByTestId('node-Epic ec-core')).toBeNull();
     expect(screen.queryByTestId('node-Feature Discovery')).toBeNull();
     expect(screen.queryByText('core.rs')).toBeNull();
     expect(screen.queryByText('ADR-0001: Core Architecture')).toBeNull();
 
-    // 2. Reset back to workspace overview via reset button
+    // 2. Click on child feature to hierarchically drill down: [Epic] -> [Feature] -> [Code]
+    const featVectorNode = screen.getByTestId('node-Feature Vector');
+    fireEvent.click(featVectorNode);
+
+    expect(screen.getByTestId('node-Epic ec-storage')).toBeInTheDocument();
+    expect(screen.getByTestId('node-Feature Vector')).toBeInTheDocument();
+    expect(screen.getByText('vector.rs')).toBeInTheDocument();
+    expect(screen.getByTestId('drilldown-status-badge')).toBeInTheDocument();
+
+    // 3. Reset back to workspace overview via reset button
     const resetEpicBtn = screen.getByTestId('reset-epic-focus-btn');
     fireEvent.click(resetEpicBtn);
 
@@ -388,14 +397,16 @@ describe('VisualLineageCanvas Component', () => {
     expect(screen.getByTestId('node-Feature Discovery')).toBeInTheDocument();
     expect(screen.getByTestId('node-Feature Vector')).toBeInTheDocument();
 
-    // 3. Test selection via Epic Focus Dropdown
+    // 4. Test selection via Epic Focus Dropdown
     const epicSelect = screen.getByTestId('epic-focus-select');
     fireEvent.change(epicSelect, { target: { value: 'ec-core' } });
 
     expect(screen.getByTestId('node-Epic ec-core')).toBeInTheDocument();
     expect(screen.getByTestId('node-Feature Discovery')).toBeInTheDocument();
-    expect(screen.getByText('core.rs')).toBeInTheDocument();
-    expect(screen.getByText('ADR-0001: Core Architecture')).toBeInTheDocument();
+
+    // Code seams and ADRs omitted in epic focus
+    expect(screen.queryByText('core.rs')).toBeNull();
+    expect(screen.queryByText('ADR-0001: Core Architecture')).toBeNull();
 
     expect(screen.queryByTestId('node-Epic ec-storage')).toBeNull();
     expect(screen.queryByTestId('node-Feature Vector')).toBeNull();
