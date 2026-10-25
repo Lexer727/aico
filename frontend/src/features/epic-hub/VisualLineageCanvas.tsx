@@ -89,6 +89,8 @@ const getTierIndex = (type: string): number => {
 // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-13::REQ-022
 // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-15::REQ-024
 // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-16::REQ-025
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-17::REQ-016
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-17::REQ-025
 export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
   nodes: initialNodes,
   edges: initialEdges,
@@ -114,6 +116,16 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const panStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const dragStartPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const isDraggingRef = useRef<boolean>(false);
+  const zoomRef = useRef(zoom);
+  const panRef = useRef(pan);
+  useEffect(() => {
+    zoomRef.current = zoom;
+  }, [zoom]);
+  useEffect(() => {
+    panRef.current = pan;
+  }, [pan]);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
 
   // Fetch live graph data if nodes are not explicitly provided
@@ -678,6 +690,7 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
 
   // Pan interaction & canvas background unselect
   // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-16::REQ-025
+  // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-17::REQ-025
   const handleMouseDown = (e: React.MouseEvent) => {
     if (
       (e.target as HTMLElement).closest('[data-node-id]') ||
@@ -686,12 +699,9 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
     ) {
       return;
     }
-    if (selectedNodeId || drilledEpicId || drilledFeatureId) {
-      setSelectedNodeId(null);
-      setDrilledEpicId(null);
-      setDrilledFeatureId(null);
-      onSelectNode?.('');
-    }
+    // Record drag start coordinates and reset drag flag
+    dragStartPosRef.current = { x: e.clientX, y: e.clientY };
+    isDraggingRef.current = false;
     setIsPanning(true);
     panStartRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
   };
@@ -704,6 +714,11 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
     ) {
       return;
     }
+    // REQ-025: If pointer moved significantly, this was a pan drag gesture, NOT an unselect click!
+    if (isDraggingRef.current) {
+      isDraggingRef.current = false;
+      return;
+    }
     if (selectedNodeId || drilledEpicId || drilledFeatureId) {
       setSelectedNodeId(null);
       setDrilledEpicId(null);
@@ -714,6 +729,11 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!isPanning) return;
+    const dx = e.clientX - dragStartPosRef.current.x;
+    const dy = e.clientY - dragStartPosRef.current.y;
+    if (dx * dx + dy * dy > 16) {
+      isDraggingRef.current = true;
+    }
     setPan({
       x: e.clientX - panStartRef.current.x,
       y: e.clientY - panStartRef.current.y,
@@ -722,15 +742,50 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
 
   const handleMouseUp = () => setIsPanning(false);
 
-  // REQ-016: Scroll wheel to zoom
+  // Zoom around viewport center for toolbar buttons
+  const zoomAroundCenter = (delta: number) => {
+    const el = canvasContainerRef.current;
+    const currentZoom = zoom;
+    const nextZoom = Math.min(2.5, Math.max(0.4, Number((currentZoom + delta).toFixed(2))));
+    if (nextZoom === currentZoom) return;
+
+    if (el) {
+      const rect = el.getBoundingClientRect();
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+      const scaleFactor = nextZoom / currentZoom;
+      const nextPanX = centerX - (centerX - pan.x) * scaleFactor;
+      const nextPanY = centerY - (centerY - pan.y) * scaleFactor;
+      setPan({ x: Math.round(nextPanX), y: Math.round(nextPanY) });
+    }
+    setZoom(nextZoom);
+  };
+
+  // REQ-016: Scroll wheel to zoom centered dynamically around cursor
+  // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-17::REQ-016
   useEffect(() => {
     const el = canvasContainerRef.current;
     if (!el) return;
 
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      const currentZoom = zoomRef.current;
+      const currentPan = panRef.current;
       const zoomDelta = -e.deltaY * 0.0015;
-      setZoom((z) => Math.min(2.5, Math.max(0.4, Number((z + zoomDelta).toFixed(2)))));
+      const nextZoom = Math.min(2.5, Math.max(0.4, Number((currentZoom + zoomDelta).toFixed(2))));
+      if (nextZoom === currentZoom) return;
+
+      // Focal zoom invariant: point under cursor (mouseX, mouseY) remains at same world coordinate
+      const scaleFactor = nextZoom / currentZoom;
+      const nextPanX = mouseX - (mouseX - currentPan.x) * scaleFactor;
+      const nextPanY = mouseY - (mouseY - currentPan.y) * scaleFactor;
+
+      setZoom(nextZoom);
+      setPan({ x: Math.round(nextPanX), y: Math.round(nextPanY) });
     };
 
     el.addEventListener('wheel', handleWheel, { passive: false });
@@ -879,7 +934,7 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
           <button
             type="button"
             data-testid="zoom-in-btn"
-            onClick={() => setZoom((z) => Math.min(2.5, Number((z + 0.15).toFixed(2))))}
+            onClick={() => zoomAroundCenter(0.15)}
             className="p-1 rounded bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-white transition-colors cursor-pointer"
             title="Zoom In"
           >
@@ -888,7 +943,7 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
           <button
             type="button"
             data-testid="zoom-out-btn"
-            onClick={() => setZoom((z) => Math.max(0.4, Number((z - 0.15).toFixed(2))))}
+            onClick={() => zoomAroundCenter(-0.15)}
             className="p-1 rounded bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-white transition-colors cursor-pointer"
             title="Zoom Out"
           >
@@ -948,7 +1003,7 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
 
         {/* Pan & Zoom Transform Container */}
         <div
-          className="absolute top-0 left-0 transition-transform duration-75"
+          className="absolute top-0 left-0"
           style={{
             width: `${canvasWidth}px`,
             height: `${canvasHeight}px`,

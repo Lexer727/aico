@@ -414,8 +414,21 @@ describe('VisualLineageCanvas Component', () => {
     expect(screen.getByText('vector.rs')).toBeInTheDocument();
     expect(screen.queryByText('core.rs')).toBeNull();
 
-    // 3. Click canvas background ("clicking nothing") to unselect and restore overview
+    // 3a. Pan dragging on canvas viewport does NOT unselect the active node or clear downstream filtering
     const viewport = screen.getByTestId('lineage-canvas-viewport');
+    fireEvent.mouseDown(viewport, { clientX: 100, clientY: 100 });
+    fireEvent.mouseMove(viewport, { clientX: 160, clientY: 160 }); // delta > 4px
+    fireEvent.mouseUp(viewport);
+    fireEvent.click(viewport);
+
+    // Selected state and filtered downstream view must be retained after pan drag!
+    expect(screen.getByTestId('node-Feature Vector')).toBeInTheDocument();
+    expect(screen.getByText('vector.rs')).toBeInTheDocument();
+    expect(screen.queryByText('core.rs')).toBeNull();
+
+    // 3b. Stationary click on canvas background ("clicking nothing" without drag) DOES unselect and restore overview
+    fireEvent.mouseDown(viewport, { clientX: 100, clientY: 100 });
+    fireEvent.mouseUp(viewport);
     fireEvent.click(viewport);
 
     // All epics, features, and code seams are restored to overview
@@ -461,5 +474,70 @@ describe('VisualLineageCanvas Component', () => {
     expect(screen.getByTestId('node-Feature Vector')).toBeInTheDocument();
     expect(screen.getByText('core.rs')).toBeInTheDocument();
     expect(screen.getByText('vector.rs')).toBeInTheDocument();
+  });
+
+  // @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-17::REQ-016
+  // @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-17::REQ-025
+  it('differentiates between pan drag and stationary click, and anchors wheel zoom dynamically around mouse cursor', () => {
+    const nodes = [
+      { id: 'epic-1', type: 'epic', label: 'Epic 1' },
+      { id: 'feat-1', type: 'feature', label: 'Feature 1' },
+      { id: 'code-1', type: 'code', label: 'file.rs' },
+    ];
+    const edges = [
+      { id: 'e1', source: 'epic-1', target: 'feat-1' },
+      { id: 'e2', source: 'feat-1', target: 'code-1' },
+    ];
+
+    render(
+      <VisualLineageCanvas nodes={nodes} edges={edges} />
+    );
+
+    const viewport = screen.getByTestId('lineage-canvas-viewport');
+    const transformContainer = viewport.querySelector('div[style*="transform"]') as HTMLElement;
+    expect(transformContainer).toBeInTheDocument();
+    expect(transformContainer.style.transform).toBe('translate(0px, 0px) scale(1)');
+
+    // 1. Wheel scroll zoom around mouse cursor at clientX: 200, clientY: 100
+    // In jsdom getBoundingClientRect returns zeros by default, so mouseX = 200, mouseY = 100
+    // deltaY: -100 => zoomDelta = 0.15 => nextZoom = 1.15
+    // scaleFactor = 1.15 / 1 = 1.15
+    // nextPanX = 200 - (200 - 0) * 1.15 = 200 - 230 = -30
+    // nextPanY = 100 - (100 - 0) * 1.15 = 100 - 115 = -15
+    fireEvent.wheel(viewport, { clientX: 200, clientY: 100, deltaY: -100 });
+
+    expect(screen.getByText('115%')).toBeInTheDocument();
+    expect(transformContainer.style.transform).toBe('translate(-30px, -15px) scale(1.15)');
+
+    // 2. Toolbar zoom reset button resets zoom and pan
+    const resetZoomBtn = screen.getByTestId('zoom-reset-btn');
+    fireEvent.click(resetZoomBtn);
+
+    expect(screen.getByText('100%')).toBeInTheDocument();
+    expect(transformContainer.style.transform).toBe('translate(0px, 0px) scale(1)');
+
+    // 3. Pan dragging moves pan coordinates and preserves node selection
+    const featNode = screen.getByTestId('node-Feature 1');
+    fireEvent.click(featNode);
+    expect(featNode.getAttribute('data-selected')).toBe('true');
+
+    // Pan drag
+    fireEvent.mouseDown(viewport, { clientX: 50, clientY: 50 });
+    fireEvent.mouseMove(viewport, { clientX: 120, clientY: 140 }); // delta > 4px
+    fireEvent.mouseUp(viewport);
+    fireEvent.click(viewport);
+
+    // Feature node remains selected
+    expect(featNode.getAttribute('data-selected')).toBe('true');
+    // Pan offset updated: pan = (70, 90)
+    expect(transformContainer.style.transform).toBe('translate(70px, 90px) scale(1)');
+
+    // 4. Stationary click on empty viewport deselects node
+    fireEvent.mouseDown(viewport, { clientX: 200, clientY: 200 });
+    fireEvent.mouseUp(viewport);
+    fireEvent.click(viewport);
+
+    // Feature node is deselected
+    expect(featNode.getAttribute('data-selected')).toBe('false');
   });
 });
