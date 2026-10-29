@@ -83,10 +83,93 @@ impl LanceVectorStore {
 
     /// Asynchronously open and connect to embedded LanceDB table
     // @implements ft-storage-lancedb-hybrid-search::TASK-STORAGE-002-1::REQ-001
+    // @implements spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-6::REQ-012
     pub async fn open_async(path: impl AsRef<Path>) -> Result<Self, StorageError> {
         let store = Self::open(path)?;
         let _ = store.ensure_table().await?;
+        let _ = store.hydrate_from_disk().await;
         Ok(store)
+    }
+
+    /// Hydrate in-memory vector and lexical cache from persisted LanceDB table on disk
+    // @implements spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-6::REQ-012
+    pub async fn hydrate_from_disk(&self) -> Result<usize, StorageError> {
+        {
+            let mem = self.records.read().unwrap();
+            if !mem.is_empty() {
+                return Ok(mem.len());
+            }
+        }
+
+        let table = self.ensure_table().await?;
+        let row_count = table.count_rows(None).await.unwrap_or(0);
+        if row_count == 0 {
+            return Ok(0);
+        }
+
+        let mut stream = table.query().execute().await?;
+        let mut hydrated = HashMap::with_capacity(row_count);
+
+        while let Some(batch) = stream.try_next().await? {
+            let id_col = batch.column_by_name("id").and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let content_col = batch.column_by_name("content").and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let path_col = batch.column_by_name("file_path").and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let start_col = batch.column_by_name("start_line").and_then(|c| c.as_any().downcast_ref::<UInt32Array>());
+            let end_col = batch.column_by_name("end_line").and_then(|c| c.as_any().downcast_ref::<UInt32Array>());
+            let lang_col = batch.column_by_name("language").and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let doc_col = batch.column_by_name("doc_type").and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let proj_col = batch.column_by_name("project_id").and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let vec_col = batch.column_by_name("vector").and_then(|c| c.as_any().downcast_ref::<FixedSizeListArray>());
+
+            for i in 0..batch.num_rows() {
+                let id = id_col.map(|c| c.value(i).to_string()).unwrap_or_default();
+                if id.is_empty() {
+                    continue;
+                }
+                let vector: Vec<f32> = if let Some(fsl) = vec_col {
+                    let row_arr = fsl.value(i);
+                    row_arr
+                        .as_any()
+                        .downcast_ref::<Float32Array>()
+                        .map(|fa| (0..fa.len()).map(|idx| fa.value(idx)).collect())
+                        .unwrap_or_else(|| vec![0.0; 384])
+                } else {
+                    vec![0.0; 384]
+                };
+
+                let metadata = serde_json::json!({
+                    "file_path": path_col.map(|c| c.value(i)).unwrap_or_default(),
+                    "start_line": start_col.map(|c| c.value(i) as usize).unwrap_or(1),
+                    "end_line": end_col.map(|c| c.value(i) as usize).unwrap_or(1),
+                    "language": lang_col.map(|c| c.value(i)).unwrap_or_default(),
+                    "doc_type": doc_col.map(|c| c.value(i)).unwrap_or_default(),
+                    "project_id": proj_col.map(|c| c.value(i)).unwrap_or_default(),
+                    "content": content_col.map(|c| c.value(i)).unwrap_or_default(),
+                });
+
+                hydrated.insert(
+                    id.clone(),
+                    VectorRecord {
+                        id,
+                        vector,
+                        metadata,
+                    },
+                );
+            }
+        }
+
+        let total = hydrated.len();
+        if total > 0 {
+            let mut mem = self.records.write().unwrap();
+            if mem.is_empty() {
+                *mem = hydrated;
+            } else {
+                for (k, v) in hydrated {
+                    mem.entry(k).or_insert(v);
+                }
+            }
+        }
+        Ok(total)
     }
 
     /// Ensure table exists and return cached handle
@@ -254,6 +337,92 @@ impl LanceVectorStore {
             true
         });
         Ok(removed)
+    }
+
+    /// Delete chunks associated with a specific project_id and file_path
+    // @implements spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-6::REQ-013
+    pub async fn delete_by_project_and_path(
+        &self,
+        project_id: &str,
+        file_path: &str,
+    ) -> Result<usize, StorageError> {
+        self.delete_by_project_and_paths(project_id, &[file_path.to_string()])
+            .await
+    }
+
+    /// Delete chunks associated with a specific project_id and a list of file_paths in batched predicates
+    // @implements spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-6::REQ-013
+    pub async fn delete_by_project_and_paths(
+        &self,
+        project_id: &str,
+        file_paths: &[String],
+    ) -> Result<usize, StorageError> {
+        if file_paths.is_empty() {
+            return Ok(0);
+        }
+        let table = self.ensure_table().await?;
+        let escaped_proj = project_id.replace('\'', "''");
+        for chunk_paths in file_paths.chunks(100) {
+            let quoted: Vec<String> = chunk_paths
+                .iter()
+                .map(|p| format!("'{}'", p.replace('\'', "''")))
+                .collect();
+            let predicate = format!(
+                "project_id = '{}' AND file_path IN ({})",
+                escaped_proj,
+                quoted.join(", ")
+            );
+            let _ = table.delete(&predicate).await;
+        }
+
+        let path_set: std::collections::HashSet<&str> =
+            file_paths.iter().map(|s| s.as_str()).collect();
+        let mut mem = self.records.write().unwrap();
+        let mut removed = 0;
+        mem.retain(|_, v| {
+            let pid_match =
+                v.metadata.get("project_id").and_then(|p| p.as_str()) == Some(project_id);
+            let fp_match = v
+                .metadata
+                .get("file_path")
+                .and_then(|f| f.as_str())
+                .map(|fp| path_set.contains(fp))
+                .unwrap_or(false);
+            if pid_match && fp_match {
+                removed += 1;
+                return false;
+            }
+            true
+        });
+        Ok(removed)
+    }
+
+    /// Compact LanceDB fragments and prune all superseded versions from _versions, _transactions, and data
+    // @implements spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-6::REQ-014
+    pub async fn compact_and_prune(&self) -> Result<(), StorageError> {
+        let table = self.ensure_table().await?;
+        let _ = table
+            .optimize(lancedb::table::OptimizeAction::Compact {
+                options: lancedb::table::CompactionOptions::default(),
+                remap_options: None,
+            })
+            .await;
+        let _ = table
+            .optimize(lancedb::table::OptimizeAction::Prune {
+                older_than: Some(lancedb::table::Duration::zero()),
+                delete_unverified: Some(true),
+                error_if_tagged_old_versions: None,
+            })
+            .await;
+        Ok(())
+    }
+
+    /// Return the number of active dataset versions in the LanceDB table
+    // @implements spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-6::REQ-014
+    pub async fn version_count(&self) -> Result<usize, StorageError> {
+        let table = self.ensure_table().await?;
+        let versions = table.list_versions().await?;
+        Ok(versions.len())
     }
 
     /// Query total row count in persistent LanceDB table

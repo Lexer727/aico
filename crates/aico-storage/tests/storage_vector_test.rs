@@ -178,4 +178,79 @@ fn test_embedding_pipeline_and_fallback() {
     assert!(sim_auth > sim_geom, "auth sim ({sim_auth}) should exceed geom sim ({sim_geom})");
 }
 
+// @verifies spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-6::REQ-012
+// @verifies spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-6::REQ-014
+#[tokio::test]
+async fn test_lancedb_hydration_and_compaction_pruning() {
+    let temp_dir = std::env::temp_dir().join(format!(
+        "aico_lance_compact_test_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let _ = std::fs::remove_dir_all(&temp_dir);
+    std::fs::create_dir_all(&temp_dir).unwrap();
+
+    let vector_dir = temp_dir.join("vector_db");
+    let store = aico_storage::LanceVectorStore::open_async(&vector_dir)
+        .await
+        .expect("open_async LanceVectorStore");
+
+    let mut vec1 = vec![0.0f32; 384];
+    vec1[0] = 1.0;
+
+    // Perform 4 separate batch appends to create multiple LanceDB versions & fragments
+    for batch_idx in 0..4 {
+        let rec = aico_storage::VectorRecordInput {
+            id: format!("proj1::src/file_{batch_idx}.rs:1"),
+            content: format!("pub fn func_{batch_idx}() {{}}"),
+            file_path: format!("src/file_{batch_idx}.rs"),
+            start_line: 1,
+            end_line: 5,
+            language: "rust".to_string(),
+            vector: vec1.clone(),
+            doc_type: "code".to_string(),
+            project_id: "proj1".to_string(),
+        };
+        store.upsert_records(&[rec]).await.expect("upsert batch");
+    }
+
+    // Delete one specific file in proj1 to create a deletion version
+    store
+        .delete_by_project_and_path("proj1", "src/file_3.rs")
+        .await
+        .expect("delete_by_project_and_path");
+
+    let versions_before = store.version_count().await.expect("version_count before");
+    assert!(
+        versions_before > 1,
+        "Multiple appends and delete should create > 1 LanceDB versions (got {versions_before})"
+    );
+
+    // Compact fragments and prune old versions (REQ-014)
+    store.compact_and_prune().await.expect("compact_and_prune");
+
+    let versions_after = store.version_count().await.expect("version_count after");
+    assert_eq!(
+        versions_after, 1,
+        "compact_and_prune should prune old versions leaving 1 active version"
+    );
+    assert_eq!(store.count_rows().await.unwrap(), 3);
+
+    // Drop and reopen store: verify in-memory cache is hydrated from disk (REQ-012)
+    drop(store);
+    let reopened = aico_storage::LanceVectorStore::open_async(&vector_dir)
+        .await
+        .expect("reopen LanceVectorStore");
+    assert_eq!(
+        reopened.record_count_for_project("proj1"),
+        3,
+        "In-memory cache should hydrate 3 records from disk on open_async"
+    );
+
+    let _ = std::fs::remove_dir_all(&temp_dir);
+}
+
+
 

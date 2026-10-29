@@ -759,3 +759,136 @@ async fn test_storage_reindex_and_rebuild_graph_endpoints() {
     server_task.abort();
     let _ = std::fs::remove_dir_all(&temp_root);
 }
+
+// @verifies spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-7::REQ-004
+// @verifies spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-7::REQ-013
+// @verifies spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-7::REQ-014
+// @verifies spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-7::REQ-015
+#[tokio::test]
+async fn test_incremental_startup_vector_crawler_and_compaction() {
+    let temp_root = std::env::temp_dir().join(format!(
+        "aico_inc_crawl_test_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let p_specs = temp_root.join("crawler-inc-specs");
+    let p_code = temp_root.join("codebase").join("crawler-inc");
+    std::fs::create_dir_all(p_specs.join("adr")).unwrap();
+    std::fs::create_dir_all(p_code.join("src")).unwrap();
+
+    std::fs::write(
+        p_specs.join("adr").join("0001-test.md"),
+        "---\nid: ADR-0001\ntitle: Architecture Test\nstatus: Approved\nderives_from: []\n---\n# Architecture Decision 1\n\nSome body text.",
+    )
+    .unwrap();
+    std::fs::write(
+        p_code.join("src").join("lib.rs"),
+        "pub fn alpha() -> i32 {\n    42\n}\n",
+    )
+    .unwrap();
+
+    let federation = aico_storage::StorageFederationManager::with_workspace_root(&temp_root);
+    let storage = federation
+        .register_project("crawler-inc-specs", &p_specs)
+        .await
+        .expect("register project");
+
+    // 1. First incremental crawl: indexes all files, writes manifest, compacts to 1 version
+    let report1 = aico_server::crawler::WorkspaceCrawler::crawl_and_index_incremental(
+        &storage,
+        &p_specs,
+        Some(&p_code),
+    )
+    .await
+    .expect("first incremental crawl");
+
+    assert_eq!(report1.files_scanned, 2);
+    assert!(report1.chunks_upserted >= 2);
+    assert_eq!(report1.total_chunks, report1.chunks_upserted);
+
+    let manifest_file = temp_root
+        .join(".aico")
+        .join("storage")
+        .join("vector")
+        .join("manifest_crawler-inc-specs.json");
+    assert!(
+        manifest_file.exists(),
+        "Manifest file should be persisted after crawl"
+    );
+
+    let vcount1 = storage
+        .vector_store()
+        .read()
+        .await
+        .version_count()
+        .await
+        .expect("version_count 1");
+    assert_eq!(
+        vcount1, 1,
+        "First crawl should compact and prune down to 1 active LanceDB version"
+    );
+
+    // 2. Second incremental crawl with unchanged files: 0 chunks upserted, still 1 version
+    let report2 = aico_server::crawler::WorkspaceCrawler::crawl_and_index_incremental(
+        &storage,
+        &p_specs,
+        Some(&p_code),
+    )
+    .await
+    .expect("second incremental crawl");
+
+    assert_eq!(report2.files_scanned, 2);
+    assert_eq!(
+        report2.chunks_upserted, 0,
+        "Unchanged files must not be re-upserted on subsequent startup crawl"
+    );
+    assert_eq!(report2.total_chunks, report1.total_chunks);
+
+    let vcount2 = storage
+        .vector_store()
+        .read()
+        .await
+        .version_count()
+        .await
+        .expect("version_count 2");
+    assert_eq!(vcount2, 1);
+
+    // 3. Modify only src/lib.rs -> only that file's chunks are re-indexed, and versions pruned to 1
+    std::fs::write(
+        p_code.join("src").join("lib.rs"),
+        "pub fn alpha() -> i32 {\n    99\n}\n\npub fn beta() -> i32 {\n    100\n}\n",
+    )
+    .unwrap();
+
+    let report3 = aico_server::crawler::WorkspaceCrawler::crawl_and_index_incremental(
+        &storage,
+        &p_specs,
+        Some(&p_code),
+    )
+    .await
+    .expect("third incremental crawl after 1 file edit");
+
+    assert_eq!(report3.files_scanned, 2);
+    assert_eq!(
+        report3.chunks_upserted, 2,
+        "Only modified file's 2 chunks should be upserted"
+    );
+    assert_eq!(report3.total_chunks, report1.total_chunks + 1);
+
+    let vcount3 = storage
+        .vector_store()
+        .read()
+        .await
+        .version_count()
+        .await
+        .expect("version_count 3");
+    assert_eq!(
+        vcount3, 1,
+        "Incremental update should compact and prune down to 1 version"
+    );
+
+    let _ = std::fs::remove_dir_all(&temp_root);
+}
+

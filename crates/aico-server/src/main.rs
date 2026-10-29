@@ -7,10 +7,11 @@ use std::path::{Path, PathBuf};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 1. Initialize logging
+    // @implements spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-7::REQ-015
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info,lance=warn,lancedb=warn")),
         )
         .init();
 
@@ -81,6 +82,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
 
                 // @implements spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-3::REQ-004
+                // @implements spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-7::REQ-004
+                // @implements spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-7::REQ-013
                 let crawler_state = state.clone();
                 let active_specs = projects[0].specs_path.clone();
                 let active_codebase = projects[0].codebase_path.clone();
@@ -88,9 +91,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 tokio::spawn(async move {
                     if let Ok(storage) = crawler_state.storage_federation.register_project(&active_id, &active_specs).await {
                         println!("[*] Starting background workspace vector indexing for ({})", active_id);
-                        match aico_server::crawler::WorkspaceCrawler::crawl_and_index(&storage, &active_specs, active_codebase.as_deref()).await {
+                        match aico_server::crawler::WorkspaceCrawler::crawl_and_index_incremental(&storage, &active_specs, active_codebase.as_deref()).await {
                             Ok(report) => {
-                                println!("[*] Background vector indexing complete: {} files, {} chunks indexed", report.files_scanned, report.chunks_upserted);
+                                println!(
+                                    "[*] Background vector indexing complete: {} files scanned, {} chunks updated ({} total chunks)",
+                                    report.files_scanned, report.chunks_upserted, report.total_chunks
+                                );
                                 crawler_state.ws_hub.broadcast("storage_updated", &active_id);
                             }
                             Err(e) => {
