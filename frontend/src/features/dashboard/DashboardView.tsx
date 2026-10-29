@@ -40,12 +40,14 @@ interface DashboardViewProps {
   adrs?: DiscoveredAdr[];
   gitStatuses?: GitRepoStatus[];
   projectName?: string;
+  projectDisplayName?: string;
   onOpenEpic: (epicId: string) => void;
   onOpenSpec: (specId: string, title: string) => void;
   onOpenGlossary?: () => void;
   onOpenAdr?: (adrId: string) => void;
   onOpenNode?: (node: any) => void;
   onPopoutGraph?: () => void;
+  onRefreshWorkspace?: () => void;
   ubiquitousLanguage?: TermInfo[];
   storageStats?: StorageStatsInfo;
 }
@@ -84,17 +86,21 @@ const defaultTerms: TermInfo[] = [
 // @implements ft-core-epic-hub::TASK-CORE-007-12::REQ-001
 // @implements ft-core-epic-hub::TASK-CORE-007-10::REQ-002
 // @implements ft-core-epic-hub::TASK-CORE-007-1::REQ-007
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-20::REQ-026
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-20::REQ-027
 export const DashboardView: React.FC<DashboardViewProps> = ({
   epics = [],
   adrs: initialAdrs,
   gitStatuses,
   projectName,
+  projectDisplayName,
   onOpenEpic,
   onOpenSpec: _onOpenSpec,
   onOpenGlossary,
   onOpenAdr,
   onOpenNode,
   onPopoutGraph,
+  onRefreshWorkspace,
   ubiquitousLanguage,
   storageStats: initialStorageStats,
 }) => {
@@ -106,16 +112,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       setStats(initialStorageStats);
       return;
     }
-    fetch('/api/v1/storage/stats')
+    const query = projectName ? `?project_id=${encodeURIComponent(projectName)}` : '';
+    fetch(`/api/v1/storage/stats${query}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data) setStats(data);
       })
       .catch(() => {});
-  }, [initialStorageStats]);
+  }, [initialStorageStats, projectName]);
 
   const [terms, setTerms] = useState<TermInfo[]>(
-    ubiquitousLanguage && ubiquitousLanguage.length > 0 ? ubiquitousLanguage : defaultTerms
+    ubiquitousLanguage !== undefined ? ubiquitousLanguage : defaultTerms
   );
   const [adrs, setAdrs] = useState<DiscoveredAdr[]>(initialAdrs || []);
   const [isTerminologyOpen, setIsTerminologyOpen] = useState(false);
@@ -124,7 +131,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [adrFilter, setAdrFilter] = useState('');
 
   useEffect(() => {
-    if (ubiquitousLanguage && ubiquitousLanguage.length > 0) {
+    if (ubiquitousLanguage !== undefined) {
       setTerms(ubiquitousLanguage);
     } else {
       fetchGlossary().then((data) => {
@@ -133,19 +140,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         }
       });
     }
-  }, [ubiquitousLanguage]);
+  }, [ubiquitousLanguage, projectName]);
 
   useEffect(() => {
-    if (initialAdrs && initialAdrs.length > 0) {
+    if (initialAdrs !== undefined) {
       setAdrs(initialAdrs);
     } else {
       fetchAllAdrs().then((data) => {
-        if (data && data.length > 0) {
+        if (Array.isArray(data)) {
           setAdrs(data);
         }
       });
     }
-  }, [initialAdrs]);
+  }, [initialAdrs, projectName]);
 
   // Derived statistics across epics and features
   const allFeatures = useMemo(() => {
@@ -191,6 +198,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <h1 className="text-2xl font-bold tracking-tight text-zinc-100">
               Workspace Overview
             </h1>
+            {projectDisplayName && (
+              <span
+                data-testid="dashboard-project-name"
+                className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-zinc-800 text-zinc-200 border border-zinc-700"
+              >
+                {projectDisplayName}
+              </span>
+            )}
             <span className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-indigo-950/70 text-indigo-400 border border-indigo-800">
               AICO v0.1.2 Standard
             </span>
@@ -276,7 +291,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* @implements ft-git-dashboard-ui::TASK-GIT-003-1::REQ-001 */}
       {/* @implements ft-git-dashboard-ui::TASK-GIT-003-1::REQ-002 */}
       {/* @implements ft-git-dashboard-ui::TASK-GIT-003-1::REQ-005 */}
-      <GitRepositoriesCard statuses={gitStatuses} />
+      <GitRepositoriesCard
+        statuses={gitStatuses}
+        projectName={projectName}
+        onRefresh={onRefreshWorkspace}
+      />
 
       {/* Epics Progress Grid */}
       <div className="space-y-3">

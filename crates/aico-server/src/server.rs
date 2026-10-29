@@ -357,7 +357,11 @@ impl HostServer {
             .route("/api/v1/config", get(get_config_handler))
             // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-4::REQ-004
             // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-4::REQ-007
+            // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-19::REQ-027
+            // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-19::REQ-028
+            // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-19::REQ-029
             .route("/api/v1/projects", get(list_projects_handler).post(handle_create_project))
+            .route("/api/v1/projects/manifest", get(handle_get_project_manifest).put(handle_update_project_manifest).post(handle_update_project_manifest))
             .route("/api/v1/projects/active", post(set_active_project_handler))
             // @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-2::REQ-005
             .route("/api/v1/projects/switch", post(set_active_project_handler))
@@ -2796,9 +2800,66 @@ fn format_rfc3339_utc(secs: u64) -> String {
     format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", year, month, day, hour, min, sec)
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ManifestRepoPayload {
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(rename = "type", default = "default_manifest_repo_type")]
+    pub repo_type: String,
+    #[serde(default)]
+    pub url: Option<String>,
+}
+
+fn default_manifest_repo_type() -> String {
+    "codebase".to_string()
+}
+
 #[derive(Debug, Deserialize)]
 pub struct CreateProjectRequest {
+    #[serde(default)]
+    pub project_name: Option<String>,
+    #[serde(default)]
     pub name: String,
+    #[serde(default)]
+    pub display_name: Option<String>,
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default)]
+    pub repositories: Option<Vec<ManifestRepoPayload>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectRepoConfigEntry {
+    pub id: String,
+    pub name: String,
+    pub path: String,
+    #[serde(rename = "type", default = "default_manifest_repo_type")]
+    pub repo_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectManifestConfig {
+    pub project_name: String,
+    pub id: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
+    #[serde(default)]
+    pub repositories: Vec<ProjectRepoConfigEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateProjectManifestRequest {
+    pub name: String,
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default)]
+    pub repositories: Vec<ManifestRepoPayload>,
 }
 
 // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-4::REQ-004
@@ -2806,12 +2867,20 @@ pub struct CreateProjectRequest {
 // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-2::REQ-010
 // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-2::REQ-012
 // @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-2::REQ-009
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-19::REQ-027
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-19::REQ-028
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-19::REQ-029
 async fn handle_create_project(
     State(state): State<AppState>,
     Json(payload): Json<CreateProjectRequest>,
 ) -> impl IntoResponse {
-    let raw = payload.name.trim();
-    let raw_stripped = raw.strip_suffix("-specs").unwrap_or(raw).trim();
+    let raw_slug_input = payload
+        .project_name
+        .as_deref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| payload.name.trim());
+    let raw_stripped = raw_slug_input.strip_suffix("-specs").unwrap_or(raw_slug_input).trim();
     let slug = raw_stripped.to_lowercase().replace(' ', "-").replace('_', "-");
 
     if slug.is_empty()
@@ -2842,7 +2911,7 @@ async fn handle_create_project(
     }
 
     // @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-6::REQ-002
-    let subdirs = ["adr", "epics", "features"];
+    let subdirs = [".aico", "adr", "epics", "features"];
     for sub in &subdirs {
         if let Err(e) = std::fs::create_dir_all(target_specs_dir.join(sub)) {
             return (
@@ -2864,32 +2933,86 @@ async fn handle_create_project(
         .collect::<Vec<_>>()
         .join(" ");
 
+    let ui_display_name = payload
+        .display_name
+        .as_deref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .or_else(|| {
+            if payload.project_name.is_some() && !payload.name.trim().is_empty() {
+                Some(payload.name.trim().to_string())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| format!("{} Specs", title));
+
+    let clean_specs_url = payload
+        .url
+        .as_deref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+
     let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
     let now = format_rfc3339_utc(secs);
 
-    let manifest_json = serde_json::json!({
+    let repo_entries_json: Vec<serde_json::Value> = if let Some(custom_repos) = payload.repositories {
+        let mut entries = Vec::new();
+        for r in custom_repos {
+            let rid = r.id.trim().to_lowercase().replace(' ', "-");
+            if rid.is_empty() {
+                continue;
+            }
+            let rname = if r.name.trim().is_empty() {
+                rid.clone()
+            } else {
+                r.name.trim().to_string()
+            };
+            let rtype = if r.repo_type.trim().is_empty() {
+                "codebase".to_string()
+            } else {
+                r.repo_type.trim().to_string()
+            };
+            let rurl = r.url.as_deref().map(|u| u.trim()).filter(|u| !u.is_empty());
+            let mut obj = serde_json::json!({
+                "id": rid,
+                "name": rname,
+                "path": format!("../codebase/{}", rid),
+                "type": rtype,
+            });
+            if let Some(u) = rurl {
+                obj["url"] = serde_json::Value::String(u.to_string());
+            }
+            entries.push(obj);
+        }
+        entries
+    } else {
+        vec![serde_json::json!({
+            "id": slug,
+            "name": format!("{} Codebase", title),
+            "path": format!("../codebase/{}", slug),
+            "type": "codebase"
+        })]
+    };
+
+    let mut manifest_json = serde_json::json!({
         "project_name": slug,
         "id": format!("{}-specs", slug),
-        "name": format!("{} Specs", title),
-        "url": "",
+        "name": ui_display_name,
         "created_at": now,
-        "repositories": [
-            {
-                "id": slug,
-                "name": format!("{} Codebase", title),
-                "path": format!("../codebase/{}", slug),
-                "url": "",
-                "type": "codebase"
-            }
-        ]
+        "repositories": repo_entries_json
     });
-    if let Err(e) = std::fs::write(
-        target_specs_dir.join(".aico-project.json"),
-        serde_json::to_string_pretty(&manifest_json).unwrap_or_default(),
-    ) {
+    if let Some(ref u) = clean_specs_url {
+        manifest_json["url"] = serde_json::Value::String(u.clone());
+    }
+
+    let manifest_str = serde_json::to_string_pretty(&manifest_json).unwrap_or_default();
+    if let Err(e) = std::fs::write(target_specs_dir.join(".aico-project.json"), &manifest_str) {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({ "error": format!("Failed to write .aico-project.json: {}", e) })),
@@ -2911,8 +3034,20 @@ async fn handle_create_project(
         .current_dir(&target_specs_dir)
         .output();
 
-    let codebase_dir = ws_root.join("codebase").join(&slug);
-    let codebase_path = if codebase_dir.exists() { Some(codebase_dir) } else { None };
+    let parsed_manifest = aico_core::ProjectManifest::from_json_str(&manifest_str).unwrap_or_else(|_| {
+        aico_core::ProjectManifest {
+            name: slug.clone(),
+            id: Some(format!("{}-specs", slug)),
+            version: Some("0.1.0".to_string()),
+            codebase_path: Some(format!("../codebase/{}", slug)),
+            created_at: Some(now),
+            repositories: None,
+        }
+    });
+
+    let codebase_path = parsed_manifest
+        .resolve_codebase_path(&target_specs_dir)
+        .filter(|p| p.exists());
     let proj_status = if codebase_path.is_some() {
         ProjectStatus::Active
     } else {
@@ -2922,25 +3057,10 @@ async fn handle_create_project(
     let mut reg = state.registry.write().await;
     let proj = DiscoveredProject {
         id: format!("{}-specs", slug),
-        name: format!("{} Specs", title),
+        name: parsed_manifest.display_name(),
         specs_path: target_specs_dir.clone(),
         codebase_path,
-        manifest: aico_core::ProjectManifest {
-            name: slug.clone(),
-            id: Some(format!("{}-specs", slug)),
-            version: Some("0.1.0".to_string()),
-            codebase_path: Some(format!("../codebase/{}", slug)),
-            created_at: Some(now),
-            repositories: Some(vec![
-                aico_core::ProjectRepository {
-                    id: slug.clone(),
-                    name: format!("{} Codebase", title),
-                    path: format!("../codebase/{}", slug),
-                    repo_type: "codebase".to_string(),
-                    url: None,
-                }
-            ]),
-        },
+        manifest: parsed_manifest,
         status: proj_status,
     };
     reg.register(proj.clone());
@@ -2948,11 +3068,321 @@ async fn handle_create_project(
     drop(reg);
 
     state.ws_hub.broadcast("active_project_changed", &proj.id);
+    state.ws_hub.broadcast("projects_updated", &proj.id);
 
     // @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-1::REQ-007
     let _ = state.storage_federation.register_project(&proj.id, &proj.specs_path).await;
 
     (StatusCode::CREATED, Json(proj)).into_response()
+}
+
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-19::REQ-027
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-19::REQ-028
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-19::REQ-029
+async fn handle_get_project_manifest(
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let registry = state.registry.read().await;
+    let active_project = registry
+        .get_active()
+        .cloned()
+        .or_else(|| registry.list_cloned().into_iter().next());
+    drop(registry);
+
+    let proj = match active_project {
+        Some(p) => p,
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({ "error": "No active project found" })),
+            )
+                .into_response()
+        }
+    };
+
+    let manifest_file = proj.specs_path.join(".aico-project.json");
+    if manifest_file.exists() {
+        if let Ok(content) = std::fs::read_to_string(&manifest_file) {
+            if let Ok(raw_val) = serde_json::from_str::<serde_json::Value>(&content) {
+                let project_name = raw_val
+                    .get("project_name")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| proj.manifest.name.clone());
+                let id = raw_val
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| proj.id.clone());
+                let name = raw_val
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| proj.name.clone());
+                let url = raw_val
+                    .get("url")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty());
+                let created_at = raw_val
+                    .get("created_at")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+                    .or_else(|| proj.manifest.created_at.clone());
+
+                let mut repos = Vec::new();
+                if let Some(arr) = raw_val.get("repositories").and_then(|v| v.as_array()) {
+                    for item in arr {
+                        let rtype = item
+                            .get("type")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("codebase")
+                            .to_string();
+                        if rtype == "specs" {
+                            continue;
+                        }
+                        let rid = item
+                            .get("id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .trim()
+                            .to_string();
+                        if rid.is_empty() {
+                            continue;
+                        }
+                        let rname = item
+                            .get("name")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or(&rid)
+                            .to_string();
+                        let rurl = item
+                            .get("url")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.trim().to_string())
+                            .filter(|s| !s.is_empty());
+                        repos.push(ProjectRepoConfigEntry {
+                            path: format!("../codebase/{}", rid),
+                            id: rid,
+                            name: rname,
+                            repo_type: rtype,
+                            url: rurl,
+                        });
+                    }
+                }
+
+                return (
+                    StatusCode::OK,
+                    Json(ProjectManifestConfig {
+                        project_name,
+                        id,
+                        name,
+                        url,
+                        created_at,
+                        repositories: repos,
+                    }),
+                )
+                    .into_response();
+            }
+        }
+    }
+
+    let repos: Vec<ProjectRepoConfigEntry> = proj
+        .manifest
+        .repositories
+        .as_ref()
+        .map(|list| {
+            list.iter()
+                .filter(|r| r.repo_type != "specs")
+                .map(|r| ProjectRepoConfigEntry {
+                    id: r.id.clone(),
+                    name: r.name.clone(),
+                    path: format!("../codebase/{}", r.id),
+                    repo_type: r.repo_type.clone(),
+                    url: r.url.clone().filter(|u| !u.trim().is_empty()),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let specs_url = proj
+        .manifest
+        .repositories
+        .as_ref()
+        .and_then(|list| list.iter().find(|r| r.repo_type == "specs"))
+        .and_then(|r| r.url.clone())
+        .filter(|u| !u.trim().is_empty());
+
+    (
+        StatusCode::OK,
+        Json(ProjectManifestConfig {
+            project_name: proj.manifest.name.clone(),
+            id: proj.id.clone(),
+            name: proj.manifest.display_name(),
+            url: specs_url,
+            created_at: proj.manifest.created_at.clone(),
+            repositories: repos,
+        }),
+    )
+        .into_response()
+}
+
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-19::REQ-027
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-19::REQ-028
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-19::REQ-029
+async fn handle_update_project_manifest(
+    State(state): State<AppState>,
+    Json(payload): Json<UpdateProjectManifestRequest>,
+) -> impl IntoResponse {
+    let trimmed_name = payload.name.trim();
+    if trimmed_name.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "Project display name must not be empty" })),
+        )
+            .into_response();
+    }
+
+    let registry = state.registry.read().await;
+    let active_project = registry
+        .get_active()
+        .cloned()
+        .or_else(|| registry.list_cloned().into_iter().next());
+    drop(registry);
+
+    let proj = match active_project {
+        Some(p) => p,
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({ "error": "No active project found" })),
+            )
+                .into_response()
+        }
+    };
+
+    let manifest_file = proj.specs_path.join(".aico-project.json");
+    let mut existing_project_name = proj.manifest.name.clone();
+    let mut existing_id = proj.id.clone();
+    let mut existing_created_at = proj.manifest.created_at.clone();
+
+    if manifest_file.exists() {
+        if let Ok(content) = std::fs::read_to_string(&manifest_file) {
+            if let Ok(raw_val) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(pn) = raw_val.get("project_name").and_then(|v| v.as_str()) {
+                    if !pn.trim().is_empty() {
+                        existing_project_name = pn.trim().to_string();
+                    }
+                }
+                if let Some(id_str) = raw_val.get("id").and_then(|v| v.as_str()) {
+                    if !id_str.trim().is_empty() {
+                        existing_id = id_str.trim().to_string();
+                    }
+                }
+                if let Some(ca) = raw_val.get("created_at").and_then(|v| v.as_str()) {
+                    if !ca.trim().is_empty() {
+                        existing_created_at = Some(ca.trim().to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    let clean_specs_url = payload
+        .url
+        .as_deref()
+        .map(|u| u.trim().to_string())
+        .filter(|u| !u.is_empty());
+
+    let mut repo_entries_json = Vec::new();
+    for r in payload.repositories {
+        let rid = r.id.trim().to_lowercase().replace(' ', "-");
+        if rid.is_empty() {
+            continue;
+        }
+        let rname = if r.name.trim().is_empty() {
+            rid.clone()
+        } else {
+            r.name.trim().to_string()
+        };
+        let rtype = if r.repo_type.trim().is_empty() || r.repo_type == "specs" {
+            "codebase".to_string()
+        } else {
+            r.repo_type.trim().to_string()
+        };
+        let rurl = r
+            .url
+            .as_deref()
+            .map(|u| u.trim().to_string())
+            .filter(|u| !u.is_empty());
+
+        let mut obj = serde_json::json!({
+            "id": rid,
+            "name": rname,
+            "path": format!("../codebase/{}", rid),
+            "type": rtype,
+        });
+        if let Some(u) = rurl {
+            obj["url"] = serde_json::Value::String(u);
+        }
+        repo_entries_json.push(obj);
+    }
+
+    let mut manifest_json = serde_json::json!({
+        "project_name": existing_project_name,
+        "id": existing_id,
+        "name": trimmed_name,
+        "repositories": repo_entries_json,
+    });
+    if let Some(ref u) = clean_specs_url {
+        manifest_json["url"] = serde_json::Value::String(u.clone());
+    }
+    if let Some(ref ca) = existing_created_at {
+        manifest_json["created_at"] = serde_json::Value::String(ca.clone());
+    }
+
+    let manifest_str = serde_json::to_string_pretty(&manifest_json).unwrap_or_default();
+    if let Err(e) = std::fs::write(&manifest_file, &manifest_str) {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": format!("Failed to write .aico-project.json: {}", e) })),
+        )
+            .into_response();
+    }
+
+    let parsed_manifest = match aico_core::ProjectManifest::from_json_str(&manifest_str) {
+        Ok(m) => m,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "error": format!("Invalid manifest configuration: {}", e) })),
+            )
+                .into_response()
+        }
+    };
+
+    let codebase_path = parsed_manifest.resolve_codebase_path(&proj.specs_path);
+    let proj_status = match codebase_path {
+        Some(ref cb) if !cb.exists() => ProjectStatus::CodebaseMissing,
+        _ => ProjectStatus::Active,
+    };
+
+    let updated_proj = DiscoveredProject {
+        id: proj.id.clone(),
+        name: parsed_manifest.display_name(),
+        specs_path: proj.specs_path.clone(),
+        codebase_path: codebase_path.filter(|p| p.exists()),
+        manifest: parsed_manifest,
+        status: proj_status,
+    };
+
+    let mut reg = state.registry.write().await;
+    reg.register(updated_proj.clone());
+    reg.set_active(&updated_proj.id);
+    drop(reg);
+
+    state.ws_hub.broadcast("projects_updated", &updated_proj.id);
+
+    (StatusCode::OK, Json(updated_proj)).into_response()
 }
 
 #[derive(Debug, Deserialize)]

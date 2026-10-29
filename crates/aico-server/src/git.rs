@@ -275,6 +275,7 @@ pub fn git_clone_repo(workspace_root: &Path, repo_id: &str, url: &str, repo_type
 // @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-1::REQ-001
 // @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-2::REQ-004
 // @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-2::REQ-005
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-19::REQ-029
 pub async fn collect_project_git_status(specs_root: &Path) -> Vec<GitRepoStatus> {
     let manifest_file = specs_root.join(".aico-project.json");
     let manifest: Option<ProjectManifest> = if manifest_file.exists() {
@@ -293,13 +294,17 @@ pub async fn collect_project_git_status(specs_root: &Path) -> Vec<GitRepoStatus>
             let proj_slug = m.project_name.clone().or_else(|| m.id.clone()).unwrap_or_else(|| "project".to_string());
             let specs_id = m.id.clone().unwrap_or_else(|| format!("{}-specs", proj_slug));
             let specs_name = m.name.clone().unwrap_or_else(|| "Specs".to_string());
+            let clean_specs_url = m.url.as_ref().map(|u| u.trim().to_string()).filter(|u| !u.is_empty());
             entries.push(ProjectRepoEntry {
                 id: specs_id,
                 name: specs_name,
                 path: Some(".".to_string()),
                 repo_type: "specs".to_string(),
-                url: m.url.clone(),
+                url: clean_specs_url,
             });
+        }
+        for r in m.repositories.iter_mut() {
+            r.url = r.url.as_ref().map(|u| u.trim().to_string()).filter(|u| !u.is_empty());
         }
         entries.append(&mut m.repositories);
     } else {

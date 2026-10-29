@@ -173,3 +173,157 @@ async fn test_project_management_rest_api() {
     server_task.abort();
     let _ = std::fs::remove_dir_all(&test_storage);
 }
+
+// @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-19::REQ-027
+// @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-19::REQ-028
+// @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-19::REQ-029
+#[tokio::test]
+async fn test_create_and_update_project_manifest_api() {
+    let temp_ws = std::env::temp_dir().join(format!("aico-manifest-api-{}", rand::random::<u64>()));
+    std::fs::create_dir_all(&temp_ws).unwrap();
+
+    // Seed an initial project so get_workspace_root(&registry) resolves to temp_ws
+    let seed_specs = temp_ws.join("seed-specs");
+    std::fs::create_dir_all(&seed_specs).unwrap();
+
+    let mut registry = WorkspaceRegistry::new();
+    registry.register(DiscoveredProject {
+        id: "seed-specs".to_string(),
+        name: "Seed Specs".to_string(),
+        specs_path: seed_specs,
+        codebase_path: None,
+        manifest: ProjectManifest {
+            name: "seed".to_string(),
+            id: Some("seed-specs".to_string()),
+            version: None,
+            codebase_path: None,
+            created_at: None,
+            repositories: None,
+        },
+        status: aico_core::ProjectStatus::CodebaseMissing,
+    });
+    registry.set_active("seed-specs");
+
+    let mut config = ServerConfig::default();
+    config.base_port = 4280;
+
+    let state = AppState {
+        registry: Arc::new(RwLock::new(registry)),
+        storage_federation: Arc::new(aico_storage::StorageFederationManager::with_workspace_root(
+            temp_ws.clone(),
+        )),
+        ..Default::default()
+    };
+
+    let mut server = HostServer::with_state(config, state);
+    let addr = server.bind().await.expect("Server should bind");
+    let server_task = tokio::spawn(async move {
+        let _ = server.serve().await;
+    });
+
+    let client = reqwest::Client::new();
+
+    // 1. Create a new project with custom display name, optional empty URL, and custom repositories
+    let create_res = client
+        .post(format!("http://{}/api/v1/projects", addr))
+        .json(&serde_json::json!({
+            "project_name": "demo-app",
+            "name": "Demo App Specs",
+            "url": "",
+            "repositories": [
+                {
+                    "id": "demo-core",
+                    "name": "Demo Core Engine",
+                    "type": "codebase",
+                    "url": ""
+                }
+            ]
+        }))
+        .send()
+        .await
+        .expect("Create project request should succeed");
+    assert_eq!(create_res.status(), 201);
+    let created_proj: serde_json::Value = create_res.json().await.unwrap();
+    assert_eq!(created_proj["id"], "demo-app-specs");
+    assert_eq!(created_proj["name"], "Demo App Specs");
+
+    // 2. GET /api/v1/projects/manifest
+    let get_manifest_res = client
+        .get(format!("http://{}/api/v1/projects/manifest", addr))
+        .send()
+        .await
+        .expect("Get manifest should succeed");
+    assert_eq!(get_manifest_res.status(), 200);
+    let manifest_cfg: serde_json::Value = get_manifest_res.json().await.unwrap();
+    assert_eq!(manifest_cfg["project_name"], "demo-app");
+    assert_eq!(manifest_cfg["id"], "demo-app-specs");
+    assert_eq!(manifest_cfg["name"], "Demo App Specs");
+    assert!(manifest_cfg.get("url").is_none() || manifest_cfg["url"].is_null());
+    let repos = manifest_cfg["repositories"].as_array().unwrap();
+    assert_eq!(repos.len(), 1);
+    assert_eq!(repos[0]["id"], "demo-core");
+    assert_eq!(repos[0]["name"], "Demo Core Engine");
+    assert_eq!(repos[0]["path"], "../codebase/demo-core");
+    assert!(repos[0].get("url").is_none() || repos[0]["url"].is_null());
+
+    // 3. GET /api/v1/git/status -> URLs should be null/absent when not set
+    let git_res = client
+        .get(format!("http://{}/api/v1/git/status", addr))
+        .send()
+        .await
+        .expect("Git status should succeed");
+    assert_eq!(git_res.status(), 200);
+    let git_repos: Vec<serde_json::Value> = git_res.json().await.unwrap();
+    assert_eq!(git_repos.len(), 2);
+    assert!(git_repos[0].get("url").is_none() || git_repos[0]["url"].is_null());
+    assert!(git_repos[1].get("url").is_none() || git_repos[1]["url"].is_null());
+
+    // 4. PUT /api/v1/projects/manifest -> update display name, URLs, and add skills repo
+    let put_res = client
+        .put(format!("http://{}/api/v1/projects/manifest", addr))
+        .json(&serde_json::json!({
+            "name": "Demo App Updated",
+            "url": "https://github.com/example/demo-app-specs",
+            "repositories": [
+                {
+                    "id": "demo-core",
+                    "name": "Demo Core Engine",
+                    "type": "codebase",
+                    "url": "https://github.com/example/demo-core"
+                },
+                {
+                    "id": "demo-skills",
+                    "name": "Demo Skills",
+                    "type": "skills",
+                    "url": ""
+                }
+            ]
+        }))
+        .send()
+        .await
+        .expect("Update manifest should succeed");
+    assert_eq!(put_res.status(), 200);
+    let updated_proj: serde_json::Value = put_res.json().await.unwrap();
+    assert_eq!(updated_proj["name"], "Demo App Updated");
+
+    // 5. Verify GET /api/v1/projects/manifest reflects updated values and fixed ../codebase/<id> paths
+    let get_manifest_res2 = client
+        .get(format!("http://{}/api/v1/projects/manifest", addr))
+        .send()
+        .await
+        .unwrap();
+    let manifest_cfg2: serde_json::Value = get_manifest_res2.json().await.unwrap();
+    assert_eq!(manifest_cfg2["name"], "Demo App Updated");
+    assert_eq!(manifest_cfg2["url"], "https://github.com/example/demo-app-specs");
+    let repos2 = manifest_cfg2["repositories"].as_array().unwrap();
+    assert_eq!(repos2.len(), 2);
+    assert_eq!(repos2[0]["path"], "../codebase/demo-core");
+    assert_eq!(repos2[0]["url"], "https://github.com/example/demo-core");
+    assert_eq!(repos2[1]["id"], "demo-skills");
+    assert_eq!(repos2[1]["path"], "../codebase/demo-skills");
+    assert_eq!(repos2[1]["type"], "skills");
+    assert!(repos2[1].get("url").is_none() || repos2[1]["url"].is_null());
+
+    server_task.abort();
+    let _ = std::fs::remove_dir_all(&temp_ws);
+}

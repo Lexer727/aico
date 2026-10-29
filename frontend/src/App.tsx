@@ -19,7 +19,13 @@ import { normalizeWorkspacePath } from './utils/pathUtils';
 import { DashboardView } from './features/dashboard/DashboardView';
 import { EpicHubView, type EpicData } from './features/epic-hub/EpicHubView';
 import { FeatureViewer, type FeatureData } from './features/feature-viewer/FeatureViewer';
-import { type DiscoveredEpic, type DiscoveredFeature, type DiscoveredAdr } from './features/feature-task-data';
+import {
+  clearArtifactCaches,
+  type DiscoveredEpic,
+  type DiscoveredFeature,
+  type DiscoveredAdr,
+  type TermInfo,
+} from './features/feature-task-data';
 import { SpecViewer } from './features/spec-viewer/SpecViewer';
 import { PlanViewer } from './features/plan-viewer/PlanViewer';
 import { DocumentViewer } from './features/document-viewer/DocumentViewer';
@@ -93,6 +99,7 @@ export const MainWorkspace: React.FC = () => {
   const [discoveredAdrs, setDiscoveredAdrs] = useState<DiscoveredAdrNav[]>([]);
   const [fullAdrs, setFullAdrs] = useState<DiscoveredAdr[]>([]);
   const [codeFiles, setCodeFiles] = useState<DiscoveredCodeFileNav[]>([]);
+  const [projectGlossary, setProjectGlossary] = useState<TermInfo[] | undefined>(undefined);
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
   const [workspaceRefreshKey, setWorkspaceRefreshKey] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -112,12 +119,13 @@ export const MainWorkspace: React.FC = () => {
   const effectivePosition = isMobileMode ? 'bottom' : position;
 
   // Dynamic Epic discovery from Axum Server REST API
+  // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-20::REQ-026
   const fetchEpics = useCallback(async () => {
     try {
       const res = await fetch('/api/v1/epics');
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           setFullEpics(data);
           const mapped: DiscoveredEpicNav[] = data.map((e: DiscoveredEpic) => ({
             id: e.id,
@@ -139,7 +147,7 @@ export const MainWorkspace: React.FC = () => {
       const res = await fetch('/api/v1/features');
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           setFullFeatures(data);
           const mapped: DiscoveredFeatureNav[] = data.map((f: DiscoveredFeature) => ({
             id: f.id,
@@ -161,7 +169,7 @@ export const MainWorkspace: React.FC = () => {
       const res = await fetch('/api/v1/adrs');
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           setFullAdrs(data);
           const mapped: DiscoveredAdrNav[] = data.map((a: DiscoveredAdr) => ({
             id: a.id,
@@ -169,6 +177,20 @@ export const MainWorkspace: React.FC = () => {
             status: a.status,
           }));
           setDiscoveredAdrs(mapped);
+        }
+      }
+    } catch {
+      // Offline fallback
+    }
+  }, []);
+
+  const fetchGlossaryTerms = useCallback(async () => {
+    try {
+      const res = await fetch('/api/v1/glossary');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setProjectGlossary(data);
         }
       }
     } catch {
@@ -203,7 +225,7 @@ export const MainWorkspace: React.FC = () => {
       const res = await fetch('/api/v1/code/files');
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           setCodeFiles(data);
         }
       }
@@ -213,15 +235,24 @@ export const MainWorkspace: React.FC = () => {
   }, []);
 
   // @implements ft-core-webui-shell::TASK-CORE-006-29::REQ-016
+  // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-20::REQ-026
   const handleRefreshWorkspace = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      await Promise.all([fetchProjects(), fetchEpics(), fetchFeatures(), fetchAdrs(), fetchCodeFiles()]);
+      clearArtifactCaches();
+      await Promise.all([
+        fetchProjects(),
+        fetchEpics(),
+        fetchFeatures(),
+        fetchAdrs(),
+        fetchCodeFiles(),
+        fetchGlossaryTerms(),
+      ]);
       setWorkspaceRefreshKey((prev) => prev + 1);
     } finally {
       setTimeout(() => setIsRefreshing(false), 300);
     }
-  }, [fetchProjects, fetchEpics, fetchFeatures, fetchAdrs, fetchCodeFiles]);
+  }, [fetchProjects, fetchEpics, fetchFeatures, fetchAdrs, fetchCodeFiles, fetchGlossaryTerms]);
 
   useEffect(() => {
     fetchProjects();
@@ -229,26 +260,34 @@ export const MainWorkspace: React.FC = () => {
     fetchFeatures();
     fetchAdrs();
     fetchCodeFiles();
-  }, [fetchProjects, fetchEpics, fetchFeatures, fetchAdrs, fetchCodeFiles]);
+    fetchGlossaryTerms();
+  }, [fetchProjects, fetchEpics, fetchFeatures, fetchAdrs, fetchCodeFiles, fetchGlossaryTerms]);
 
   useEffect(() => {
     if (lastMessage && typeof lastMessage === 'object') {
       const msg = lastMessage as { topic?: string; payload?: string };
       if (msg.topic === 'active_project_changed' && msg.payload) {
+        clearArtifactCaches();
         setActiveProject(msg.payload);
-        fetchEpics();
-        fetchFeatures();
-        fetchAdrs();
-        fetchCodeFiles();
-      } else if (msg.topic === 'projects_updated') {
         fetchProjects();
         fetchEpics();
         fetchFeatures();
         fetchAdrs();
         fetchCodeFiles();
+        fetchGlossaryTerms();
+        setWorkspaceRefreshKey((prev) => prev + 1);
+      } else if (msg.topic === 'projects_updated') {
+        clearArtifactCaches();
+        fetchProjects();
+        fetchEpics();
+        fetchFeatures();
+        fetchAdrs();
+        fetchCodeFiles();
+        fetchGlossaryTerms();
+        setWorkspaceRefreshKey((prev) => prev + 1);
       }
     }
-  }, [lastMessage, setActiveProject, fetchProjects, fetchEpics, fetchFeatures, fetchAdrs, fetchCodeFiles]);
+  }, [lastMessage, setActiveProject, fetchProjects, fetchEpics, fetchFeatures, fetchAdrs, fetchCodeFiles, fetchGlossaryTerms]);
 
   // Dynamic mobile mode detection on viewport resize or URL query
   useEffect(() => {
@@ -950,18 +989,22 @@ export const MainWorkspace: React.FC = () => {
       );
     }
 
+    const activeProjectObj = projects.find((p) => p.id === activeProjectId);
     return (
       <DashboardView
+        key={`${activeProjectId}-${workspaceRefreshKey}`}
         epics={fullEpics}
         adrs={fullAdrs}
         projectName={activeProjectId}
+        projectDisplayName={activeProjectObj?.name}
         onOpenEpic={handleOpenEpic}
         onOpenSpec={handleOpenSpec}
         onOpenGlossary={handleOpenGlossary}
         onOpenAdr={handleOpenAdr}
         onOpenNode={handleOpenNodeFromGraph}
         onPopoutGraph={() => handleOpenGraph('workspace')}
-        ubiquitousLanguage={fullEpics[0]?.ubiquitous_language || fullEpics[0]?.ubiquitousLanguage}
+        onRefreshWorkspace={handleRefreshWorkspace}
+        ubiquitousLanguage={projectGlossary ?? fullEpics[0]?.ubiquitous_language ?? fullEpics[0]?.ubiquitousLanguage}
       />
     );
   };
@@ -999,10 +1042,10 @@ export const MainWorkspace: React.FC = () => {
       isMobile={isMobileMode}
       activeMobileView={activeMobileView}
       onMobileViewChange={setActiveMobileView}
-      epics={discoveredEpics.length > 0 ? discoveredEpics : undefined}
-      features={discoveredFeatures.length > 0 ? discoveredFeatures : undefined}
-      adrs={discoveredAdrs.length > 0 ? discoveredAdrs : undefined}
-      codeFiles={codeFiles.length > 0 ? codeFiles : undefined}
+      epics={discoveredEpics}
+      features={discoveredFeatures}
+      adrs={discoveredAdrs}
+      codeFiles={codeFiles}
       fullEpics={fullEpics}
       fullFeatures={fullFeatures}
       fullAdrs={fullAdrs}
@@ -1032,7 +1075,11 @@ export const MainWorkspace: React.FC = () => {
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center gap-2">
                 <HistoryNavButtons />
-                <ProjectSwitcher projects={projects} onRefreshProjects={fetchProjects} />
+                <ProjectSwitcher
+                  projects={projects}
+                  onSelectProject={() => handleRefreshWorkspace()}
+                  onRefreshProjects={handleRefreshWorkspace}
+                />
               </div>
               <ConnectionStatusBanner status={status} onReconnect={reconnect} iconOnly={true} />
             </div>
@@ -1060,7 +1107,11 @@ export const MainWorkspace: React.FC = () => {
           <>
             <div className="flex items-center gap-2 shrink-0 relative z-20">
               <HistoryNavButtons />
-              <ProjectSwitcher projects={projects} onRefreshProjects={fetchProjects} />
+              <ProjectSwitcher
+                projects={projects}
+                onSelectProject={() => handleRefreshWorkspace()}
+                onRefreshProjects={handleRefreshWorkspace}
+              />
             </div>
 
             {/* Desktop Global Viewport Centered OmniSearch Bar (50vw) */}

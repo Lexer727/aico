@@ -4,6 +4,8 @@
 // @verifies spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-3::REQ-002
 // @verifies spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-3::REQ-004
 // @verifies spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-3::REQ-005
+// @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-22::REQ-028
+// @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-22::REQ-029
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -232,6 +234,86 @@ describe('GitRepositoriesCard', () => {
           }),
         })
       );
+    });
+  });
+
+  // @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-22::REQ-028
+  // @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-22::REQ-029
+  it('reflects missing remote URL with "No remote URL set" badge, disables remote actions, and opens ProjectConfigModal to edit .aico-project.json', async () => {
+    const noUrlStatuses: GitRepoStatusExtended[] = [
+      {
+        id: 'test-specs',
+        name: 'Test Specs',
+        path: 'd:/aico/test-specs',
+        type: 'specs',
+        url: null,
+        is_available: true,
+        is_cloned: true,
+        branch: 'main',
+        upstream: null,
+        ahead: 1,
+        behind: 1,
+        staged_count: 0,
+        unstaged_count: 0,
+        untracked_count: 0,
+        is_clean: true,
+      },
+      {
+        id: 'test-code',
+        name: 'Test Codebase',
+        path: 'd:/aico/codebase/test-code',
+        type: 'codebase',
+        url: '',
+        is_available: false,
+        is_cloned: false,
+        branch: 'not cloned',
+        upstream: null,
+        ahead: 0,
+        behind: 0,
+        staged_count: 0,
+        unstaged_count: 0,
+        untracked_count: 0,
+        is_clean: true,
+      },
+    ];
+
+    global.fetch = vi.fn().mockImplementation(async (url: string | URL | Request) => {
+      const urlStr = typeof url === 'string' ? url : url.toString();
+      if (urlStr.includes('/api/v1/projects/manifest')) {
+        return {
+          ok: true,
+          json: async () => ({
+            project_name: 'test',
+            id: 'test-specs',
+            name: 'Test Specs',
+            url: null,
+            repositories: [
+              { id: 'test-code', name: 'Test Codebase', path: '../codebase/test-code', type: 'codebase' },
+            ],
+          }),
+        } as Response;
+      }
+      return {
+        ok: true,
+        json: async () => noUrlStatuses,
+      } as Response;
+    });
+
+    render(<GitRepositoriesCard statuses={noUrlStatuses} projectName="test-specs" />);
+
+    expect(screen.getByTestId('git-no-url-test-specs')).toHaveTextContent('No remote URL set');
+    expect(screen.getByTestId('git-no-url-test-code')).toHaveTextContent('No remote URL set');
+
+    // Remote actions (Pull, Push, Clone) must be disabled when no remote URL is configured
+    expect((screen.getByTestId('git-pull-btn-test-specs') as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByTestId('git-push-btn-test-specs') as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByTestId('git-clone-btn-test-code') as HTMLButtonElement).disabled).toBe(true);
+
+    // Click Edit button on GitRepositoriesCard header to open ProjectConfigModal in edit mode
+    fireEvent.click(screen.getByTestId('edit-project-manifest-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('project-config-modal')).toBeInTheDocument();
+      expect(screen.getByTestId('input-project-display-name')).toHaveValue('Test Specs');
     });
   });
 });

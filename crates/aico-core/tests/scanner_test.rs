@@ -31,6 +31,45 @@ fn test_root_scanner_discovers_specs_and_codebases() {
     let _ = fs::remove_dir_all(temp_root);
 }
 
+// @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-19::REQ-027
+#[test]
+fn test_root_scanner_preserves_display_name_from_elevated_manifest() {
+    let temp_root = std::env::temp_dir().join(format!(
+        "aico_test_display_name_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let project_specs = temp_root.join("aico-specs");
+    fs::create_dir_all(&project_specs).unwrap();
+
+    let manifest_content = r#"{
+        "project_name": "aico",
+        "id": "aico-specs",
+        "name": "AICO Specs",
+        "url": "https://github.com/Lexer727/aico-specs",
+        "repositories": [
+            {
+                "id": "aico",
+                "name": "AICO Engine & WebUI",
+                "path": "../codebase/aico",
+                "type": "codebase",
+                "url": "https://github.com/Lexer727/aico"
+            }
+        ]
+    }"#;
+    fs::write(project_specs.join(".aico-project.json"), manifest_content).unwrap();
+
+    let discovered = RootScanner::scan(&temp_root).expect("Scanner should discover project");
+    assert_eq!(discovered.len(), 1);
+    assert_eq!(discovered[0].id, "aico-specs");
+    assert_eq!(discovered[0].name, "AICO Specs");
+    assert_eq!(discovered[0].manifest.name, "aico");
+
+    let _ = fs::remove_dir_all(temp_root);
+}
+
 // @verifies ft-core-discovery::TASK-CORE-004-2::REQ-005
 #[test]
 fn test_workspace_registry_tracks_active_project() {

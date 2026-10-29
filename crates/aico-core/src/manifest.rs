@@ -95,9 +95,20 @@ impl ProjectManifest {
             raw.name.clone()
         };
 
+        let clean_specs_url = raw
+            .url
+            .as_ref()
+            .map(|u| u.trim().to_string())
+            .filter(|u| !u.is_empty());
+
         let mut repositories = raw.repositories;
         if let Some(ref mut repos) = repositories {
             for r in repos.iter_mut() {
+                r.url = r
+                    .url
+                    .as_ref()
+                    .map(|u| u.trim().to_string())
+                    .filter(|u| !u.is_empty());
                 if r.path.trim().is_empty() {
                     if r.repo_type == "specs" {
                         r.path = ".".to_string();
@@ -119,9 +130,18 @@ impl ProjectManifest {
                     name: specs_title,
                     path: ".".to_string(),
                     repo_type: "specs".to_string(),
-                    url: raw.url.clone(),
+                    url: clean_specs_url,
                 });
             }
+        } else if raw.project_name.is_some() {
+            let specs_id = raw.id.clone().unwrap_or_else(|| format!("{}-specs", canonical_name));
+            repositories = Some(vec![ProjectRepository {
+                id: specs_id,
+                name: raw.name.clone(),
+                path: ".".to_string(),
+                repo_type: "specs".to_string(),
+                url: clean_specs_url,
+            }]);
         }
 
         // @implements spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-1::REQ-001
@@ -135,6 +155,19 @@ impl ProjectManifest {
             created_at: raw.created_at,
             repositories,
         })
+    }
+
+    /// Return the human-readable UI display name for the project (falling back to canonical slug)
+    // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-19::REQ-027
+    pub fn display_name(&self) -> String {
+        if let Some(ref repos) = self.repositories {
+            if let Some(specs_repo) = repos.iter().find(|r| r.repo_type == "specs") {
+                if !specs_repo.name.trim().is_empty() {
+                    return specs_repo.name.clone();
+                }
+            }
+        }
+        self.name.clone()
     }
 
     /// Resolve any path relative to specs repository directory

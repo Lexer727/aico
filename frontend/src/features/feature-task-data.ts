@@ -116,6 +116,12 @@ const featureCache = new Map<string, DiscoveredFeature>();
 const epicCache = new Map<string, DiscoveredEpic>();
 const adrCache = new Map<string, DiscoveredAdr>();
 
+export function clearArtifactCaches(): void {
+  featureCache.clear();
+  epicCache.clear();
+  adrCache.clear();
+}
+
 function getApiUrl(endpoint: string): string {
   if (typeof window !== 'undefined' && window.location && window.location.origin && window.location.origin !== 'null') {
     return `${window.location.origin}${endpoint}`;

@@ -9,8 +9,10 @@ import {
   FolderGit2,
   ExternalLink,
   Sparkles,
+  Pencil,
 } from 'lucide-react';
 import { fetchGitStatus, type GitRepoStatus } from '../feature-task-data';
+import { ProjectConfigModal } from '../../components/navigation/ProjectConfigModal';
 
 // @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-3::REQ-002
 // @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-3::REQ-003
@@ -44,6 +46,7 @@ export const GitRepositoriesCard: React.FC<GitRepositoriesCardProps> = ({
     message: string;
   } | null>(null);
   const [actionLoading, setActionLoading] = useState<Record<string, string>>({});
+  const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
 
   const fetchRepos = async () => {
     setRefreshing(true);
@@ -67,7 +70,7 @@ export const GitRepositoriesCard: React.FC<GitRepositoriesCardProps> = ({
     } else {
       fetchRepos();
     }
-  }, [initialStatuses]);
+  }, [initialStatuses, projectName]);
 
   const handleClone = async (repo: GitRepoStatusExtended) => {
     setActionLoading((prev) => ({ ...prev, [repo.id]: 'clone' }));
@@ -270,17 +273,38 @@ export const GitRepositoriesCard: React.FC<GitRepositoriesCardProps> = ({
               Git Repositories
             </h2>
           </div>
-          <button
-            onClick={fetchRepos}
-            title="Refresh Git status"
-            className="p-1 rounded hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              data-testid="edit-project-manifest-btn"
+              onClick={() => setIsEditModalOpen(true)}
+              title="Edit .aico-project.json configuration"
+              className="flex items-center gap-1 px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-mono transition-colors cursor-pointer"
+            >
+              <Pencil className="w-3 h-3 text-indigo-400" />
+              <span>Edit</span>
+            </button>
+            <button
+              onClick={fetchRepos}
+              title="Refresh Git status"
+              className="p-1 rounded hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
         </div>
         <p className="text-xs text-zinc-500">
           No repositories configured in active project manifest.
         </p>
+        <ProjectConfigModal
+          isOpen={isEditModalOpen}
+          mode="edit"
+          onClose={() => setIsEditModalOpen(false)}
+          onSuccess={async () => {
+            await fetchRepos();
+            if (onRefresh) onRefresh();
+          }}
+        />
       </div>
     );
   }
@@ -298,9 +322,13 @@ export const GitRepositoriesCard: React.FC<GitRepositoriesCardProps> = ({
     }
   };
 
+  // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-22::REQ-028
+  // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-22::REQ-029
   const renderRepoCard = (repo: GitRepoStatusExtended) => {
     const isUncloned = repo.is_cloned === false;
     const modifiedCount = (repo.staged_count || 0) + (repo.unstaged_count || 0) + (repo.untracked_count || 0);
+    const effectiveUrl = (repo.remote_url || repo.url || '').trim();
+    const hasRemoteUrl = effectiveUrl.length > 0;
 
     return (
       <div
@@ -316,9 +344,9 @@ export const GitRepositoriesCard: React.FC<GitRepositoriesCardProps> = ({
                 <div className="font-semibold text-xs text-zinc-100 truncate" title={repo.name}>
                   {repo.name}
                 </div>
-                {repo.url && (
+                {hasRemoteUrl ? (
                   <a
-                    href={repo.url}
+                    href={effectiveUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     title={`Open ${repo.name} on GitHub / Remote`}
@@ -327,19 +355,38 @@ export const GitRepositoriesCard: React.FC<GitRepositoriesCardProps> = ({
                   >
                     <ExternalLink className="w-3 h-3" />
                   </a>
+                ) : (
+                  <span
+                    data-testid={`git-no-url-${repo.id}`}
+                    className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-zinc-900 text-zinc-500 border border-zinc-800 shrink-0"
+                    title="No remote Git URL configured in .aico-project.json"
+                  >
+                    No remote URL set
+                  </span>
                 )}
               </div>
               <div className="font-mono text-[10px] text-zinc-500 truncate" title={repo.path}>
                 {repo.id}
               </div>
             </div>
-            <span
-              className={`text-[10px] font-mono px-1.5 py-0.5 rounded border uppercase shrink-0 ${getTypeBadgeColor(
-                repo.type
-              )}`}
-            >
-              {repo.type}
-            </span>
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                data-testid={`git-edit-repo-${repo.id}`}
+                onClick={() => setIsEditModalOpen(true)}
+                title="Edit repository in .aico-project.json"
+                className="p-1 rounded text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
+              >
+                <Pencil className="w-3 h-3" />
+              </button>
+              <span
+                className={`text-[10px] font-mono px-1.5 py-0.5 rounded border uppercase shrink-0 ${getTypeBadgeColor(
+                  repo.type
+                )}`}
+              >
+                {repo.type}
+              </span>
+            </div>
           </div>
 
           {/* Uncloned State */}
@@ -352,9 +399,10 @@ export const GitRepositoriesCard: React.FC<GitRepositoriesCardProps> = ({
               <button
                 type="button"
                 onClick={() => handleClone(repo)}
-                disabled={!!actionLoading[repo.id]}
+                disabled={!hasRemoteUrl || !!actionLoading[repo.id]}
+                title={!hasRemoteUrl ? 'Configure a remote URL in .aico-project.json to clone' : `Clone ${repo.id}`}
                 data-testid={`git-clone-btn-${repo.id}`}
-                className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-colors disabled:opacity-50 shadow-sm"
+                className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
               >
                 <FolderGit2 className={`w-3.5 h-3.5 ${actionLoading[repo.id] === 'clone' ? 'animate-pulse' : ''}`} />
                 <span>{actionLoading[repo.id] === 'clone' ? 'Cloning...' : 'Clone'}</span>
@@ -448,15 +496,18 @@ export const GitRepositoriesCard: React.FC<GitRepositoriesCardProps> = ({
           <div className="pt-2 border-t border-zinc-800/60">
             {/* @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-3::REQ-003 */}
             {/* @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-4::REQ-004 */}
+            {/* @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-22::REQ-029 */}
             <div className="flex items-center gap-1.5">
               {/* Pull button */}
               <button
                 type="button"
                 onClick={() => handlePull(repo)}
-                disabled={repo.behind === 0 || !!actionLoading[repo.id]}
+                disabled={!hasRemoteUrl || repo.behind === 0 || !!actionLoading[repo.id]}
                 data-testid={`git-pull-btn-${repo.id}`}
                 title={
-                  repo.behind === 0
+                  !hasRemoteUrl
+                    ? 'No remote URL configured'
+                    : repo.behind === 0
                     ? 'Up to date (0 commits behind)'
                     : `${repo.behind} commits behind upstream - click to pull`
                 }
@@ -476,10 +527,12 @@ export const GitRepositoriesCard: React.FC<GitRepositoriesCardProps> = ({
               <button
                 type="button"
                 onClick={() => handlePush(repo)}
-                disabled={repo.ahead === 0 || !!actionLoading[repo.id]}
+                disabled={!hasRemoteUrl || repo.ahead === 0 || !!actionLoading[repo.id]}
                 data-testid={`git-push-btn-${repo.id}`}
                 title={
-                  repo.ahead === 0
+                  !hasRemoteUrl
+                    ? 'No remote URL configured'
+                    : repo.ahead === 0
                     ? 'Nothing to push (0 commits ahead)'
                     : `${repo.ahead} commits ahead of upstream - click to push`
                 }
@@ -550,14 +603,26 @@ export const GitRepositoriesCard: React.FC<GitRepositoriesCardProps> = ({
             {repoStatuses.length}
           </span>
         </div>
-        <button
-          onClick={fetchRepos}
-          title="Refresh Git status"
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-mono transition-colors"
-        >
-          <RefreshCw className={`w-3 h-3 ${refreshing ? 'animate-spin' : ''}`} />
-          <span>Refresh</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            data-testid="edit-project-manifest-btn"
+            onClick={() => setIsEditModalOpen(true)}
+            title="Edit .aico-project.json configuration"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-mono transition-colors cursor-pointer"
+          >
+            <Pencil className="w-3 h-3 text-indigo-400" />
+            <span>Edit</span>
+          </button>
+          <button
+            onClick={fetchRepos}
+            title="Refresh Git status"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-mono transition-colors"
+          >
+            <RefreshCw className={`w-3 h-3 ${refreshing ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </button>
+        </div>
       </div>
 
       {/* Action feedback message banner */}
@@ -588,6 +653,16 @@ export const GitRepositoriesCard: React.FC<GitRepositoriesCardProps> = ({
       >
         {sortedRepos.map(renderRepoCard)}
       </div>
+
+      <ProjectConfigModal
+        isOpen={isEditModalOpen}
+        mode="edit"
+        onClose={() => setIsEditModalOpen(false)}
+        onSuccess={async () => {
+          await fetchRepos();
+          if (onRefresh) onRefresh();
+        }}
+      />
     </div>
   );
 };

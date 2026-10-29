@@ -66,9 +66,12 @@ impl RootScanner {
                             .unwrap_or_else(|| format!("{}-specs", manifest.name))
                     });
 
+                    // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-19::REQ-027
+                    let display_name = manifest.display_name();
+
                     discovered.push(DiscoveredProject {
                         id: project_id,
-                        name: manifest.name.clone(),
+                        name: display_name,
                         specs_path: path,
                         codebase_path,
                         manifest,

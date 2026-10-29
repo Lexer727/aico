@@ -154,7 +154,11 @@ describe('EpicHub Task Plan & ShellLayout Refinements', () => {
         '/api/v1/projects',
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify({ name: 'Project New' }),
+          body: JSON.stringify({
+            project_name: 'project-new',
+            name: 'Project New Specs',
+            display_name: 'Project New Specs',
+          }),
         })
       );
     });

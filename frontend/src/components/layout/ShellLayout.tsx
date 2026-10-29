@@ -295,8 +295,9 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
     }));
   };
 
+  // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-20::REQ-026
   const effectiveEpics = useMemo(() => {
-    if (epics && epics.length > 0 && epics !== defaultEpics) return epics;
+    if (epics && epics !== defaultEpics) return epics;
     if (fullEpics && fullEpics.length > 0) {
       return fullEpics.map((e) => ({
         id: e.id,
@@ -310,7 +311,7 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
   }, [epics, fullEpics]);
 
   const effectiveFeatures = useMemo(() => {
-    if (features && features.length > 0 && features !== defaultFeatures) return features;
+    if (features && features !== defaultFeatures) return features;
     if (fullFeatures && fullFeatures.length > 0) {
       return fullFeatures.map((f) => ({
         id: f.id,
@@ -324,7 +325,7 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
   }, [features, fullFeatures]);
 
   const effectiveAdrs = useMemo(() => {
-    if (adrs && adrs.length > 0 && adrs !== defaultAdrs) return adrs;
+    if (adrs && adrs !== defaultAdrs) return adrs;
     if (fullAdrs && fullAdrs.length > 0) {
       return fullAdrs.map((a) => ({
         id: a.id,
@@ -363,7 +364,7 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
   }, [effectiveEpics, effectiveFeatures]);
 
   const effectiveCode = useMemo(() => {
-    if (codeFiles && codeFiles.length > 0) return codeFiles;
+    if (codeFiles && codeFiles !== defaultCodeFiles) return codeFiles;
     return defaultCodeFiles;
   }, [codeFiles]);
 

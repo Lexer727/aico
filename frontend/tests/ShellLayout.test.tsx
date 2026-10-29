@@ -129,5 +129,29 @@ describe('ShellLayout Component', () => {
     expect(sidebar.style.width).toBe('340px');
     expect(localStorage.getItem('aico-left-sidebar-width')).toBe('340');
   });
+
+  // @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-20::REQ-026
+  it('renders strictly empty tree collections for a newly created project without leaking aico-specs defaults', () => {
+    render(
+      <ShellLayout
+        epics={[]}
+        features={[]}
+        adrs={[]}
+        codeFiles={[]}
+        fullEpics={[]}
+        fullFeatures={[]}
+        fullAdrs={[]}
+      >
+        <div>Empty Project Canvas</div>
+      </ShellLayout>
+    );
+
+    expect(screen.queryByTestId('nav-epic-ec-core')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('nav-epic-ec-specs')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('nav-feature-ft-core-host-runtime')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('nav-spec-spec-ft-core-host-runtime')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('nav-adr-ADR-0001')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('nav-code-crates/aico-server/src/server.rs')).not.toBeInTheDocument();
+  });
 });
 
