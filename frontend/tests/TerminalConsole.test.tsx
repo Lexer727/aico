@@ -639,6 +639,32 @@ describe('TerminalConsole Component (xterm.js + ConPTY)', () => {
     const closeOnUnmount = socket.sentMessages.find((m: string) => m.includes('"type":"close"'));
     expect(closeOnUnmount).toBeUndefined();
   });
+
+  // @verifies ft-core-webui-shell::TASK-CORE-006-38::REQ-026
+  it('renders single-line wrapping launcher buttons in empty state ordered Antigravity, Claude, PowerShell, Git Bash, and Command Prompt', () => {
+    render(<TerminalConsole />);
+
+    const actionsContainer = screen.getByTestId('empty-terminal-actions');
+    expect(actionsContainer.className).toContain('flex-wrap');
+
+    const buttons = Array.from(actionsContainer.querySelectorAll('button'));
+    expect(buttons.map((b) => b.getAttribute('data-testid'))).toEqual([
+      'empty-launch-ai',
+      'empty-launch-claude',
+      'empty-new-terminal',
+      'empty-launch-bash',
+      'empty-launch-cmd',
+    ]);
+
+    for (const btn of buttons) {
+      expect(btn.className).toContain('whitespace-nowrap');
+      expect(btn.className).toContain('shrink-0');
+    }
+
+    // Verify clicking Git Bash or Command Prompt opens the corresponding shell tab
+    fireEvent.click(screen.getByTestId('empty-launch-cmd'));
+    expect(screen.getByText(/Command Prompt/i)).toBeInTheDocument();
+  });
 });
 
 

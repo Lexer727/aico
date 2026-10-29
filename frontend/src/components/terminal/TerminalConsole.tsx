@@ -1474,6 +1474,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({
       )}
 
       {/* 4. Terminal Body: xterm Viewport Host or Empty State */}
+      {/* @implements ft-core-webui-shell::TASK-CORE-006-38::REQ-026 */}
       {tabs.length === 0 && (
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center select-none">
           <div className="w-12 h-12 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-3">
@@ -1483,19 +1484,14 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({
           <p className="text-xs text-zinc-500 max-w-xs mb-4">
             Open a new terminal shell or launch Antigravity or Claude to run commands.
           </p>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => handleAddTab('powershell', 'PowerShell', 'ps')}
-              data-testid="empty-new-terminal"
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs rounded font-medium border border-zinc-700 transition-colors cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>New Terminal</span>
-            </button>
+          <div
+            data-testid="empty-terminal-actions"
+            className="flex flex-wrap items-center justify-center gap-2 max-w-full"
+          >
             <button
               onClick={() => handleAddTab('agy', 'Antigravity', 'AGY')}
               data-testid="empty-launch-ai"
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-950/60 hover:bg-indigo-900/70 text-indigo-300 text-xs rounded font-medium border border-indigo-700/60 transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-950/60 hover:bg-indigo-900/70 text-indigo-300 text-xs rounded font-medium border border-indigo-700/60 transition-colors cursor-pointer whitespace-nowrap shrink-0"
             >
               <AntigravityIcon className="w-3.5 h-3.5 shrink-0" />
               <span>Antigravity</span>
@@ -1503,10 +1499,34 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({
             <button
               onClick={() => handleAddTab('claude', 'Claude', 'claude')}
               data-testid="empty-launch-claude"
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#d97757]/15 hover:bg-[#d97757]/30 text-[#e88b6d] text-xs rounded font-medium border border-[#d97757]/45 transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#d97757]/15 hover:bg-[#d97757]/30 text-[#e88b6d] text-xs rounded font-medium border border-[#d97757]/45 transition-colors cursor-pointer whitespace-nowrap shrink-0"
             >
               <ClaudeIcon className="w-3.5 h-3.5 shrink-0" />
               <span>Claude</span>
+            </button>
+            <button
+              onClick={() => handleAddTab('powershell', 'PowerShell', 'ps')}
+              data-testid="empty-new-terminal"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs rounded font-medium border border-zinc-700 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+            >
+              <TerminalIcon className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+              <span>PowerShell</span>
+            </button>
+            <button
+              onClick={() => handleAddTab('bash', 'Git Bash', 'bash')}
+              data-testid="empty-launch-bash"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs rounded font-medium border border-zinc-700 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+            >
+              <TerminalIcon className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span>Git Bash</span>
+            </button>
+            <button
+              onClick={() => handleAddTab('cmd', 'Command Prompt', 'cmd')}
+              data-testid="empty-launch-cmd"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs rounded font-medium border border-zinc-700 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+            >
+              <TerminalIcon className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span>Command Prompt</span>
             </button>
           </div>
         </div>

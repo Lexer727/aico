@@ -157,6 +157,7 @@ const defaultAdrs: DiscoveredAdrNav[] = [
 // @implements ft-core-webui-shell::TASK-CORE-006-8::REQ-012
 // @implements ft-core-webui-shell::TASK-CORE-006-22::REQ-013
 // @implements ft-core-webui-shell::TASK-CORE-006-29::REQ-016
+// @implements ft-core-webui-shell::TASK-CORE-006-36::REQ-025
 // @implements ft-core-epic-hub::TASK-CORE-007-12::REQ-001
 // @implements ft-core-omni-search-fulltext::TASK-CORE-009-2::REQ-003
 // @implements ft-core-omni-search-fulltext::TASK-CORE-009-2::REQ-004
@@ -184,6 +185,46 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
 }) => {
   const [internalMobileView, setInternalMobileView] = useState<MobileViewType>('main');
   const currentMobileView = activeMobileView ?? internalMobileView;
+
+  // @implements ft-core-webui-shell::TASK-CORE-006-36::REQ-025
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('aico-left-sidebar-width');
+      if (saved) {
+        const parsed = parseInt(saved, 10);
+        if (!Number.isNaN(parsed) && parsed >= 180 && parsed <= 600) {
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore storage errors
+    }
+    return 256;
+  });
+
+  const handleSidebarResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = sidebarWidth;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const nextWidth = Math.min(600, Math.max(180, startWidth + (moveEvent.clientX - startX)));
+      setSidebarWidth(nextWidth);
+      try {
+        localStorage.setItem('aico-left-sidebar-width', String(nextWidth));
+      } catch {
+        // ignore storage errors
+      }
+    };
+
+    const handleMouseUp = () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
 
   const handleMobileViewChange = (view: MobileViewType) => {
     setInternalMobileView(view);
@@ -838,9 +879,18 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
       {!isMobile && (
         <aside
           data-testid="left-sidebar"
-          className="h-screen w-64 flex-shrink-0 z-30 flex flex-col"
+          style={{ width: `${sidebarWidth}px` }}
+          className="h-screen flex-shrink-0 z-30 flex flex-col relative"
         >
           {renderNavContent()}
+          <div
+            data-testid="left-sidebar-resize-handle"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize left sidebar"
+            onMouseDown={handleSidebarResizeStart}
+            className="absolute top-0 right-0 bottom-0 w-1.5 cursor-col-resize hover:bg-indigo-500/60 active:bg-indigo-500 transition-colors z-40"
+          />
         </aside>
       )}
 

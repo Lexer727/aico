@@ -107,5 +107,27 @@ describe('ShellLayout Component', () => {
     expect(screen.queryByTestId('refresh-workspace-btn')).not.toBeInTheDocument();
     expect(screen.getByText('v0.1.1')).toBeInTheDocument();
   });
+
+  // @verifies ft-core-webui-shell::TASK-CORE-006-36::REQ-025
+  it('supports resizing desktop left sidebar width via drag handle and persists width in localStorage', () => {
+    localStorage.clear();
+    render(
+      <ShellLayout>
+        <div>Workspace Canvas</div>
+      </ShellLayout>
+    );
+
+    const sidebar = screen.getByTestId('left-sidebar');
+    const resizeHandle = screen.getByTestId('left-sidebar-resize-handle');
+    expect(resizeHandle).toBeInTheDocument();
+    expect(sidebar.style.width).toBe('256px');
+
+    fireEvent.mouseDown(resizeHandle, { clientX: 256 });
+    fireEvent.mouseMove(window, { clientX: 340 });
+    fireEvent.mouseUp(window);
+
+    expect(sidebar.style.width).toBe('340px');
+    expect(localStorage.getItem('aico-left-sidebar-width')).toBe('340');
+  });
 });
 
