@@ -13,6 +13,7 @@ import {
   FolderTree,
   LayoutGrid,
   Terminal,
+  X,
 } from 'lucide-react';
 import { AiStatusMonitor } from './AiStatusMonitor';
 import type {
@@ -462,6 +463,7 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
 
       {/* Sidebar Integrated Search & 5 Persistent Filter Checkboxes */}
       <div className="p-2.5 border-b border-zinc-800 bg-zinc-900/60 space-y-2">
+        {/* @implements spec-ft-core-omni-search-fulltext::TASK-CORE-009-11::REQ-013 */}
         <div className="relative">
           <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
           <input
@@ -469,9 +471,27 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
             data-testid="sidebar-search-input"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape' && searchQuery.length > 0) {
+                e.stopPropagation();
+                setSearchQuery('');
+              }
+            }}
             placeholder="Search workspace..."
-            className="w-full pl-8 pr-2 py-1.5 bg-zinc-950 border border-zinc-800 rounded text-xs text-zinc-100 placeholder-zinc-500 outline-none focus:border-indigo-500 transition-colors"
+            className="w-full pl-8 pr-7 py-1.5 bg-zinc-950 border border-zinc-800 rounded text-xs text-zinc-100 placeholder-zinc-500 outline-none focus:border-indigo-500 transition-colors"
           />
+          {searchQuery.length > 0 && (
+            <button
+              type="button"
+              data-testid="sidebar-search-clear-btn"
+              aria-label="Clear search"
+              title="Clear search"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/80 transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         {/* 5 Persistent Filter Checkboxes (Toggling hides/shows the section in the tree view) */}

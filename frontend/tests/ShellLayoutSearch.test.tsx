@@ -335,5 +335,45 @@ describe('ShellLayoutSearch: Sidebar Tree Fuzzy Filtering & Section Auto-Expansi
     fireEvent.click(codeItem);
     expect(handleSelectCode).toHaveBeenCalledWith('aico/crates/aico-server/src/server.rs');
   });
+
+  // @verifies spec-ft-core-omni-search-fulltext::TASK-CORE-009-11::REQ-013
+  it('renders clear (X) button in Search workspace bar when query is non-empty and resets query on click or Escape', () => {
+    render(
+      <ShellLayout
+        fullEpics={mockEpics}
+        fullFeatures={mockFeatures}
+      >
+        <div>Content</div>
+      </ShellLayout>
+    );
+
+    const searchInput = screen.getByTestId('sidebar-search-input') as HTMLInputElement;
+
+    // Initially empty -> clear button is hidden
+    expect(screen.queryByTestId('sidebar-search-clear-btn')).not.toBeInTheDocument();
+
+    // Type a non-matching query -> clear button appears and tree shows "No matches"
+    fireEvent.change(searchInput, { target: { value: 'nonexistent-query-xyz' } });
+    expect(searchInput.value).toBe('nonexistent-query-xyz');
+    expect(screen.queryByTestId('nav-feature-ft-core-host-runtime')).not.toBeInTheDocument();
+
+    const clearBtn = screen.getByTestId('sidebar-search-clear-btn');
+    expect(clearBtn).toBeInTheDocument();
+    expect(clearBtn).toHaveAttribute('aria-label', 'Clear search');
+
+    // Click clear button -> resets input value and restores tree items
+    fireEvent.click(clearBtn);
+    expect(searchInput.value).toBe('');
+    expect(screen.queryByTestId('sidebar-search-clear-btn')).not.toBeInTheDocument();
+    expect(screen.getByTestId('nav-feature-ft-core-host-runtime')).toBeInTheDocument();
+
+    // Type again and press Escape inside input -> also clears search query
+    fireEvent.change(searchInput, { target: { value: 'nonexistent-query-xyz' } });
+    expect(screen.getByTestId('sidebar-search-clear-btn')).toBeInTheDocument();
+    fireEvent.keyDown(searchInput, { key: 'Escape' });
+    expect(searchInput.value).toBe('');
+    expect(screen.queryByTestId('sidebar-search-clear-btn')).not.toBeInTheDocument();
+  });
 });
+
 
