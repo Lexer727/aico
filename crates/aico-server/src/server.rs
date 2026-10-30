@@ -39,11 +39,14 @@ pub enum ServerError {
     Internal(String),
 }
 
+// @implements spec-ft-core-auto-open-browser-on-start::TASK-CORE-024-2::REQ-002
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
     pub base_port: u16,
     pub max_port_attempts: u16,
     pub host: String,
+    #[serde(default)]
+    pub auto_open_browser: bool,
 }
 
 impl Default for ServerConfig {
@@ -52,6 +55,7 @@ impl Default for ServerConfig {
             base_port: 4242,
             max_port_attempts: 10,
             host: "127.0.0.1".to_string(),
+            auto_open_browser: false,
         }
     }
 }
@@ -2875,6 +2879,40 @@ pub async fn resolve_server_workspace_root(state: &AppState) -> PathBuf {
         let registry = state.registry.read().await;
         get_workspace_root(&registry)
     }
+}
+
+// ---------------------------------------------------------------------------
+// DEFAULT BROWSER LAUNCHER
+// ---------------------------------------------------------------------------
+
+// @implements spec-ft-core-auto-open-browser-on-start::TASK-CORE-024-1::REQ-001
+pub fn resolve_browser_command(url: &str) -> (String, Vec<String>) {
+    #[cfg(target_os = "windows")]
+    {
+        (
+            "rundll32".to_string(),
+            vec!["url.dll,FileProtocolHandler".to_string(), url.to_string()],
+        )
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        ("open".to_string(), vec![url.to_string()])
+    }
+
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    {
+        ("xdg-open".to_string(), vec![url.to_string()])
+    }
+}
+
+// @implements spec-ft-core-auto-open-browser-on-start::TASK-CORE-024-1::REQ-001
+// @implements spec-ft-core-auto-open-browser-on-start::TASK-CORE-024-1::REQ-005
+pub fn open_browser(url: &str) -> std::io::Result<()> {
+    let (prog, args) = resolve_browser_command(url);
+    let mut cmd = std::process::Command::new(&prog);
+    cmd.args(&args);
+    cmd.spawn().map(|_| ())
 }
 
 fn format_rfc3339_utc(secs: u64) -> String {

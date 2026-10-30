@@ -29,6 +29,7 @@ async fn test_pairing_rest_endpoint() {
         base_port: 4350,
         max_port_attempts: 10,
         host: "127.0.0.1".to_string(),
+        auto_open_browser: false,
     };
     let state = AppState::default();
     let mut server = HostServer::with_state(config, state);

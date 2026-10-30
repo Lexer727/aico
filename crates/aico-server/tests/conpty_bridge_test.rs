@@ -20,6 +20,7 @@ async fn start_server(base_port: u16) -> (SocketAddr, tokio::task::JoinHandle<()
         base_port,
         max_port_attempts: 10,
         host: "127.0.0.1".to_string(),
+        auto_open_browser: false,
     };
     let mut server = HostServer::with_state(config, AppState::default());
     let addr = server.bind().await.expect("Failed to bind server");
@@ -211,6 +212,7 @@ async fn test_default_cwd_resolves_to_workspace_root_parent_of_specs_path() {
         base_port: 5040,
         max_port_attempts: 10,
         host: "127.0.0.1".to_string(),
+        auto_open_browser: false,
     };
     let mut server = HostServer::with_state(config, state);
     let addr = server.bind().await.expect("Failed to bind server");
@@ -277,6 +279,7 @@ async fn test_nested_specs_default_cwd_resolves_to_grandparent_workspace_root() 
         base_port: 5045,
         max_port_attempts: 10,
         host: "127.0.0.1".to_string(),
+        auto_open_browser: false,
     };
     let mut server = HostServer::with_state(config, state);
     let addr = server.bind().await.expect("Failed to bind server");

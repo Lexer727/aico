@@ -14,6 +14,7 @@ async fn test_terminal_websocket_spawn_shell_and_loopback() {
         base_port: 4950,
         max_port_attempts: 10,
         host: "127.0.0.1".to_string(),
+        auto_open_browser: false,
     };
     let state = AppState::default();
     let mut server = HostServer::with_state(config, state);
@@ -89,6 +90,7 @@ async fn test_terminal_websocket_shell_resolution_and_error_handling() {
         base_port: 4960,
         max_port_attempts: 10,
         host: "127.0.0.1".to_string(),
+        auto_open_browser: false,
     };
     let state = AppState::default();
     let mut server = HostServer::with_state(config, state);
@@ -148,6 +150,7 @@ async fn test_terminal_powershell_clear_command_execution() {
         base_port: 4970,
         max_port_attempts: 10,
         host: "127.0.0.1".to_string(),
+        auto_open_browser: false,
     };
     let state = AppState::default();
     let mut server = HostServer::with_state(config, state);
@@ -220,6 +223,7 @@ async fn test_terminal_kill_message_terminates_session() {
         base_port: 4980,
         max_port_attempts: 10,
         host: "127.0.0.1".to_string(),
+        auto_open_browser: false,
     };
     let state = AppState::default();
     let mut server = HostServer::with_state(config, state);

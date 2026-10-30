@@ -117,13 +117,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // 4. Configure & bind host server
+    // @implements spec-ft-core-auto-open-browser-on-start::TASK-CORE-024-2::REQ-003
+    let mut auto_open = true;
+    for arg in env::args() {
+        if arg == "--no-open" || arg == "--no-browser" {
+            auto_open = false;
+            break;
+        }
+    }
+    if let Ok(val) = env::var("AICO_NO_BROWSER") {
+        if val == "1" || val.eq_ignore_ascii_case("true") {
+            auto_open = false;
+        }
+    }
+    if let Ok(val) = env::var("AICO_AUTO_OPEN") {
+        if val == "0" || val.eq_ignore_ascii_case("false") {
+            auto_open = false;
+        }
+    }
+
     let config = ServerConfig {
         base_port: 4242,
         max_port_attempts: 10,
         host: "0.0.0.0".to_string(),
+        auto_open_browser: auto_open,
     };
 
-    let mut server = HostServer::with_state(config, state.clone());
+    let mut server = HostServer::with_state(config.clone(), state.clone());
     let addr = server.bind().await?;
 
     let pairing_url = state.auth.pairing_url("localhost", addr.port());
@@ -137,6 +157,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("------------------------------------------------------------");
     println!("Press Ctrl+C to stop the server.");
     println!("============================================================");
+
+    // @implements spec-ft-core-auto-open-browser-on-start::TASK-CORE-024-3::REQ-004
+    // @implements spec-ft-core-auto-open-browser-on-start::TASK-CORE-024-3::REQ-005
+    if config.auto_open_browser {
+        let webui_url = format!("http://localhost:{}/", addr.port());
+        tokio::task::spawn_blocking(move || {
+            if let Err(e) = aico_server::open_browser(&webui_url) {
+                tracing::warn!("Failed to auto-open default browser for {}: {}", webui_url, e);
+            }
+        });
+    }
 
     // 5. Serve with graceful shutdown
     server

@@ -46,6 +46,7 @@ async fn test_ai_quotas_endpoint_filters_connected_providers_and_detects_login()
         base_port: 4920,
         max_port_attempts: 30,
         host: "127.0.0.1".to_string(),
+        auto_open_browser: false,
     };
 
     let mut server = HostServer::with_state(config, state);
@@ -119,6 +120,7 @@ async fn test_ai_quotas_tracks_terminal_session_state_transitions() {
         base_port: 4960,
         max_port_attempts: 30,
         host: "127.0.0.1".to_string(),
+        auto_open_browser: false,
     };
 
     let mut server = HostServer::with_state(config, state.clone());

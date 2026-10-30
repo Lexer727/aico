@@ -28,6 +28,7 @@ async fn test_real_websocket_handshake_and_stream() {
         base_port: 4890,
         max_port_attempts: 10,
         host: "127.0.0.1".to_string(),
+        auto_open_browser: false,
     };
     let state = AppState::default();
     let ws_hub = state.ws_hub.clone();

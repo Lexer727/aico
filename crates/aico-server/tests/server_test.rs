@@ -947,3 +947,40 @@ async fn test_nested_specs_lineage_graph_persists_to_canonical_root_not_specs_fo
 }
 
 
+
+
+// @verifies spec-ft-core-auto-open-browser-on-start::TASK-CORE-024-2::REQ-002
+#[test]
+fn test_server_config_auto_open_defaults_to_false() {
+    let config = ServerConfig::default();
+    assert!(
+        !config.auto_open_browser,
+        "ServerConfig::default().auto_open_browser must default to false for test isolation"
+    );
+}
+
+// @verifies spec-ft-core-auto-open-browser-on-start::TASK-CORE-024-1::REQ-001
+// @verifies spec-ft-core-auto-open-browser-on-start::TASK-CORE-024-1::REQ-005
+#[test]
+fn test_browser_opener_resolves_platform_command() {
+    let test_url = "http://localhost:4242/";
+    let (prog, args) = aico_server::resolve_browser_command(test_url);
+
+    #[cfg(target_os = "windows")]
+    {
+        assert_eq!(prog, "rundll32");
+        assert_eq!(args, vec!["url.dll,FileProtocolHandler", test_url]);
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        assert_eq!(prog, "open");
+        assert_eq!(args, vec![test_url]);
+    }
+
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    {
+        assert_eq!(prog, "xdg-open");
+        assert_eq!(args, vec![test_url]);
+    }
+}
