@@ -92,6 +92,12 @@ export const MainWorkspace: React.FC = () => {
   }>>({});
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  useEffect(() => {
+    const handleOpenSettingsEvent = () => setIsSettingsOpen(true);
+    window.addEventListener('aico:open-settings', handleOpenSettingsEvent);
+    return () => window.removeEventListener('aico:open-settings', handleOpenSettingsEvent);
+  }, []);
   const [projects, setProjects] = useState<{ id: string; name: string; specs_path?: string }[]>([]);
   const [discoveredEpics, setDiscoveredEpics] = useState<DiscoveredEpicNav[]>([]);
   const [fullEpics, setFullEpics] = useState<DiscoveredEpic[]>([]);
@@ -1089,6 +1095,7 @@ export const MainWorkspace: React.FC = () => {
                   projects={projects}
                   onSelectProject={() => handleRefreshWorkspace()}
                   onRefreshProjects={handleRefreshWorkspace}
+                  onOpenSettings={() => setIsSettingsOpen(true)}
                 />
               </div>
               <ConnectionStatusBanner status={status} onReconnect={reconnect} iconOnly={true} />
@@ -1121,6 +1128,7 @@ export const MainWorkspace: React.FC = () => {
                 projects={projects}
                 onSelectProject={() => handleRefreshWorkspace()}
                 onRefreshProjects={handleRefreshWorkspace}
+                onOpenSettings={() => setIsSettingsOpen(true)}
               />
             </div>
 

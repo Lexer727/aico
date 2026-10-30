@@ -368,6 +368,10 @@ impl HostServer {
             // @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-1::REQ-004
             .route("/api/v1/github/status", get(handle_github_status))
             .route("/api/v1/github/token", post(handle_save_github_token).delete(handle_delete_github_token))
+            // @implements spec-ft-core-add-project-github-cli-and-auth-guard::TASK-CORE-021-1::REQ-003
+            .route("/api/v1/github/cli/status", get(handle_github_cli_status))
+            // @implements spec-ft-core-add-project-github-cli-and-auth-guard::TASK-CORE-021-2::REQ-006
+            .route("/api/v1/github/cli/sync", post(handle_github_cli_sync))
             // @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-2::REQ-008
             .route("/api/v1/github/check-repo", post(handle_github_check_repo))
             // @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-2::REQ-009
@@ -3013,6 +3017,31 @@ async fn handle_github_create_repo(
         Err(err) => (
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({ "error": err })),
+        ).into_response(),
+    }
+}
+
+// @implements spec-ft-core-add-project-github-cli-and-auth-guard::TASK-CORE-021-1::REQ-003
+async fn handle_github_cli_status() -> impl IntoResponse {
+    let status = GitHubService::get_cli_status();
+    Json(status)
+}
+
+// @implements spec-ft-core-add-project-github-cli-and-auth-guard::TASK-CORE-021-2::REQ-006
+async fn handle_github_cli_sync() -> impl IntoResponse {
+    match GitHubService::sync_cli_token().await {
+        Ok(username) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "status": "ok",
+                "username": username
+            })),
+        ).into_response(),
+        Err(err) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": err
+            })),
         ).into_response(),
     }
 }

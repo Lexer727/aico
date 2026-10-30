@@ -12,6 +12,7 @@ interface ProjectSwitcherProps {
   projects: ProjectInfo[];
   onSelectProject?: (projectId: string) => void;
   onRefreshProjects?: () => Promise<void> | void;
+  onOpenSettings?: () => void;
 }
 
 // @implements ft-core-webui-shell::TASK-CORE-006-7::REQ-003
@@ -26,6 +27,7 @@ export const ProjectSwitcher: React.FC<ProjectSwitcherProps> = ({
   projects,
   onSelectProject,
   onRefreshProjects,
+  onOpenSettings,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -127,6 +129,7 @@ export const ProjectSwitcher: React.FC<ProjectSwitcherProps> = ({
         mode="create"
         existingProjects={projects}
         onClose={() => setIsCreateModalOpen(false)}
+        onOpenSettings={onOpenSettings}
         onSuccess={async (created) => {
           if (onRefreshProjects) {
             await onRefreshProjects();

@@ -31,6 +31,7 @@ export interface ProjectConfigModalProps {
   initialManifest?: ProjectManifestData | null;
   onClose: () => void;
   onSuccess?: (project: { id: string; name: string }) => Promise<void> | void;
+  onOpenSettings?: () => void;
 }
 
 function toSlug(raw: string): string {
@@ -54,6 +55,7 @@ function toTitleCase(slug: string): string {
 // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-21::REQ-027
 // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-21::REQ-028
 // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-22::REQ-029
+// @implements spec-ft-core-add-project-github-cli-and-auth-guard::TASK-CORE-021-5::REQ-001
 export const ProjectConfigModal: React.FC<ProjectConfigModalProps> = ({
   isOpen,
   mode,
@@ -61,6 +63,7 @@ export const ProjectConfigModal: React.FC<ProjectConfigModalProps> = ({
   initialManifest = null,
   onClose,
   onSuccess,
+  onOpenSettings,
 }) => {
   const [projectName, setProjectName] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -68,13 +71,15 @@ export const ProjectConfigModal: React.FC<ProjectConfigModalProps> = ({
   const [specsUrl, setSpecsUrl] = useState('');
   const [specsUrlTouched, setSpecsUrlTouched] = useState(false);
   const [githubUsername, setGithubUsername] = useState<string | null>(null);
-  const [localOnly, setLocalOnly] = useState(false);
+  const [isGithubAuthenticated, setIsGithubAuthenticated] = useState(false);
+  const [localOnly, setLocalOnly] = useState(true);
   const [isPrivate, setIsPrivate] = useState(true);
   const [isCheckingRepo, setIsCheckingRepo] = useState(false);
   const [checkResult, setCheckResult] = useState<{
     exists: boolean;
     is_specs?: boolean;
     is_empty?: boolean;
+    unauthenticated?: boolean;
     manifest?: any;
     owner?: string | null;
     repo?: string | null;
@@ -105,7 +110,7 @@ export const ProjectConfigModal: React.FC<ProjectConfigModalProps> = ({
       setDisplayNameTouched(false);
       setSpecsUrl('');
       setSpecsUrlTouched(false);
-      setLocalOnly(false);
+      setLocalOnly(true);
       setIsPrivate(true);
       setCheckResult(null);
       setConfirmExisting(false);
@@ -113,14 +118,24 @@ export const ProjectConfigModal: React.FC<ProjectConfigModalProps> = ({
       setRepositories([]);
       setIsLoadingManifest(false);
 
+      // Query GitHub authentication status
+      // @implements spec-ft-core-add-project-github-cli-and-auth-guard::TASK-CORE-021-5::REQ-001
       apiFetch('/api/v1/github/status')
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
           if (data?.authenticated && data?.username) {
             setGithubUsername(data.username);
+            setIsGithubAuthenticated(true);
+            setLocalOnly(false);
+          } else {
+            setGithubUsername(null);
+            setIsGithubAuthenticated(false);
           }
         })
-        .catch(() => {});
+        .catch(() => {
+          setGithubUsername(null);
+          setIsGithubAuthenticated(false);
+        });
     } else {
       if (initialManifest) {
         setProjectName(initialManifest.project_name || toSlug(initialManifest.id || ''));
@@ -190,6 +205,7 @@ export const ProjectConfigModal: React.FC<ProjectConfigModalProps> = ({
     cleanSpecsUrl.endsWith('-specs') ||
     cleanSpecsUrl.endsWith('-specs.git');
 
+  // @implements spec-ft-core-add-project-github-cli-and-auth-guard::TASK-CORE-021-5::REQ-001
   const handleProjectNameChange = (val: string) => {
     setProjectName(val);
     if (errorMsg) setErrorMsg(null);
@@ -199,9 +215,8 @@ export const ProjectConfigModal: React.FC<ProjectConfigModalProps> = ({
       setDisplayName(title ? `${title} Specs` : '');
     }
     if (!specsUrlTouched && mode === 'create' && !localOnly) {
-      if (slug) {
-        const user = githubUsername || '<username>';
-        setSpecsUrl(`https://github.com/${user}/${slug}-specs.git`);
+      if (slug && githubUsername) {
+        setSpecsUrl(`https://github.com/${githubUsername}/${slug}-specs.git`);
       } else {
         setSpecsUrl('');
       }
@@ -209,14 +224,16 @@ export const ProjectConfigModal: React.FC<ProjectConfigModalProps> = ({
     }
   };
 
+  // @implements spec-ft-core-add-project-github-cli-and-auth-guard::TASK-CORE-021-5::REQ-001
   const handleToggleLocalOnly = (checked: boolean) => {
     setLocalOnly(checked);
     if (checked) {
       setSpecsUrl('');
       setCheckResult(null);
-    } else if (computedSlug) {
-      const user = githubUsername || '<username>';
-      setSpecsUrl(`https://github.com/${user}/${computedSlug}-specs.git`);
+    } else if (computedSlug && githubUsername) {
+      setSpecsUrl(`https://github.com/${githubUsername}/${computedSlug}-specs.git`);
+    } else {
+      setSpecsUrl('');
     }
   };
 
@@ -623,38 +640,74 @@ export const ProjectConfigModal: React.FC<ProjectConfigModalProps> = ({
                 {/* Specs Remote URL & Remote Inspector */}
                 {/* @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-7::REQ-005 */}
                 {/* @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-7::REQ-008 */}
+                {/* @implements spec-ft-core-add-project-github-cli-and-auth-guard::TASK-CORE-021-5::REQ-004 */}
                 {!localOnly && (
-                  <div className="space-y-1.5">
-                    <label className="block text-[11px] font-medium text-zinc-400">
-                      Specs Repository Remote URL (GitHub)
-                    </label>
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <Globe className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                        <input
-                          type="text"
-                          data-testid="input-project-specs-url"
-                          value={specsUrl}
-                          onChange={(e) => {
-                            setSpecsUrl(e.target.value);
-                            setSpecsUrlTouched(true);
-                            setCheckResult(null);
-                          }}
-                          disabled={isSubmitting}
-                          placeholder="https://github.com/org/project-specs.git"
-                          className="w-full pl-8 pr-2.5 py-1.5 bg-zinc-900 border border-zinc-700 rounded text-xs text-zinc-100 font-mono placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        data-testid="btn-check-repo"
-                        onClick={handleCheckRepo}
-                        disabled={isCheckingRepo || !specsUrl.trim() || isSubmitting}
-                        className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-200 rounded text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer border border-zinc-700 shrink-0"
+                  <div className="space-y-2">
+                    {/* Unauthenticated Alert Guard */}
+                    {isGithubAuthenticated === false && (
+                      <div
+                        data-testid="unauthenticated-remote-alert"
+                        className="p-2.5 rounded bg-amber-950/40 border border-amber-800/50 space-y-2 text-xs text-amber-200"
                       >
-                        <RefreshCw className={`w-3.5 h-3.5 text-indigo-400 ${isCheckingRepo ? 'animate-spin' : ''}`} />
-                        <span>{isCheckingRepo ? 'Checking...' : 'Check Repo'}</span>
-                      </button>
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                          <div className="space-y-0.5">
+                            <p className="font-medium text-amber-300">GitHub account not connected</p>
+                            <p className="text-[11px] text-amber-200/80 leading-relaxed">
+                              Private repositories cannot be checked and remote repositories cannot be created without authentication. Connect your GitHub account in Settings to enable remote workflows.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex justify-end pt-0.5">
+                          <button
+                            type="button"
+                            data-testid="btn-open-settings-from-alert"
+                            onClick={() => {
+                              onOpenSettings?.();
+                              if (typeof window !== 'undefined') {
+                                window.dispatchEvent(new CustomEvent('aico:open-settings'));
+                              }
+                            }}
+                            className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white font-medium rounded text-[11px] transition-colors cursor-pointer"
+                          >
+                            Connect GitHub in Settings →
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <label className="block text-[11px] font-medium text-zinc-400">
+                        Specs Repository Remote URL (GitHub)
+                      </label>
+                      <div className="flex gap-2">
+                        <div className="relative flex-1">
+                          <Globe className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="text"
+                            data-testid="input-project-specs-url"
+                            value={specsUrl}
+                            onChange={(e) => {
+                              setSpecsUrl(e.target.value);
+                              setSpecsUrlTouched(true);
+                              setCheckResult(null);
+                            }}
+                            disabled={isSubmitting}
+                            placeholder="https://github.com/org/project-specs.git"
+                            className="w-full pl-8 pr-2.5 py-1.5 bg-zinc-900 border border-zinc-700 rounded text-xs text-zinc-100 font-mono placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          data-testid="btn-check-repo"
+                          onClick={handleCheckRepo}
+                          disabled={isCheckingRepo || !specsUrl.trim() || isSubmitting}
+                          className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-200 rounded text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer border border-zinc-700 shrink-0"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 text-indigo-400 ${isCheckingRepo ? 'animate-spin' : ''}`} />
+                          <span>{isCheckingRepo ? 'Checking...' : 'Check Repo'}</span>
+                        </button>
+                      </div>
                     </div>
 
                     {/* Permissive Warning if -specs postfix is missing */}
@@ -699,7 +752,41 @@ export const ProjectConfigModal: React.FC<ProjectConfigModalProps> = ({
                       </div>
                     )}
 
-                    {checkResult && !checkResult.exists && (
+                    {/* Unauthenticated 404 Guard Banner */}
+                    {/* @implements spec-ft-core-add-project-github-cli-and-auth-guard::TASK-CORE-021-5::REQ-005 */}
+                    {checkResult?.unauthenticated && (
+                      <div
+                        data-testid="check-repo-status-unauthenticated"
+                        className="p-2.5 rounded bg-amber-950/40 border border-amber-800/50 space-y-2 text-xs text-amber-200"
+                      >
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                          <div className="space-y-0.5">
+                            <p className="font-medium text-amber-300">Authentication Required for Private Repositories</p>
+                            <p className="text-[11px] text-amber-200/80 leading-relaxed">
+                              {checkResult.error || 'Repository was not found (or is private). Sign in to GitHub in Settings to verify private repositories or scaffold remote repositories.'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex justify-end pt-0.5">
+                          <button
+                            type="button"
+                            data-testid="btn-open-settings-from-check"
+                            onClick={() => {
+                              onOpenSettings?.();
+                              if (typeof window !== 'undefined') {
+                                window.dispatchEvent(new CustomEvent('aico:open-settings'));
+                              }
+                            }}
+                            className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white font-medium rounded text-[11px] transition-colors cursor-pointer"
+                          >
+                            Connect GitHub in Settings →
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {checkResult && !checkResult.exists && !checkResult.unauthenticated && (
                       <div data-testid="check-repo-status-not-found" className="text-[11px] text-indigo-300 bg-indigo-950/40 p-2 rounded border border-indigo-800/50 flex items-center gap-1.5">
                         <span className="shrink-0">ℹ️</span>
                         <span>

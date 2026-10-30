@@ -21,6 +21,7 @@ pub struct CheckRepoRequest {
 }
 
 // @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-2::REQ-008
+// @implements spec-ft-core-add-project-github-cli-and-auth-guard::TASK-CORE-021-3::REQ-005
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CheckRepoResponse {
     pub exists: bool,
@@ -29,6 +30,8 @@ pub struct CheckRepoResponse {
     #[serde(default)]
     pub is_empty: bool,
     #[serde(default)]
+    pub unauthenticated: bool,
+    #[serde(default)]
     pub manifest: Option<serde_json::Value>,
     #[serde(default)]
     pub owner: Option<String>,
@@ -36,6 +39,18 @@ pub struct CheckRepoResponse {
     pub repo: Option<String>,
     #[serde(default)]
     pub error: Option<String>,
+}
+
+// @implements spec-ft-core-add-project-github-cli-and-auth-guard::TASK-CORE-021-1::REQ-003
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GitHubCliStatusResponse {
+    pub installed: bool,
+    #[serde(default)]
+    pub binary_path: Option<String>,
+    #[serde(default)]
+    pub logged_in: bool,
+    #[serde(default)]
+    pub username: Option<String>,
 }
 
 // @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-2::REQ-009
@@ -183,6 +198,108 @@ impl GitHubService {
         Ok(username.to_string())
     }
 
+    // @implements spec-ft-core-add-project-github-cli-and-auth-guard::TASK-CORE-021-1::REQ-003
+    pub fn get_cli_status() -> GitHubCliStatusResponse {
+        let gh_bin = aico_core::github::find_gh_binary();
+        let Some(gh_path) = gh_bin else {
+            return GitHubCliStatusResponse {
+                installed: false,
+                binary_path: None,
+                logged_in: false,
+                username: None,
+            };
+        };
+
+        let binary_path_str = gh_path.to_string_lossy().to_string();
+        let mut logged_in = false;
+        let mut username = None;
+
+        // Run `gh auth status`
+        if let Ok(output) = std::process::Command::new(&gh_path)
+            .arg("auth")
+            .arg("status")
+            .output()
+        {
+            let combined = format!(
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+
+            if output.status.success()
+                || combined.contains("Logged in to github.com account")
+                || combined.contains("Logged in to github.com as")
+            {
+                logged_in = true;
+                for line in combined.lines() {
+                    if let Some(idx) = line.find("account ") {
+                        let rest = &line[idx + 8..];
+                        let account = rest.split_whitespace().next().unwrap_or_default().trim();
+                        if !account.is_empty() {
+                            username = Some(account.to_string());
+                            break;
+                        }
+                    } else if let Some(idx) = line.find("as ") {
+                        let rest = &line[idx + 3..];
+                        let account = rest.split_whitespace().next().unwrap_or_default().trim();
+                        if !account.is_empty() {
+                            username = Some(account.to_string());
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Additional check: `gh auth token`
+        if let Ok(tok_output) = std::process::Command::new(&gh_path)
+            .arg("auth")
+            .arg("token")
+            .output()
+        {
+            if tok_output.status.success() {
+                let tok = String::from_utf8_lossy(&tok_output.stdout).trim().to_string();
+                if !tok.is_empty() {
+                    logged_in = true;
+                }
+            }
+        }
+
+        GitHubCliStatusResponse {
+            installed: true,
+            binary_path: Some(binary_path_str),
+            logged_in,
+            username,
+        }
+    }
+
+    // @implements spec-ft-core-add-project-github-cli-and-auth-guard::TASK-CORE-021-2::REQ-006
+    pub async fn sync_cli_token() -> Result<String, String> {
+        let gh_path = aico_core::github::find_gh_binary()
+            .ok_or_else(|| "GitHub CLI (gh) executable not found on system".to_string())?;
+
+        let output = std::process::Command::new(&gh_path)
+            .arg("auth")
+            .arg("token")
+            .output()
+            .map_err(|e| format!("Failed to execute gh auth token: {}", e))?;
+
+        if !output.status.success() {
+            let err_str = String::from_utf8_lossy(&output.stderr);
+            return Err(format!(
+                "GitHub CLI is not logged in: {}. Please run 'gh auth login' in your terminal.",
+                err_str.trim()
+            ));
+        }
+
+        let token = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if token.is_empty() {
+            return Err("No token returned by GitHub CLI. Please run 'gh auth login' in your terminal.".to_string());
+        }
+
+        Self::verify_and_save_token(&token).await
+    }
+
     /// Extract (owner, repo) from GitHub URL
     pub fn parse_github_owner_repo(url: &str) -> Option<(String, String)> {
         let trimmed = url.trim();
@@ -218,12 +335,14 @@ impl GitHubService {
     }
 
     // @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-2::REQ-008
+    // @implements spec-ft-core-add-project-github-cli-and-auth-guard::TASK-CORE-021-3::REQ-005
     pub async fn check_repository(url: &str) -> CheckRepoResponse {
         let Some((owner, repo)) = Self::parse_github_owner_repo(url) else {
             return CheckRepoResponse {
                 exists: false,
                 is_specs: false,
                 is_empty: false,
+                unauthenticated: false,
                 manifest: None,
                 owner: None,
                 repo: None,
@@ -232,6 +351,7 @@ impl GitHubService {
         };
 
         let resolved = GitHubCredentialManager::resolve_token();
+        let has_token = resolved.is_some();
         let client = Self::create_client(resolved.as_ref().map(|t| t.token.as_str()));
 
         let repo_url = format!("https://api.github.com/repos/{}/{}", owner, repo);
@@ -242,6 +362,7 @@ impl GitHubService {
                     exists: false,
                     is_specs: false,
                     is_empty: false,
+                    unauthenticated: false,
                     manifest: None,
                     owner: Some(owner),
                     repo: Some(repo),
@@ -251,10 +372,23 @@ impl GitHubService {
         };
 
         if res.status() == reqwest::StatusCode::NOT_FOUND {
+            if !has_token {
+                return CheckRepoResponse {
+                    exists: false,
+                    is_specs: false,
+                    is_empty: false,
+                    unauthenticated: true,
+                    manifest: None,
+                    owner: Some(owner),
+                    repo: Some(repo),
+                    error: Some("Repository was not found (or is a private repository). Connect your GitHub account in Settings to verify private repositories or create new ones on GitHub.".to_string()),
+                };
+            }
             return CheckRepoResponse {
                 exists: false,
                 is_specs: false,
                 is_empty: false,
+                unauthenticated: false,
                 manifest: None,
                 owner: Some(owner),
                 repo: Some(repo),
@@ -267,6 +401,7 @@ impl GitHubService {
                 exists: false,
                 is_specs: false,
                 is_empty: false,
+                unauthenticated: false,
                 manifest: None,
                 owner: Some(owner),
                 repo: Some(repo),
@@ -283,6 +418,7 @@ impl GitHubService {
                 exists: true,
                 is_specs: false,
                 is_empty: true,
+                unauthenticated: false,
                 manifest: None,
                 owner: Some(owner),
                 repo: Some(repo),
@@ -321,6 +457,7 @@ impl GitHubService {
                             exists: true,
                             is_specs: true,
                             is_empty: false,
+                            unauthenticated: false,
                             manifest: Some(manifest),
                             owner: Some(owner),
                             repo: Some(repo),
@@ -335,6 +472,7 @@ impl GitHubService {
             exists: true,
             is_specs: false,
             is_empty: false,
+            unauthenticated: false,
             manifest: None,
             owner: Some(owner),
             repo: Some(repo),

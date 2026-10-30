@@ -33,6 +33,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [vectorStatusMessage, setVectorStatusMessage] = useState<string | null>(null);
 
   // @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-6::REQ-004
+  // @implements spec-ft-core-add-project-github-cli-and-auth-guard::TASK-CORE-021-4::REQ-008
   interface GitHubStatus {
     authenticated: boolean;
     username: string | null;
@@ -40,10 +41,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     scopes: string[];
     error?: string | null;
   }
+  interface GitHubCliStatus {
+    installed: boolean;
+    binary_path: string | null;
+    logged_in: boolean;
+    username: string | null;
+  }
   const [ghStatus, setGhStatus] = useState<GitHubStatus | null>(null);
+  const [cliStatus, setCliStatus] = useState<GitHubCliStatus | null>(null);
   const [ghTokenInput, setGhTokenInput] = useState('');
   const [showToken, setShowToken] = useState(false);
   const [isVerifyingGithub, setIsVerifyingGithub] = useState(false);
+  const [isSyncingCli, setIsSyncingCli] = useState(false);
   const [isDisconnectingGithub, setIsDisconnectingGithub] = useState(false);
   const [ghError, setGhError] = useState<string | null>(null);
   const [ghSuccess, setGhSuccess] = useState<string | null>(null);
@@ -54,6 +63,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       if (res.ok) {
         const data = await res.json();
         setGhStatus(data);
+      }
+    } catch {
+      // ignore
+    }
+
+    try {
+      const cliRes = await apiFetch('/api/v1/github/cli/status');
+      if (cliRes.ok) {
+        const cliData = await cliRes.json();
+        setCliStatus(cliData);
       }
     } catch {
       // ignore
@@ -89,6 +108,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       setGhError('Network error connecting to server');
     } finally {
       setIsVerifyingGithub(false);
+    }
+  };
+
+  // @implements spec-ft-core-add-project-github-cli-and-auth-guard::TASK-CORE-021-4::REQ-007
+  const handleSyncCliToken = async () => {
+    setIsSyncingCli(true);
+    setGhError(null);
+    setGhSuccess(null);
+    try {
+      const res = await apiFetch('/api/v1/github/cli/sync', {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (res.ok && data.status === 'ok') {
+        setGhSuccess(`Connected successfully with GitHub CLI as @${data.username}`);
+        await fetchGithubStatus();
+      } else {
+        setGhError(data.error || 'Failed to sync credentials from GitHub CLI');
+      }
+    } catch {
+      setGhError('Network error connecting to server');
+    } finally {
+      setIsSyncingCli(false);
     }
   };
 
@@ -388,10 +430,83 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   )}
                 </div>
               ) : (
-                <div className="space-y-2.5">
+                <div className="space-y-3">
                   <p className="text-[11px] text-zinc-400 leading-relaxed">
-                    Connect your GitHub Personal Access Token to enable automatic repository creation, status checks, and specs cloning.
+                    Connect GitHub to enable automatic repository creation, private repository status verification, and automated project cloning.
                   </p>
+
+                  {/* GitHub CLI Option */}
+                  {/* @implements spec-ft-core-add-project-github-cli-and-auth-guard::TASK-CORE-021-4::REQ-007 */}
+                  {/* @implements spec-ft-core-add-project-github-cli-and-auth-guard::TASK-CORE-021-4::REQ-008 */}
+                  <div
+                    data-testid="github-cli-card"
+                    className="p-3 bg-zinc-900/90 rounded border border-zinc-800 space-y-2.5"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 font-medium text-xs text-zinc-200">
+                        <span className="text-purple-400">⚡</span>
+                        <span>GitHub CLI (gh)</span>
+                      </div>
+                      {cliStatus?.installed && cliStatus.binary_path && (
+                        <span
+                          data-testid="gh-cli-path"
+                          className="text-[10px] font-mono text-zinc-500 bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800 truncate max-w-[240px]"
+                          title={cliStatus.binary_path}
+                        >
+                          {cliStatus.binary_path}
+                        </span>
+                      )}
+                    </div>
+
+                    {cliStatus?.installed ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] text-zinc-400">
+                            {cliStatus.logged_in
+                              ? `Detected active CLI session${cliStatus.username ? ` for @${cliStatus.username}` : ''}`
+                              : 'GitHub CLI detected on system. Click to sync credentials.'}
+                          </span>
+                          <button
+                            type="button"
+                            data-testid="sync-github-cli-btn"
+                            onClick={handleSyncCliToken}
+                            disabled={isSyncingCli}
+                            className="px-2.5 py-1 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded text-xs font-medium flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+                          >
+                            {isSyncingCli ? 'Connecting...' : 'Connect with GitHub CLI'}
+                          </button>
+                        </div>
+                        {!cliStatus.logged_in && (
+                          <div className="text-[10px] text-zinc-500">
+                            Tip: You can also run <code className="text-zinc-400">gh auth login</code> in your terminal first.
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-[11px] text-zinc-500 flex items-center justify-between">
+                        <span>GitHub CLI (gh) not detected on system PATH.</span>
+                        <a
+                          href="https://cli.github.com"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-indigo-400 hover:text-indigo-300 underline text-[10px]"
+                        >
+                          Install GitHub CLI ↗
+                        </a>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Divider */}
+                  <div className="relative flex py-1 items-center">
+                    <div className="flex-grow border-t border-zinc-800"></div>
+                    <span className="flex-shrink mx-2 text-[10px] uppercase font-semibold text-zinc-500">
+                      {cliStatus?.installed ? 'Or connect with Personal Access Token' : 'Personal Access Token'}
+                    </span>
+                    <div className="flex-grow border-t border-zinc-800"></div>
+                  </div>
+
+                  {/* PAT Option */}
                   <div className="space-y-1.5">
                     <label className="text-[11px] text-zinc-400 font-medium block">Personal Access Token (requires 'repo' scope)</label>
                     <div className="flex gap-2">
@@ -436,12 +551,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                       >
                         Generate a token on GitHub (requires 'repo' scope) ↗
                       </a>
-                      {ghStatus?.source === 'cli' && (
-                        <span className="text-zinc-500">Detected GitHub CLI</span>
-                      )}
-                      {ghStatus?.source === 'env' && (
-                        <span className="text-zinc-500">Detected environment token</span>
-                      )}
                     </div>
                   </div>
 

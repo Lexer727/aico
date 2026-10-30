@@ -134,4 +134,63 @@ describe('SettingsModal Component', () => {
     const successMsg = await screen.findByTestId('github-success-msg');
     expect(successMsg).toHaveTextContent(/Connected successfully as @testuser/i);
   });
+
+  // @verifies spec-ft-core-add-project-github-cli-and-auth-guard::TASK-CORE-021-4::REQ-007
+  // @verifies spec-ft-core-add-project-github-cli-and-auth-guard::TASK-CORE-021-4::REQ-008
+  it('detects GitHub CLI and syncs credentials via sync button', async () => {
+    const onClose = vi.fn();
+    const fetchMock = vi.fn().mockImplementation((url: string, opts?: any) => {
+      if (url === '/api/v1/github/status') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            authenticated: false,
+            username: null,
+            source: 'none',
+            scopes: [],
+          }),
+        });
+      }
+      if (url === '/api/v1/github/cli/status') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            installed: true,
+            binary_path: 'C:\\Program Files\\GitHub CLI\\gh.exe',
+            logged_in: true,
+            username: 'ghuser',
+          }),
+        });
+      }
+      if (url === '/api/v1/github/cli/sync' && opts?.method === 'POST') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ status: 'ok', username: 'ghuser' }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+    globalThis.fetch = fetchMock;
+
+    render(<SettingsModal isOpen={true} onClose={onClose} />);
+
+    // REQ-008: Displays detected GitHub CLI card and binary path
+    const cliCard = await screen.findByTestId('github-cli-card');
+    expect(cliCard).toBeInTheDocument();
+    expect(screen.getByTestId('gh-cli-path')).toHaveTextContent('C:\\Program Files\\GitHub CLI\\gh.exe');
+    expect(screen.getByText(/Detected active CLI session for @ghuser/i)).toBeInTheDocument();
+
+    // REQ-007: Clicks sync button calling POST /api/v1/github/cli/sync
+    const syncBtn = screen.getByTestId('sync-github-cli-btn');
+    expect(syncBtn).toBeInTheDocument();
+    fireEvent.click(syncBtn);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/github/cli/sync',
+      expect.objectContaining({ method: 'POST' })
+    );
+
+    const successMsg = await screen.findByTestId('github-success-msg');
+    expect(successMsg).toHaveTextContent(/Connected successfully with GitHub CLI as @ghuser/i);
+  });
 });

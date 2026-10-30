@@ -19,5 +19,5 @@ pub use human_gate::{
 };
 pub use config::{AicoConfig, AssetsConfig};
 pub use skills_sync::{SkillsSynchronizer, SyncReport, SkillsSyncError};
-pub use github::{GitHubConfig, GitHubCredentialManager, ResolvedGitHubToken, TokenSource};
+pub use github::{find_gh_binary, GitHubConfig, GitHubCredentialManager, ResolvedGitHubToken, TokenSource};
 

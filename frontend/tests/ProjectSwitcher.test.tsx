@@ -63,6 +63,12 @@ describe('ProjectSwitcher', () => {
 
   it('opens OmniSearch-style ProjectConfigModal on clicking New Project button and submits .aico-project.json configuration', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url: any) => {
+      if (String(url).includes('/api/v1/github/status')) {
+        return {
+          ok: true,
+          json: async () => ({ authenticated: true, username: 'testuser', source: 'cli' }),
+        } as any;
+      }
       if (String(url).includes('/api/v1/projects/active')) {
         return { ok: true, json: async () => ({ status: 'ok' }) } as any;
       }
@@ -85,6 +91,11 @@ describe('ProjectSwitcher', () => {
 
     fireEvent.click(screen.getByTestId('btn-new-project-trigger'));
     expect(screen.getByTestId('project-config-modal')).toBeInTheDocument();
+
+    // Wait for github status to resolve so localOnly is false
+    await waitFor(() => {
+      expect(screen.getByTestId('input-project-specs-url')).toBeInTheDocument();
+    });
 
     // Enter project_name and verify live <project_name>-specs preview
     const slugInput = screen.getByTestId('input-new-project-name');
@@ -118,7 +129,7 @@ describe('ProjectSwitcher', () => {
             project_name: 'my-service',
             name: 'My Service UI',
             display_name: 'My Service UI',
-            url: 'https://github.com/<username>/my-service-specs.git',
+            url: 'https://github.com/testuser/my-service-specs.git',
             local_only: false,
             private: true,
             repositories: [
@@ -202,8 +213,11 @@ describe('ProjectSwitcher', () => {
   // @verifies spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-7::REQ-002
   // @verifies spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-7::REQ-005
   // @verifies spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-7::REQ-006
-  it('verifies Add Project flow, local-only mode, and removal of default codebase text', () => {
-    render(<ProjectSwitcher projects={mockProjects} />);
+  // @verifies spec-ft-core-add-project-github-cli-and-auth-guard::TASK-CORE-021-5::REQ-001
+  // @verifies spec-ft-core-add-project-github-cli-and-auth-guard::TASK-CORE-021-5::REQ-004
+  it('verifies Add Project flow, unauthenticated local-only default, and alert guard on unchecking', async () => {
+    const onOpenSettings = vi.fn();
+    render(<ProjectSwitcher projects={mockProjects} onOpenSettings={onOpenSettings} />);
 
     // REQ-001: Trigger button shows "+ Add Project"
     const addBtn = screen.getByTestId('btn-new-project-trigger');
@@ -217,20 +231,73 @@ describe('ProjectSwitcher', () => {
     expect(screen.queryByText(/will be created automatically/i)).not.toBeInTheDocument();
     expect(screen.getByText(/No linked codebase repositories configured/i)).toBeInTheDocument();
 
-    // REQ-005: Typing project name auto-prefills specs URL with -specs.git
-    const slugInput = screen.getByTestId('input-new-project-name');
-    fireEvent.change(slugInput, { target: { value: 'nebula' } });
-    const specsUrlInput = screen.getByTestId('input-project-specs-url') as HTMLInputElement;
-    expect(specsUrlInput.value).toContain('nebula-specs.git');
-
-    // REQ-006: Local repository only hides specs URL input
-    const localOnlyCheckbox = screen.getByTestId('checkbox-local-only');
-    fireEvent.click(localOnlyCheckbox);
+    // REQ-001: Local repository only is checked by default when unauthenticated
+    const localOnlyCheckbox = screen.getByTestId('checkbox-local-only') as HTMLInputElement;
+    expect(localOnlyCheckbox.checked).toBe(true);
     expect(screen.queryByTestId('input-project-specs-url')).not.toBeInTheDocument();
 
-    // Uncheck local-only restores URL input
+    // REQ-004: Unchecking local-only while unauthenticated reveals URL input and alert notice
     fireEvent.click(localOnlyCheckbox);
-    expect(screen.getByTestId('input-project-specs-url')).toBeInTheDocument();
+    expect(localOnlyCheckbox.checked).toBe(false);
+
+    const alertNotice = screen.getByTestId('unauthenticated-remote-alert');
+    expect(alertNotice).toBeInTheDocument();
+    expect(screen.getByText(/GitHub account not connected/i)).toBeInTheDocument();
+
+    // Clicking "Connect GitHub in Settings" in the alert invokes onOpenSettings
+    const settingsBtn = screen.getByTestId('btn-open-settings-from-alert');
+    fireEvent.click(settingsBtn);
+    expect(onOpenSettings).toHaveBeenCalled();
+
+    // URL input is visible but contains NO awkward dummy <username> placeholder
+    const specsUrlInput = screen.getByTestId('input-project-specs-url') as HTMLInputElement;
+    expect(specsUrlInput.value).toBe('');
+    expect(specsUrlInput.value).not.toContain('<username>');
+  });
+
+  // @verifies spec-ft-core-add-project-github-cli-and-auth-guard::TASK-CORE-021-5::REQ-005
+  it('displays unauthenticated 404 private repo guidance banner when check returns unauthenticated: true', async () => {
+    const onOpenSettings = vi.fn();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url: any) => {
+      if (String(url).includes('/api/v1/github/check-repo')) {
+        return {
+          ok: true,
+          json: async () => ({
+            exists: false,
+            unauthenticated: true,
+            error:
+              'Repository was not found (or is a private repository). Connect your GitHub account in Settings to verify private repositories or scaffold remote repositories.',
+          }),
+        } as any;
+      }
+      return { ok: true, json: async () => ({}) } as any;
+    });
+
+    render(<ProjectSwitcher projects={mockProjects} onOpenSettings={onOpenSettings} />);
+
+    fireEvent.click(screen.getByTestId('btn-new-project-trigger'));
+    // Uncheck localOnly to reveal specs URL input and check button
+    const localOnlyCheckbox = screen.getByTestId('checkbox-local-only');
+    fireEvent.click(localOnlyCheckbox);
+
+    const specsUrlInput = screen.getByTestId('input-project-specs-url');
+    fireEvent.change(specsUrlInput, {
+      target: { value: 'https://github.com/my-org/private-specs.git' },
+    });
+
+    const checkBtn = screen.getByTestId('btn-check-repo');
+    expect(checkBtn).not.toBeDisabled();
+    fireEvent.click(checkBtn);
+
+    const unauthBanner = await screen.findByTestId('check-repo-status-unauthenticated');
+    expect(unauthBanner).toBeInTheDocument();
+    expect(
+      screen.getByText(/Authentication Required for Private Repositories/i)
+    ).toBeInTheDocument();
+
+    const connectBtn = screen.getByTestId('btn-open-settings-from-check');
+    fireEvent.click(connectBtn);
+    expect(onOpenSettings).toHaveBeenCalled();
   });
 
   // @verifies spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-7::REQ-003

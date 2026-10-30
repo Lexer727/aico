@@ -26,6 +26,61 @@ pub struct ResolvedGitHubToken {
     pub source: TokenSource,
 }
 
+// @implements spec-ft-core-add-project-github-cli-and-auth-guard::TASK-CORE-021-1::REQ-002
+pub fn find_gh_binary() -> Option<PathBuf> {
+    // 1. Check if "where gh" (Windows) or "which gh" (Unix) resolves it
+    #[cfg(windows)]
+    let lookup_cmd = "where.exe";
+    #[cfg(not(windows))]
+    let lookup_cmd = "which";
+
+    if let Ok(output) = std::process::Command::new(lookup_cmd).arg("gh").output() {
+        if output.status.success() {
+            let out_str = String::from_utf8_lossy(&output.stdout);
+            for line in out_str.lines() {
+                let candidate = PathBuf::from(line.trim());
+                if candidate.is_file() {
+                    return Some(candidate);
+                }
+            }
+        }
+    }
+
+    // 2. Standard Windows installation locations
+    #[cfg(windows)]
+    {
+        let standard_paths = [
+            r"C:\Program Files\GitHub CLI\gh.exe",
+            r"C:\Program Files (x86)\GitHub CLI\gh.exe",
+        ];
+        for path_str in &standard_paths {
+            let p = PathBuf::from(path_str);
+            if p.is_file() {
+                return Some(p);
+            }
+        }
+
+        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+            let p = PathBuf::from(local_app_data)
+                .join("Programs")
+                .join("GitHub CLI")
+                .join("gh.exe");
+            if p.is_file() {
+                return Some(p);
+            }
+        }
+    }
+
+    // 3. Fallback check: attempt direct execution of "gh"
+    if let Ok(output) = std::process::Command::new("gh").arg("--version").output() {
+        if output.status.success() {
+            return Some(PathBuf::from("gh"));
+        }
+    }
+
+    None
+}
+
 // @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-1::REQ-004
 pub struct GitHubCredentialManager;
 
@@ -90,14 +145,17 @@ impl GitHubCredentialManager {
         }
 
         // 2. gh auth token
-        if let Ok(output) = std::process::Command::new("gh").arg("auth").arg("token").output() {
-            if output.status.success() {
-                let token_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                if !token_str.is_empty() {
-                    return Some(ResolvedGitHubToken {
-                        token: token_str,
-                        source: TokenSource::GhCli,
-                    });
+        // @implements spec-ft-core-add-project-github-cli-and-auth-guard::TASK-CORE-021-1::REQ-002
+        if let Some(gh_path) = find_gh_binary() {
+            if let Ok(output) = std::process::Command::new(gh_path).arg("auth").arg("token").output() {
+                if output.status.success() {
+                    let token_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    if !token_str.is_empty() {
+                        return Some(ResolvedGitHubToken {
+                            token: token_str,
+                            source: TokenSource::GhCli,
+                        });
+                    }
                 }
             }
         }
