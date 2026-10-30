@@ -49,10 +49,11 @@ export const GitRepositoriesCard: React.FC<GitRepositoriesCardProps> = ({
   const [actionLoading, setActionLoading] = useState<Record<string, string>>({});
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
 
-  const fetchRepos = async () => {
+  // @implements spec-ft-git-remote-fetch-and-sync::TASK-GIT-006-5::REQ-004
+  const fetchRepos = async (doFetch = false) => {
     setRefreshing(true);
     try {
-      const data = await fetchGitStatus();
+      const data = await fetchGitStatus(doFetch ? { fetch: true } : undefined);
       if (Array.isArray(data)) {
         setRepoStatuses(data);
       }
@@ -286,7 +287,10 @@ export const GitRepositoriesCard: React.FC<GitRepositoriesCardProps> = ({
               <span>Edit</span>
             </button>
             <button
-              onClick={fetchRepos}
+              onClick={async () => {
+                await fetchRepos(true);
+                if (onRefresh) onRefresh();
+              }}
               title="Refresh Git status"
               className="p-1 rounded hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors"
             >
@@ -616,7 +620,10 @@ export const GitRepositoriesCard: React.FC<GitRepositoriesCardProps> = ({
             <span>Edit</span>
           </button>
           <button
-            onClick={fetchRepos}
+            onClick={async () => {
+              await fetchRepos(true);
+              if (onRefresh) onRefresh();
+            }}
             title="Refresh Git status"
             className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-mono transition-colors"
           >

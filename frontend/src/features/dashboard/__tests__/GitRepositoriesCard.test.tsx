@@ -6,6 +6,7 @@
 // @verifies spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-3::REQ-005
 // @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-22::REQ-028
 // @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-22::REQ-029
+// @verifies spec-ft-git-remote-fetch-and-sync::TASK-GIT-006-4::REQ-004
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -315,5 +316,35 @@ describe('GitRepositoriesCard', () => {
       expect(screen.getByTestId('project-config-modal')).toBeInTheDocument();
       expect(screen.getByTestId('input-project-display-name')).toHaveValue('Test Specs');
     });
+  });
+
+  // @verifies spec-ft-git-remote-fetch-and-sync::TASK-GIT-006-4::REQ-004
+  it('triggers remote fetch with fetch=true query parameter on Refresh button click and calls onRefresh', async () => {
+    let capturedUrl = '';
+    global.fetch = vi.fn().mockImplementation(async (url: string | URL | Request) => {
+      const urlStr = typeof url === 'string' ? url : url.toString();
+      capturedUrl = urlStr;
+      if (urlStr.includes('/api/v1/git/status')) {
+        return {
+          ok: true,
+          json: async () => mockStatuses,
+        } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+
+    const onRefresh = vi.fn();
+    render(<GitRepositoriesCard statuses={mockStatuses} projectName="aico" onRefresh={onRefresh} />);
+
+    const refreshBtn = screen.getByTitle('Refresh Git status');
+    expect(refreshBtn).toBeInTheDocument();
+
+    fireEvent.click(refreshBtn);
+
+    await waitFor(() => {
+      expect(capturedUrl).toContain('/api/v1/git/status');
+      expect(capturedUrl).toContain('fetch=true');
+    });
+    expect(onRefresh).toHaveBeenCalled();
   });
 });

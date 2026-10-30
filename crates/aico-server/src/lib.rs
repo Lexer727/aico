@@ -16,6 +16,6 @@ pub use server::{
 pub use ws::{WebSocketHub, HubMessage};
 pub use auth::LanAuthenticator;
 pub use assets::{FrontendAssets, static_asset_handler};
-pub use git::{GitRepoStatus, GitStatusScanner, GitCommitInfo};
+pub use git::{GitRepoStatus, GitStatusScanner, GitCommitInfo, git_fetch_repo};
 pub use terminal::{terminal_ws_handler, resolve_shell_command, ShellType};
 pub use crawler::{WorkspaceCrawler, CrawlReport};

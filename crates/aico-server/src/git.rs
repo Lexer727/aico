@@ -1,7 +1,21 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::{Arc, Mutex as StdMutex, OnceLock};
+use std::time::Duration;
 use tokio::process::Command as TokioCommand;
+use tokio::sync::Mutex as TokioMutex;
+use tokio::time::timeout;
+
+static REPO_LOCKS: OnceLock<StdMutex<HashMap<PathBuf, Arc<TokioMutex<()>>>>> = OnceLock::new();
+
+pub fn get_repo_lock(repo_dir: &Path) -> Arc<TokioMutex<()>> {
+    let canonical = repo_dir.canonicalize().unwrap_or_else(|_| repo_dir.to_path_buf());
+    let locks = REPO_LOCKS.get_or_init(|| StdMutex::new(HashMap::new()));
+    let mut map = locks.lock().unwrap();
+    map.entry(canonical).or_insert_with(|| Arc::new(TokioMutex::new(()))).clone()
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GitCommitInfo {
@@ -92,6 +106,40 @@ pub fn resolve_clone_target_dir(workspace_root: &Path, repo_id: &str, repo_type:
         workspace_root.join("specs").join(repo_id)
     } else {
         workspace_root.join("codebase").join(repo_id)
+    }
+}
+
+// @implements spec-ft-git-remote-fetch-and-sync::TASK-GIT-006-2::REQ-001
+// @implements spec-ft-git-remote-fetch-and-sync::TASK-GIT-006-2::REQ-002
+// @implements spec-ft-git-remote-fetch-and-sync::TASK-GIT-006-2::REQ-005
+pub async fn git_fetch_repo(repo_dir: &Path, timeout_secs: u64) -> Result<(), String> {
+    if !repo_dir.exists() {
+        return Err(format!("Directory does not exist: {}", repo_dir.display()));
+    }
+    if !repo_dir.join(".git").exists() {
+        return Err(format!("Not a git repository: {}", repo_dir.display()));
+    }
+
+    let repo_lock = get_repo_lock(repo_dir);
+    let _guard = repo_lock.lock().await;
+
+    let fetch_fut = TokioCommand::new("git")
+        .arg("fetch")
+        .arg("--prune")
+        .current_dir(repo_dir)
+        .output();
+
+    match timeout(Duration::from_secs(timeout_secs), fetch_fut).await {
+        Ok(Ok(output)) => {
+            if !output.status.success() {
+                let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                Err(if err.is_empty() { "git fetch failed".to_string() } else { err })
+            } else {
+                Ok(())
+            }
+        }
+        Ok(Err(e)) => Err(format!("Failed to execute git fetch: {}", e)),
+        Err(_) => Err(format!("git fetch timed out after {} seconds", timeout_secs)),
     }
 }
 
@@ -278,7 +326,9 @@ pub fn git_clone_repo(workspace_root: &Path, repo_id: &str, url: &str, repo_type
 // @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-2::REQ-004
 // @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-2::REQ-005
 // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-19::REQ-029
-pub async fn collect_project_git_status(specs_root: &Path) -> Vec<GitRepoStatus> {
+// @implements spec-ft-git-remote-fetch-and-sync::TASK-GIT-006-2::REQ-001
+// @implements spec-ft-git-remote-fetch-and-sync::TASK-GIT-006-2::REQ-002
+pub async fn collect_project_git_status(specs_root: &Path, do_fetch: bool) -> Vec<GitRepoStatus> {
     let manifest_file = specs_root.join(".aico-project.json");
     let manifest: Option<ProjectManifest> = if manifest_file.exists() {
         std::fs::read_to_string(&manifest_file)
@@ -361,6 +411,11 @@ pub async fn collect_project_git_status(specs_root: &Path) -> Vec<GitRepoStatus>
                     error: None,
                 }
             } else {
+                if do_fetch {
+                    if let Err(e) = git_fetch_repo(&target_path, 5).await {
+                        tracing::warn!("Failed to fetch repo at {}: {}", target_path.display(), e);
+                    }
+                }
                 let mut status = GitStatusScanner::scan_repo(
                     &entry.id,
                     &entry.name,
@@ -380,6 +435,12 @@ pub async fn collect_project_git_status(specs_root: &Path) -> Vec<GitRepoStatus>
 pub struct GitStatusScanner;
 
 impl GitStatusScanner {
+    // @implements spec-ft-git-remote-fetch-and-sync::TASK-GIT-006-2::REQ-001
+    // @implements spec-ft-git-remote-fetch-and-sync::TASK-GIT-006-2::REQ-002
+    pub async fn fetch_repo(repo_dir: &Path, timeout_secs: u64) -> Result<(), String> {
+        git_fetch_repo(repo_dir, timeout_secs).await
+    }
+
     pub fn pull_repo(repo_dir: &Path) -> Result<String, String> {
         git_pull_repo(repo_dir)
     }

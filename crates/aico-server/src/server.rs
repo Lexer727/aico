@@ -475,6 +475,29 @@ impl HostServer {
             .with_state(state)
     }
 
+// @implements spec-ft-git-remote-fetch-and-sync::TASK-GIT-006-3::REQ-003
+// @implements spec-ft-git-remote-fetch-and-sync::TASK-GIT-006-3::REQ-005
+pub fn spawn_git_auto_fetch_task(state: AppState) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(300));
+        // First tick completes immediately; wait for 5 minutes before first periodic background fetch
+        interval.tick().await;
+
+        loop {
+            interval.tick().await;
+            let projects = {
+                let registry = state.registry.read().await;
+                registry.list_cloned()
+            };
+
+            for project in projects {
+                tracing::debug!("Running periodic git background fetch for {}", project.id);
+                let _ = collect_project_git_status(&project.specs_path, true).await;
+            }
+        }
+    })
+}
+
     /// Run the server loop until shutdown
     // @implements ft-core-host-runtime::TASK-CORE-001-1::REQ-001
     // @implements ft-core-host-runtime::TASK-CORE-001-1::REQ-006
@@ -483,11 +506,14 @@ impl HostServer {
             .listener
             .take()
             .ok_or_else(|| ServerError::Internal("Server not bound before serve".to_string()))?;
-        let router = Self::build_router(self.state);
+        let router = Self::build_router(self.state.clone());
+        let auto_fetch_handle = Self::spawn_git_auto_fetch_task(self.state);
 
-        axum::serve(listener, router)
+        let res = axum::serve(listener, router)
             .await
-            .map_err(|e| ServerError::Internal(e.to_string()))
+            .map_err(|e| ServerError::Internal(e.to_string()));
+        auto_fetch_handle.abort();
+        res
     }
 
     /// Run server with graceful shutdown signal and drain
@@ -501,9 +527,10 @@ impl HostServer {
             .take()
             .ok_or_else(|| ServerError::Internal("Server not bound before serve".to_string()))?;
         let ws_hub = self.state.ws_hub.clone();
-        let router = Self::build_router(self.state);
+        let router = Self::build_router(self.state.clone());
+        let auto_fetch_handle = Self::spawn_git_auto_fetch_task(self.state);
 
-        axum::serve(listener, router)
+        let res = axum::serve(listener, router)
             .with_graceful_shutdown(async move {
                 shutdown_signal.await;
                 tracing::info!("Graceful shutdown triggered: broadcasting to clients...");
@@ -511,7 +538,9 @@ impl HostServer {
                 tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
             })
             .await
-            .map_err(|e| ServerError::Internal(e.to_string()))
+            .map_err(|e| ServerError::Internal(e.to_string()));
+        auto_fetch_handle.abort();
+        res
     }
 }
 
@@ -802,6 +831,7 @@ async fn list_projects_handler(
 pub struct ProjectQuery {
     pub project: Option<String>,
     pub project_id: Option<String>,
+    pub fetch: Option<bool>,
 }
 
 // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-23::REQ-030
@@ -878,6 +908,7 @@ async fn get_storage_stats_handler(
     let pq = ProjectQuery {
         project: query.project.clone(),
         project_id: query.project_id.clone(),
+        fetch: None,
     };
     let target_proj = resolve_project_context(&state, &headers, &pq).await;
 
@@ -910,6 +941,7 @@ async fn handle_storage_reindex(
     let pq = ProjectQuery {
         project: req.project_id.clone(),
         project_id: req.project_id.clone(),
+        fetch: None,
     };
     let target_proj = resolve_project_context(&state, &headers, &pq).await;
 
@@ -2336,6 +2368,7 @@ async fn get_raw_file_handler(
     let project_query = ProjectQuery {
         project: query.project.clone(),
         project_id: query.project_id.clone(),
+        fetch: None,
     };
     let active_project = resolve_project_context(&state, &headers, &project_query).await;
     let target_path = if let Some(ref proj) = active_project {
@@ -2546,14 +2579,17 @@ async fn get_stats_handler(
 // @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-1::REQ-001
 // @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-2::REQ-005
 // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-23::REQ-030
+// @implements spec-ft-git-remote-fetch-and-sync::TASK-GIT-006-2::REQ-001
+// @implements spec-ft-git-remote-fetch-and-sync::TASK-GIT-006-2::REQ-002
 async fn get_git_status_handler(
     headers: HeaderMap,
     Query(query): Query<ProjectQuery>,
     State(state): State<AppState>,
 ) -> Json<Vec<GitRepoStatus>> {
     let project = resolve_project_context(&state, &headers, &query).await;
+    let do_fetch = query.fetch.unwrap_or(false);
     let results = if let Some(proj) = project {
-        collect_project_git_status(&proj.specs_path).await
+        collect_project_git_status(&proj.specs_path, do_fetch).await
     } else {
         vec![]
     };
@@ -4006,6 +4042,7 @@ async fn handle_get_graph(
     let pq = ProjectQuery {
         project: query.project.clone(),
         project_id: query.project_id.clone(),
+        fetch: None,
     };
     let active_project = resolve_project_context(&state, &headers, &pq).await;
 

@@ -421,10 +421,13 @@ export interface GitRepoStatus {
  * Fetch Git repository statuses for the active project from Axum backend
  * @implements ft-git-dashboard-ui::TASK-GIT-003-1::REQ-001
  * @implements ft-git-dashboard-ui::TASK-GIT-003-1::REQ-005
+ * @implements spec-ft-git-remote-fetch-and-sync::TASK-GIT-006-5::REQ-001
+ * @implements spec-ft-git-remote-fetch-and-sync::TASK-GIT-006-5::REQ-004
  */
-export async function fetchGitStatus(): Promise<GitRepoStatus[]> {
+export async function fetchGitStatus(options?: { fetch?: boolean }): Promise<GitRepoStatus[]> {
   try {
-    const res = await apiFetch(getApiUrl('/api/v1/git/status'));
+    const query = options?.fetch ? '?fetch=true' : '';
+    const res = await apiFetch(getApiUrl(`/api/v1/git/status${query}`));
     if (res.ok) {
       const data: GitRepoStatus[] = await res.json();
       if (Array.isArray(data)) {

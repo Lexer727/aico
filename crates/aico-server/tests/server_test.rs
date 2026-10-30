@@ -294,7 +294,7 @@ async fn test_git_manifest_and_operations_endpoints() {
     std::fs::write(specs_dir.join(".aico-project.json"), serde_json::to_string_pretty(&manifest).unwrap()).unwrap();
 
     // Test collect_project_git_status (REQ-001, REQ-005)
-    let statuses = collect_project_git_status(&specs_dir).await;
+    let statuses = collect_project_git_status(&specs_dir, false).await;
     assert_eq!(statuses.len(), 2, "Should return specs repo and codebase repo");
     assert_eq!(statuses[0].id, "test-repo-specs");
     assert_eq!(statuses[0].repo_type, "specs");
