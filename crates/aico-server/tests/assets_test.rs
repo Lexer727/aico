@@ -4,6 +4,24 @@ use aico_server::assets::DiscoveredAssetInfo;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+// @verifies spec-ft-distribution-portable-runtime-root::TASK-DISTRIBUTION-001-3::REQ-004
+#[test]
+fn test_disk_assets_policy() {
+    use aico_server::assets::check_disk_assets_policy;
+
+    // Release mode (is_debug = false): disabled unless AICO_DEV_ASSETS=1 or "true"
+    assert!(!check_disk_assets_policy(false, None));
+    assert!(!check_disk_assets_policy(false, Some("0")));
+    assert!(!check_disk_assets_policy(false, Some("false")));
+    assert!(check_disk_assets_policy(false, Some("1")));
+    assert!(check_disk_assets_policy(false, Some("true")));
+    assert!(check_disk_assets_policy(false, Some("TRUE")));
+
+    // Debug mode (is_debug = true): always enabled
+    assert!(check_disk_assets_policy(true, None));
+    assert!(check_disk_assets_policy(true, Some("0")));
+}
+
 // @verifies ft-core-assets-manager::TASK-ASSET-003::REQ-001
 // @verifies ft-core-assets-manager::TASK-ASSET-001::REQ-002
 // @verifies ft-core-assets-manager::TASK-ASSET-007::REQ-003

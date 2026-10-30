@@ -248,6 +248,21 @@ impl GraphCacheManager {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateStatusResponse {
+    pub current_version: String,
+    pub latest_version: Option<String>,
+    pub update_available: bool,
+    pub release_url: Option<String>,
+    pub checked_at: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct CachedUpdateStatus {
+    pub fetched_at: Instant,
+    pub response: UpdateStatusResponse,
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub start_time: Arc<Instant>,
@@ -260,6 +275,7 @@ pub struct AppState {
     pub storage: Arc<RwLock<Option<aico_storage::StorageManager>>>,
     pub storage_federation: Arc<aico_storage::StorageFederationManager>,
     pub graph_cache: Arc<GraphCacheManager>,
+    pub update_cache: Arc<RwLock<Option<CachedUpdateStatus>>>,
 }
 
 impl Default for AppState {
@@ -275,6 +291,7 @@ impl Default for AppState {
             storage: Arc::new(RwLock::new(None)),
             storage_federation: Arc::new(aico_storage::StorageFederationManager::new()),
             graph_cache: Arc::new(GraphCacheManager::new()),
+            update_cache: Arc::new(RwLock::new(None)),
         }
     }
 }
@@ -417,6 +434,9 @@ impl HostServer {
             .route("/api/v1/git/clone", post(handle_git_clone))
             // @implements spec-ft-terminal-quotas-gates-and-notifications::TASK-TERMINAL-007-3::REQ-005
             .route("/api/v1/notifications/popup", post(handle_popup_notification))
+            // @implements spec-ft-distribution-update-check::TASK-DISTRIBUTION-006-1::REQ-001
+            // @implements spec-ft-distribution-update-check::TASK-DISTRIBUTION-006-1::REQ-003
+            .route("/api/v1/system/update", get(handle_system_update))
             // @implements spec-ft-terminal-native-hook-gate-bridge::TASK-HOOK-001-1::REQ-001
             // @implements spec-ft-terminal-native-hook-gate-bridge::TASK-HOOK-001-1::REQ-003
             .route("/api/v1/terminal/ai-status", post(handle_ai_status))
@@ -1134,18 +1154,9 @@ fn get_annotation_regex() -> &'static regex::Regex {
     })
 }
 
+// @implements spec-ft-distribution-portable-runtime-root::TASK-DISTRIBUTION-001-1::REQ-002
 pub fn resolve_workspace_root() -> std::path::PathBuf {
-    std::env::var("AICO_ROOT")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|_| {
-            if std::path::Path::new("d:/aico").exists() {
-                std::path::PathBuf::from("d:/aico")
-            } else if std::path::Path::new("../..").exists() {
-                std::path::PathBuf::from("../..")
-            } else {
-                std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
-            }
-        })
+    aico_core::root::aico_root()
 }
 
 /// Recursively scan codebase directory for source files and parse @implements and @verifies annotations
@@ -2135,6 +2146,20 @@ pub fn scan_adrs_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredAdrI
 }
 
 
+fn resolve_target_specs_path(project: Option<aico_core::DiscoveredProject>) -> PathBuf {
+    if let Some(proj) = project {
+        if proj.specs_path.exists() {
+            return proj.specs_path;
+        }
+    }
+    let default_specs = aico_core::root::aico_root().join("specs").join("aico-specs");
+    if default_specs.exists() {
+        default_specs
+    } else {
+        aico_core::root::aico_root().join("specs")
+    }
+}
+
 // @implements ft-core-epic-hub::TASK-CORE-007-12::REQ-001
 // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-23::REQ-030
 async fn list_epics_handler(
@@ -2143,16 +2168,7 @@ async fn list_epics_handler(
     State(state): State<AppState>,
 ) -> Json<Vec<DiscoveredEpic>> {
     let project = resolve_project_context(&state, &headers, &query).await;
-    let target_path = if let Some(proj) = project {
-        if proj.specs_path.exists() {
-            proj.specs_path
-        } else {
-            std::path::PathBuf::from("d:/aico/aico-specs")
-        }
-    } else {
-        std::path::PathBuf::from("d:/aico/aico-specs")
-    };
-
+    let target_path = resolve_target_specs_path(project);
     Json(scan_epics_for_project(&target_path))
 }
 
@@ -2165,15 +2181,7 @@ async fn get_epic_handler(
     State(state): State<AppState>,
 ) -> Result<Json<DiscoveredEpic>, StatusCode> {
     let project = resolve_project_context(&state, &headers, &query).await;
-    let target_path = if let Some(proj) = project {
-        if proj.specs_path.exists() {
-            proj.specs_path
-        } else {
-            std::path::PathBuf::from("d:/aico/aico-specs")
-        }
-    } else {
-        std::path::PathBuf::from("d:/aico/aico-specs")
-    };
+    let target_path = resolve_target_specs_path(project);
 
     let epics = scan_epics_for_project(&target_path);
     let id_lower = id.to_lowercase();
@@ -2192,16 +2200,7 @@ async fn list_features_handler(
     State(state): State<AppState>,
 ) -> Json<Vec<DiscoveredFeatureInfo>> {
     let project = resolve_project_context(&state, &headers, &query).await;
-    let target_path = if let Some(proj) = project {
-        if proj.specs_path.exists() {
-            proj.specs_path
-        } else {
-            std::path::PathBuf::from("d:/aico/aico-specs")
-        }
-    } else {
-        std::path::PathBuf::from("d:/aico/aico-specs")
-    };
-
+    let target_path = resolve_target_specs_path(project);
     Json(scan_all_features_for_project(&target_path))
 }
 
@@ -2214,15 +2213,7 @@ async fn get_feature_handler(
     State(state): State<AppState>,
 ) -> Result<Json<DiscoveredFeatureInfo>, StatusCode> {
     let project = resolve_project_context(&state, &headers, &query).await;
-    let target_path = if let Some(proj) = project {
-        if proj.specs_path.exists() {
-            proj.specs_path
-        } else {
-            std::path::PathBuf::from("d:/aico/aico-specs")
-        }
-    } else {
-        std::path::PathBuf::from("d:/aico/aico-specs")
-    };
+    let target_path = resolve_target_specs_path(project);
 
     let all_features = scan_all_features_for_project(&target_path);
     let id_lower = id.to_lowercase();
@@ -2250,16 +2241,7 @@ async fn list_adrs_handler(
     State(state): State<AppState>,
 ) -> Json<Vec<DiscoveredAdrInfo>> {
     let project = resolve_project_context(&state, &headers, &query).await;
-    let target_path = if let Some(proj) = project {
-        if proj.specs_path.exists() {
-            proj.specs_path
-        } else {
-            std::path::PathBuf::from("d:/aico/aico-specs")
-        }
-    } else {
-        std::path::PathBuf::from("d:/aico/aico-specs")
-    };
-
+    let target_path = resolve_target_specs_path(project);
     Json(scan_adrs_for_project(&target_path))
 }
 
@@ -2272,15 +2254,7 @@ async fn get_adr_handler(
     State(state): State<AppState>,
 ) -> Result<Json<DiscoveredAdrInfo>, StatusCode> {
     let project = resolve_project_context(&state, &headers, &query).await;
-    let target_path = if let Some(proj) = project {
-        if proj.specs_path.exists() {
-            proj.specs_path
-        } else {
-            std::path::PathBuf::from("d:/aico/aico-specs")
-        }
-    } else {
-        std::path::PathBuf::from("d:/aico/aico-specs")
-    };
+    let target_path = resolve_target_specs_path(project);
 
     let adrs = scan_adrs_for_project(&target_path);
     let id_lower = id.to_lowercase();
@@ -2299,16 +2273,7 @@ async fn get_glossary_handler(
     State(state): State<AppState>,
 ) -> Json<Vec<TermInfo>> {
     let project = resolve_project_context(&state, &headers, &query).await;
-    let target_path = if let Some(proj) = project {
-        if proj.specs_path.exists() {
-            proj.specs_path
-        } else {
-            std::path::PathBuf::from("d:/aico/aico-specs")
-        }
-    } else {
-        std::path::PathBuf::from("d:/aico/aico-specs")
-    };
-
+    let target_path = resolve_target_specs_path(project);
     Json(load_project_glossary(&target_path))
 }
 
@@ -2410,10 +2375,159 @@ async fn get_raw_file_handler(
                         Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
                     };
                 }
+
+                // If path starts with project name or repo directory (e.g. "aico/crates/..."), strip it
+                let repo_prefix = format!("{}/", proj.name);
+                let stripped = query.path.strip_prefix(&repo_prefix).or_else(|| {
+                    code_path.file_name().and_then(|n| n.to_str()).and_then(|n| {
+                        let prefix = format!("{}/", n);
+                        query.path.strip_prefix(&prefix)
+                    })
+                });
+                if let Some(rel) = stripped {
+                    let stripped_rel = code_path.join(rel);
+                    if stripped_rel.exists() && stripped_rel.is_file() {
+                        return match std::fs::read_to_string(&stripped_rel) {
+                            Ok(content) => Ok(content),
+                            Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+                        };
+                    }
+                }
             }
         }
         Err(StatusCode::NOT_FOUND)
     }
+}
+
+fn current_time_rfc3339() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    format_rfc3339_utc(secs)
+}
+
+fn parse_semver_triplet(v: &str) -> (u64, u64, u64) {
+    let clean = v.split(|c| c == '-' || c == '+').next().unwrap_or(v);
+    let mut parts = clean.split('.');
+    let major = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+    let minor = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+    let patch = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+    (major, minor, patch)
+}
+
+fn is_version_greater(remote: &str, current: &str) -> bool {
+    let r = parse_semver_triplet(remote);
+    let c = parse_semver_triplet(current);
+    r > c
+}
+
+// @implements spec-ft-distribution-update-check::TASK-DISTRIBUTION-006-1::REQ-001
+// @implements spec-ft-distribution-update-check::TASK-DISTRIBUTION-006-1::REQ-003
+async fn handle_system_update(
+    State(state): State<AppState>,
+) -> Json<UpdateStatusResponse> {
+    let now = Instant::now();
+    let current_version = env!("CARGO_PKG_VERSION").to_string();
+
+    // Check opt-out
+    if let Ok(val) = std::env::var("AICO_NO_UPDATE_CHECK") {
+        if val == "1" || val.eq_ignore_ascii_case("true") {
+            return Json(UpdateStatusResponse {
+                current_version,
+                latest_version: None,
+                update_available: false,
+                release_url: None,
+                checked_at: current_time_rfc3339(),
+            });
+        }
+    }
+
+    // Check 6-hour cache (21600 seconds)
+    {
+        let cache_guard = state.update_cache.read().await;
+        if let Some(cached) = &*cache_guard {
+            if now.duration_since(cached.fetched_at).as_secs() < 6 * 3600 {
+                return Json(cached.response.clone());
+            }
+        }
+    }
+
+    let fallback = UpdateStatusResponse {
+        current_version: current_version.clone(),
+        latest_version: None,
+        update_available: false,
+        release_url: None,
+        checked_at: current_time_rfc3339(),
+    };
+
+    let api_url = std::env::var("AICO_UPDATE_API_URL")
+        .unwrap_or_else(|_| "https://api.github.com/repos/Lexer727/aico/releases/latest".to_string());
+
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+    {
+        Ok(c) => c,
+        Err(_) => return Json(fallback),
+    };
+
+    let resp = match client
+        .get(&api_url)
+        .header(reqwest::header::USER_AGENT, format!("aico-server/{}", current_version))
+        .header(reqwest::header::ACCEPT, "application/vnd.github.v3+json")
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(_) => return Json(fallback),
+    };
+
+    if !resp.status().is_success() {
+        return Json(fallback);
+    }
+
+    #[derive(Deserialize)]
+    struct GithubRelease {
+        tag_name: Option<String>,
+        html_url: Option<String>,
+    }
+
+    let release_info = match resp.json::<GithubRelease>().await {
+        Ok(info) => info,
+        Err(_) => return Json(fallback),
+    };
+
+    let latest_tag = match release_info.tag_name {
+        Some(t) => t,
+        None => return Json(fallback),
+    };
+
+    let clean_latest = latest_tag.trim_start_matches(|c| c == 'v' || c == 'V');
+    let release_url = release_info.html_url.or_else(|| {
+        Some(format!("https://github.com/Lexer727/aico/releases/tag/{}", latest_tag))
+    });
+
+    let update_available = is_version_greater(clean_latest, &current_version);
+
+    let status = UpdateStatusResponse {
+        current_version,
+        latest_version: Some(clean_latest.to_string()),
+        update_available,
+        release_url,
+        checked_at: current_time_rfc3339(),
+    };
+
+    // Store in cache
+    {
+        let mut cache_guard = state.update_cache.write().await;
+        *cache_guard = Some(CachedUpdateStatus {
+            fetched_at: now,
+            response: status.clone(),
+        });
+    }
+
+    Json(status)
 }
 
 // @implements ft-core-webui-shell::TASK-CORE-006-8::REQ-012
@@ -2846,11 +2960,7 @@ pub fn resolve_workspace_root_from_specs_path(specs_path: &StdPath) -> PathBuf {
         }
         return parent.to_path_buf();
     }
-    if StdPath::new("d:/aico").exists() {
-        PathBuf::from("d:/aico")
-    } else {
-        specs_path.to_path_buf()
-    }
+    aico_core::root::aico_root()
 }
 
 // @implements spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-1::REQ-003
@@ -2865,11 +2975,7 @@ pub fn get_workspace_root(registry: &WorkspaceRegistry) -> PathBuf {
     if let Some(first) = registry.list_cloned().first() {
         return resolve_workspace_root_from_specs_path(StdPath::new(&first.specs_path));
     }
-    if StdPath::new("d:/aico").exists() {
-        PathBuf::from("d:/aico")
-    } else {
-        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-    }
+    aico_core::root::aico_root()
 }
 
 pub async fn resolve_server_workspace_root(state: &AppState) -> PathBuf {

@@ -20,13 +20,63 @@ pub struct SyncReport {
 pub struct SkillsSynchronizer;
 
 impl SkillsSynchronizer {
+    // @implements spec-ft-distribution-portable-runtime-root::TASK-DISTRIBUTION-001-2::REQ-003
+    pub fn resolve_skills_source<P: AsRef<Path>, Q: AsRef<Path>>(
+        root: P,
+        exe_dir: Q,
+    ) -> Option<std::path::PathBuf> {
+        let root = root.as_ref();
+        let dev_source = root.join("codebase").join("aico").join("skills");
+        if dev_source.is_dir() {
+            if let Ok(entries) = fs::read_dir(&dev_source) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_dir() && path.join("SKILL.md").is_file() {
+                        return Some(dev_source);
+                    }
+                }
+            }
+        }
+
+        let bundled = exe_dir.as_ref().join("skills");
+        if bundled.is_dir() {
+            if let Ok(entries) = fs::read_dir(&bundled) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_dir() && path.join("SKILL.md").is_file() {
+                        return Some(bundled);
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    // @implements spec-ft-distribution-portable-runtime-root::TASK-DISTRIBUTION-001-2::REQ-003
+    pub fn sync_workspace_with_exe<P: AsRef<Path>, Q: AsRef<Path>>(
+        root_dir: P,
+        exe_dir: Q,
+    ) -> Result<SyncReport, SkillsSyncError> {
+        let root = root_dir.as_ref();
+        if let Some(source) = Self::resolve_skills_source(root, exe_dir) {
+            Self::sync_from_source(&source, root)
+        } else {
+            Ok(SyncReport::default())
+        }
+    }
+
     /// Synchronize workspace `.agents/skills/`, `.agents/rules/`, and `GEMINI.md`
-    /// from `<root_dir>/codebase/aico/skills`.
+    /// from `<root_dir>/codebase/aico/skills` or bundled `<exe_dir>/skills`.
     // @implements ft-core-skills-sync::TASK-SYNC-002::REQ-001
+    // @implements spec-ft-distribution-portable-runtime-root::TASK-DISTRIBUTION-001-2::REQ-003
     pub fn sync_workspace<P: AsRef<Path>>(root_dir: P) -> Result<SyncReport, SkillsSyncError> {
         let root = root_dir.as_ref();
-        let source_skills_dir = root.join("codebase").join("aico").join("skills");
-        Self::sync_from_source(&source_skills_dir, root)
+        let exe_dir = std::env::current_exe()
+            .ok()
+            .and_then(|e| e.parent().map(|p| p.to_path_buf()))
+            .unwrap_or_else(|| std::path::PathBuf::from("."));
+        Self::sync_workspace_with_exe(root, exe_dir)
     }
 
     /// Synchronize workspace skills and rules from an explicit skills source directory.

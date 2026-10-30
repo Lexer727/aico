@@ -1,0 +1,81 @@
+{
+  "tools": [
+    {
+      "id": "git",
+      "name": "Git",
+      "description": "Version control engine required for specs and codebase repositories",
+      "required": true,
+      "default_checked": true,
+      "detect_cmd": "git --version",
+      "winget_id": "Git.Git",
+      "npm_package": null,
+      "homepage_url": "https://git-scm.com/downloads"
+    },
+    {
+      "id": "gh",
+      "name": "GitHub CLI",
+      "description": "Command-line tool for GitHub authentication, repository creation, and pull requests",
+      "required": false,
+      "default_checked": true,
+      "detect_cmd": "gh --version",
+      "winget_id": "GitHub.cli",
+      "npm_package": null,
+      "homepage_url": "https://cli.github.com"
+    },
+    {
+      "id": "node",
+      "name": "Node.js LTS",
+      "description": "JavaScript runtime for running AICO skill scripts and artifact verification",
+      "required": false,
+      "default_checked": true,
+      "detect_cmd": "node --version",
+      "winget_id": "OpenJS.NodeJS.LTS",
+      "npm_package": null,
+      "homepage_url": "https://nodejs.org"
+    },
+    {
+      "id": "claude-code",
+      "name": "Claude Code",
+      "description": "Agentic coding harness from Anthropic for terminal-based workflow orchestration",
+      "required": false,
+      "default_checked": false,
+      "detect_cmd": "claude --version",
+      "winget_id": "Anthropic.ClaudeCode",
+      "npm_package": "@anthropic-ai/claude-code",
+      "homepage_url": "https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview"
+    },
+    {
+      "id": "antigravity",
+      "name": "Google Antigravity",
+      "description": "Next-generation agentic AI coding companion and developer IDE",
+      "required": false,
+      "default_checked": false,
+      "detect_cmd": "agy --version",
+      "winget_id": "Google.Antigravity",
+      "npm_package": null,
+      "homepage_url": "https://antigravity.google"
+    },
+    {
+      "id": "codex",
+      "name": "OpenAI Codex CLI",
+      "description": "OpenAI CLI harness for code synthesis and agent workflows",
+      "required": false,
+      "default_checked": false,
+      "detect_cmd": "codex --version",
+      "winget_id": null,
+      "npm_package": "@openai/codex",
+      "homepage_url": "https://github.com/openai/codex"
+    },
+    {
+      "id": "copilot",
+      "name": "GitHub Copilot CLI",
+      "description": "GitHub Copilot CLI extension for command suggestions and automation",
+      "required": false,
+      "default_checked": false,
+      "detect_cmd": "gh copilot --version",
+      "winget_id": "GitHub.Copilot",
+      "npm_package": "@githubnext/github-copilot-cli",
+      "homepage_url": "https://github.com/github/gh-copilot"
+    }
+  ]
+}

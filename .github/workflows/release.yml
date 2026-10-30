@@ -1,0 +1,99 @@
+# @implements spec-ft-distribution-release-pipeline::TASK-DISTRIBUTION-002-3::REQ-001
+# @implements spec-ft-distribution-release-pipeline::TASK-DISTRIBUTION-002-3::REQ-005
+# @implements spec-ft-distribution-release-pipeline::TASK-DISTRIBUTION-002-3::REQ-006
+# @implements spec-ft-distribution-release-pipeline::TASK-DISTRIBUTION-002-3::REQ-007
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version_override:
+        description: 'Version tag override for dry run (e.g. 0.2.0)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  release-windows:
+    name: Build & Release (Windows x64)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup Node.js LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Verify release version gate
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: powershell
+        run: |
+          .\scripts\check-release-version.ps1 -Tag "${{ github.ref_name }}" -CargoToml "Cargo.toml"
+
+      - name: Build WebUI bundle
+        shell: powershell
+        run: |
+          npm --prefix frontend ci
+          npm --prefix frontend run build
+
+      - name: Build aico-server binary (Release)
+        shell: powershell
+        run: |
+          cargo build --release -p aico-server
+
+      - name: Package Release Bundle
+        id: package
+        shell: powershell
+        run: |
+          $ver = if ("${{ github.ref_name }}" -match '^v?(.*)$') { $matches[1] } else { "0.2.0" }
+          if ("${{ github.event.inputs.version_override }}") {
+            $ver = "${{ github.event.inputs.version_override }}"
+          }
+          .\scripts\package-release.ps1 -Version $ver -BinaryPath "target/release/aico-server.exe" -SkillsPath "skills" -CatalogPath "installer/prerequisites.json" -OutDir "dist/release"
+          echo "version=$ver" >> $env:GITHUB_OUTPUT
+
+      - name: Build Windows Installer (Inno Setup)
+        if: hashFiles('installer/aico.iss') != ''
+        shell: powershell
+        run: |
+          choco install innosetup -y
+          $ver = "${{ steps.package.outputs.version }}"
+          iscc /DAppVersion="$ver" /DPayloadDir="dist/release" installer/aico.iss
+
+      - name: Upload Artifacts (Workflow dispatch & backup)
+        uses: actions/upload-artifact@v4
+        with:
+          name: aico-windows-x64-dist
+          path: dist/release/*
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "AICO v${{ steps.package.outputs.version }}"
+          files: |
+            dist/release/aico-windows-x64.zip
+            dist/release/aico-windows-x64.zip.sha256
+            dist/release/aico-setup-*.exe
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}

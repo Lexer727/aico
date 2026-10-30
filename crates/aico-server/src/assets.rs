@@ -15,8 +15,30 @@ use crate::server::AppState;
 #[folder = "../../frontend/dist"]
 pub struct FrontendAssets;
 
+/// Pure logic for evaluating disk asset lookup enablement
+pub fn check_disk_assets_policy(is_debug: bool, env_val: Option<&str>) -> bool {
+    if is_debug {
+        return true;
+    }
+    match env_val {
+        Some(v) => v == "1" || v.eq_ignore_ascii_case("true"),
+        None => false,
+    }
+}
+
+/// Returns whether on-disk WebUI assets are preferred over embedded assets.
+/// In release builds, disk lookups are disabled unless `AICO_DEV_ASSETS=1`.
+// @implements spec-ft-distribution-portable-runtime-root::TASK-DISTRIBUTION-001-3::REQ-004
+pub fn disk_assets_enabled() -> bool {
+    check_disk_assets_policy(
+        cfg!(debug_assertions),
+        std::env::var("AICO_DEV_ASSETS").ok().as_deref(),
+    )
+}
+
 /// Serves embedded WebUI static assets with SPA wildcard fallback and disk search backup
 // @implements ft-core-host-runtime::TASK-CORE-001-2::REQ-002
+// @implements spec-ft-distribution-portable-runtime-root::TASK-DISTRIBUTION-001-3::REQ-004
 pub async fn static_asset_handler(uri: Uri) -> impl IntoResponse {
     let raw_path = uri.path().trim_start_matches('/');
     let asset_path = if raw_path.is_empty() {
@@ -25,27 +47,29 @@ pub async fn static_asset_handler(uri: Uri) -> impl IntoResponse {
         raw_path
     };
 
-    // 1. Try reading exact asset from disk if present (allows live updates from frontend builds)
-    for base in &[
-        "codebase/aico/frontend/dist",
-        "frontend/dist",
-        "../frontend/dist",
-        "../../frontend/dist",
-        "dist",
-    ] {
-        let disk_path = StdPath::new(base).join(asset_path);
-        if disk_path.is_file() {
-            if let Ok(bytes) = std::fs::read(&disk_path) {
-                let mime = mime_guess::from_path(asset_path).first_or_octet_stream();
-                return Response::builder()
-                    .status(StatusCode::OK)
-                    .header(
-                        header::CONTENT_TYPE,
-                        HeaderValue::from_str(mime.as_ref())
-                            .unwrap_or_else(|_| HeaderValue::from_static("application/octet-stream")),
-                    )
-                    .body(Body::from(bytes))
-                    .unwrap();
+    // 1. Try reading exact asset from disk if present and enabled (allows live updates from frontend builds)
+    if disk_assets_enabled() {
+        for base in &[
+            "codebase/aico/frontend/dist",
+            "frontend/dist",
+            "../frontend/dist",
+            "../../frontend/dist",
+            "dist",
+        ] {
+            let disk_path = StdPath::new(base).join(asset_path);
+            if disk_path.is_file() {
+                if let Ok(bytes) = std::fs::read(&disk_path) {
+                    let mime = mime_guess::from_path(asset_path).first_or_octet_stream();
+                    return Response::builder()
+                        .status(StatusCode::OK)
+                        .header(
+                            header::CONTENT_TYPE,
+                            HeaderValue::from_str(mime.as_ref())
+                                .unwrap_or_else(|_| HeaderValue::from_static("application/octet-stream")),
+                        )
+                        .body(Body::from(bytes))
+                        .unwrap();
+                }
             }
         }
     }
@@ -64,25 +88,27 @@ pub async fn static_asset_handler(uri: Uri) -> impl IntoResponse {
             .unwrap();
     }
 
-    // 3. SPA Wildcard Fallback: for non-API client routes, check disk index.html first
-    for base in &[
-        "codebase/aico/frontend/dist",
-        "frontend/dist",
-        "../frontend/dist",
-        "../../frontend/dist",
-        "dist",
-    ] {
-        let disk_path = StdPath::new(base).join("index.html");
-        if disk_path.is_file() {
-            if let Ok(bytes) = std::fs::read(&disk_path) {
-                return Response::builder()
-                    .status(StatusCode::OK)
-                    .header(
-                        header::CONTENT_TYPE,
-                        HeaderValue::from_static("text/html; charset=utf-8"),
-                    )
-                    .body(Body::from(bytes))
-                    .unwrap();
+    // 3. SPA Wildcard Fallback: for non-API client routes, check disk index.html first if enabled
+    if disk_assets_enabled() {
+        for base in &[
+            "codebase/aico/frontend/dist",
+            "frontend/dist",
+            "../frontend/dist",
+            "../../frontend/dist",
+            "dist",
+        ] {
+            let disk_path = StdPath::new(base).join("index.html");
+            if disk_path.is_file() {
+                if let Ok(bytes) = std::fs::read(&disk_path) {
+                    return Response::builder()
+                        .status(StatusCode::OK)
+                        .header(
+                            header::CONTENT_TYPE,
+                            HeaderValue::from_static("text/html; charset=utf-8"),
+                        )
+                        .body(Body::from(bytes))
+                        .unwrap();
+                }
             }
         }
     }
@@ -169,7 +195,12 @@ pub async fn get_effective_specs_path(state: &AppState) -> PathBuf {
             return proj.specs_path.clone();
         }
     }
-    PathBuf::from("d:/aico/aico-specs")
+    let default_specs = aico_core::root::aico_root().join("specs").join("aico-specs");
+    if default_specs.exists() {
+        default_specs
+    } else {
+        aico_core::root::aico_root().join("specs")
+    }
 }
 
 pub async fn get_effective_codebase_path(state: &AppState) -> Option<PathBuf> {

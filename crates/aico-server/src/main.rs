@@ -2,44 +2,88 @@ use aico_core::scanner::RootScanner;
 use aico_core::SkillsSynchronizer;
 use aico_server::{AppState, HostServer, ServerConfig};
 use std::env;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 1. Initialize logging
+    let args: Vec<String> = env::args().collect();
+
+    // 0. Handle --version flag immediately
+    // @implements spec-ft-distribution-portable-runtime-root::TASK-DISTRIBUTION-001-1::REQ-006
+    if args.iter().any(|arg| arg == "--version" || arg == "-V") {
+        println!("aico-server {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+
+    // Parse --root argument if present
+    // @implements spec-ft-distribution-portable-runtime-root::TASK-DISTRIBUTION-001-1::REQ-001
+    let mut cli_root = None;
+    let mut i = 1;
+    while i < args.len() {
+        if args[i] == "--root" && i + 1 < args.len() {
+            cli_root = Some(PathBuf::from(&args[i + 1]));
+            i += 2;
+        } else {
+            i += 1;
+        }
+    }
+
+    // 1. Determine root directory for project scanning
+    // @implements spec-ft-distribution-portable-runtime-root::TASK-DISTRIBUTION-001-1::REQ-001
+    // @implements spec-ft-distribution-portable-runtime-root::TASK-DISTRIBUTION-001-1::REQ-008
+    let env_root = env::var("AICO_ROOT").ok().map(PathBuf::from);
+    let current_exe = env::current_exe().unwrap_or_else(|_| PathBuf::from("aico-server.exe"));
+    let current_dir = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+
+    let root_dir = match aico_core::root::resolve_aico_root(
+        cli_root.as_deref(),
+        env_root.as_deref(),
+        &current_exe,
+        &current_dir,
+    ) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("[!] Error resolving AICO workspace root: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let _ = aico_core::root::set_aico_root(&root_dir);
+
+    // 2. Initialize dual logging (stdout + file in <root>/.aico/logs/aico-server.log)
     // @implements spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-7::REQ-015
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info,lance=warn,lancedb=warn")),
-        )
+    // @implements spec-ft-distribution-portable-runtime-root::TASK-DISTRIBUTION-001-4::REQ-007
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
+
+    let logs_dir = aico_core::root::logs_dir(&root_dir);
+    let file_appender = tracing_appender::rolling::never(&logs_dir, "aico-server.log");
+    let (file_writer, _log_guard) = tracing_appender::non_blocking(file_appender);
+
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info,lance=warn,lancedb=warn"));
+
+    tracing_subscriber::registry()
+        .with(env_filter)
+        .with(tracing_subscriber::fmt::layer())
+        .with(tracing_subscriber::fmt::layer().with_writer(file_writer).with_ansi(false))
         .init();
 
+    // @implements spec-ft-distribution-portable-runtime-root::TASK-DISTRIBUTION-001-1::REQ-005
     println!("============================================================");
     println!("   AICO - Autonomous Intelligent Code Orchestrator");
-    println!("   Version: 0.1.1 (Spec-Driven Development Platform)");
+    println!("   Version: {} (Spec-Driven Development Platform)", env!("CARGO_PKG_VERSION"));
     println!("============================================================");
-
-    // 2. Determine root directory for project scanning
-    let root_dir = env::var("AICO_ROOT")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            if Path::new("d:/aico").exists() {
-                PathBuf::from("d:/aico")
-            } else if Path::new("../..").exists() {
-                PathBuf::from("../..")
-            } else {
-                env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-            }
-        });
 
     println!("[*] Workspace root: {}", root_dir.display());
 
-    // 2b. Synchronize workspace .agents/skills, .agents/rules, and GEMINI.md from codebase/aico/skills
+    // 2b. Synchronize workspace .agents/skills, .agents/rules, and GEMINI.md from codebase/aico/skills or bundled skills
     // @implements ft-core-skills-sync::TASK-SYNC-002::REQ-002
     // @implements ft-core-skills-sync::TASK-SYNC-003::REQ-005
     // @implements ft-core-skills-sync::TASK-SYNC-003::REQ-007
-    match SkillsSynchronizer::sync_workspace(&root_dir) {
+    // @implements spec-ft-distribution-portable-runtime-root::TASK-DISTRIBUTION-001-2::REQ-003
+    let exe_dir = current_exe.parent().unwrap_or(&root_dir);
+    match SkillsSynchronizer::sync_workspace_with_exe(&root_dir, exe_dir) {
         Ok(report) if report.skills_synced > 0 => {
             println!(
                 "[*] Workspace skills & rules synced ({} skills, {} files updated, {} stale entries pruned)",
@@ -48,8 +92,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Ok(_) => {
             tracing::warn!(
-                "Skills submodule not found or empty under {}/codebase/aico/skills; skipping workspace sync",
-                root_dir.display()
+                "Skills source not found or empty under {} or {}; skipping workspace sync",
+                root_dir.join("codebase/aico/skills").display(),
+                exe_dir.join("skills").display()
             );
         }
         Err(e) => {

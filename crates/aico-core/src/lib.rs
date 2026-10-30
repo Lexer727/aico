@@ -7,6 +7,7 @@ pub mod human_gate;
 pub mod config;
 pub mod skills_sync;
 pub mod github;
+pub mod root;
 
 pub use manifest::{ProjectManifest, ProjectRepository, ManifestError};
 pub use scanner::{RootScanner, DiscoveredProject, ProjectStatus};

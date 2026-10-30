@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import { AiStatusMonitor } from './AiStatusMonitor';
+import { UpdateBanner } from './UpdateBanner';
 import { apiFetch } from '../../utils/apiClient';
 import type {
   DiscoveredEpic,
@@ -898,6 +899,7 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col min-h-0 overflow-hidden min-w-0 bg-zinc-950 relative">
+        <UpdateBanner />
         {isMobile && currentMobileView === 'tree' ? (
           <div data-testid="mobile-tree-view" className="flex-1 overflow-y-auto h-full w-full">
             {renderNavContent()}
