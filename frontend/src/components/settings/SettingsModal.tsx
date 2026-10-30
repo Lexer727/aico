@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Settings, Shield, Server, Database, Sliders, FolderTree, Bell, RefreshCw, Layers } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Settings, Shield, Server, Database, Sliders, FolderTree, Bell, RefreshCw, Layers, GitBranch, Eye, EyeOff } from 'lucide-react';
 import { apiFetch } from '../../utils/apiClient';
 
 interface SettingsModalProps {
@@ -31,6 +31,87 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
   const [isReindexingVectors, setIsReindexingVectors] = useState(false);
   const [vectorStatusMessage, setVectorStatusMessage] = useState<string | null>(null);
+
+  // @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-6::REQ-004
+  interface GitHubStatus {
+    authenticated: boolean;
+    username: string | null;
+    source: string;
+    scopes: string[];
+    error?: string | null;
+  }
+  const [ghStatus, setGhStatus] = useState<GitHubStatus | null>(null);
+  const [ghTokenInput, setGhTokenInput] = useState('');
+  const [showToken, setShowToken] = useState(false);
+  const [isVerifyingGithub, setIsVerifyingGithub] = useState(false);
+  const [isDisconnectingGithub, setIsDisconnectingGithub] = useState(false);
+  const [ghError, setGhError] = useState<string | null>(null);
+  const [ghSuccess, setGhSuccess] = useState<string | null>(null);
+
+  const fetchGithubStatus = async () => {
+    try {
+      const res = await apiFetch('/api/v1/github/status');
+      if (res.ok) {
+        const data = await res.json();
+        setGhStatus(data);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchGithubStatus();
+    }
+  }, [isOpen]);
+
+  const handleSaveGithubToken = async () => {
+    if (!ghTokenInput.trim()) return;
+    setIsVerifyingGithub(true);
+    setGhError(null);
+    setGhSuccess(null);
+    try {
+      const res = await apiFetch('/api/v1/github/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: ghTokenInput.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok && data.status === 'ok') {
+        setGhSuccess(`Connected successfully as @${data.username}`);
+        setGhTokenInput('');
+        await fetchGithubStatus();
+      } else {
+        setGhError(data.error || 'Failed to verify GitHub token');
+      }
+    } catch {
+      setGhError('Network error connecting to server');
+    } finally {
+      setIsVerifyingGithub(false);
+    }
+  };
+
+  const handleDisconnectGithub = async () => {
+    setIsDisconnectingGithub(true);
+    setGhError(null);
+    setGhSuccess(null);
+    try {
+      const res = await apiFetch('/api/v1/github/token', {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        setGhSuccess('GitHub token removed');
+        await fetchGithubStatus();
+      } else {
+        setGhError('Failed to remove GitHub token');
+      }
+    } catch {
+      setGhError('Network error connecting to server');
+    } finally {
+      setIsDisconnectingGithub(false);
+    }
+  };
 
   const handleRebuildGraph = async () => {
     setIsRebuildingGraph(true);
@@ -255,6 +336,127 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               <div className="text-[10px] text-zinc-500 italic pt-1">
                 All navigation and code viewer tabs resolve canonically relative to this root (e.g. codebase/aico/...).
               </div>
+            </div>
+          </section>
+
+          {/* GitHub Integration Section */}
+          {/* @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-6::REQ-004 */}
+          <section className="space-y-2.5" data-testid="section-github-integration">
+            <div className="flex items-center justify-between font-semibold text-zinc-300">
+              <div className="flex items-center gap-2">
+                <GitBranch className="w-3.5 h-3.5 text-purple-400" />
+                <span>GitHub Integration</span>
+              </div>
+              {ghStatus?.authenticated && (
+                <span data-testid="github-connected-badge" className="text-[11px] font-mono text-emerald-400 bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-800/50 flex items-center gap-1">
+                  ✓ Connected as @{ghStatus.username}
+                </span>
+              )}
+            </div>
+
+            <div className="bg-zinc-950/60 p-3.5 rounded-lg border border-zinc-800/80 space-y-3">
+              {ghStatus?.authenticated ? (
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <span className="text-zinc-200 font-medium block">GitHub Account</span>
+                      <span className="text-[11px] text-zinc-400 block font-mono">
+                        @{ghStatus.username} <span className="text-zinc-500">({ghStatus.source})</span>
+                      </span>
+                    </div>
+                    {ghStatus.source === 'configfile' && (
+                      <button
+                        type="button"
+                        data-testid="disconnect-github-btn"
+                        onClick={handleDisconnectGithub}
+                        disabled={isDisconnectingGithub}
+                        className="px-2.5 py-1 bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-800/50 rounded text-xs transition-colors cursor-pointer"
+                      >
+                        {isDisconnectingGithub ? 'Disconnecting...' : 'Disconnect'}
+                      </button>
+                    )}
+                  </div>
+                  {ghStatus.scopes && ghStatus.scopes.length > 0 && (
+                    <div className="text-[11px] text-zinc-500 flex items-center gap-1.5 flex-wrap">
+                      <span>Scopes:</span>
+                      {ghStatus.scopes.map((s) => (
+                        <span key={s} className="bg-zinc-900 text-zinc-400 px-1.5 py-0.5 rounded font-mono text-[10px] border border-zinc-800">
+                          {s}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  <p className="text-[11px] text-zinc-400 leading-relaxed">
+                    Connect your GitHub Personal Access Token to enable automatic repository creation, status checks, and specs cloning.
+                  </p>
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] text-zinc-400 font-medium block">Personal Access Token (requires 'repo' scope)</label>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <input
+                          data-testid="github-token-input"
+                          type={showToken ? 'text' : 'password'}
+                          placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                          value={ghTokenInput}
+                          onChange={(e) => {
+                            setGhTokenInput(e.target.value);
+                            setGhError(null);
+                          }}
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-indigo-500 font-mono pr-8"
+                        />
+                        <button
+                          type="button"
+                          data-testid="toggle-token-visibility-btn"
+                          onClick={() => setShowToken(!showToken)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 p-0.5"
+                          title={showToken ? 'Hide token' : 'Show token'}
+                        >
+                          {showToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        data-testid="verify-github-token-btn"
+                        onClick={handleSaveGithubToken}
+                        disabled={isVerifyingGithub || !ghTokenInput.trim()}
+                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                      >
+                        {isVerifyingGithub ? 'Verifying...' : 'Verify & Connect'}
+                      </button>
+                    </div>
+                    <div className="flex justify-between items-center text-[10px] pt-0.5">
+                      <a
+                        href="https://github.com/settings/tokens/new?scopes=repo&description=AICO"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-indigo-400 hover:text-indigo-300 underline"
+                      >
+                        Generate a token on GitHub (requires 'repo' scope) ↗
+                      </a>
+                      {ghStatus?.source === 'cli' && (
+                        <span className="text-zinc-500">Detected GitHub CLI</span>
+                      )}
+                      {ghStatus?.source === 'env' && (
+                        <span className="text-zinc-500">Detected environment token</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {ghError && (
+                    <div data-testid="github-error-msg" className="text-[11px] text-red-400 bg-red-950/40 p-2 rounded border border-red-800/50">
+                      {ghError}
+                    </div>
+                  )}
+                  {ghSuccess && (
+                    <div data-testid="github-success-msg" className="text-[11px] text-emerald-400 bg-emerald-950/40 p-2 rounded border border-emerald-800/50">
+                      {ghSuccess}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </section>
 

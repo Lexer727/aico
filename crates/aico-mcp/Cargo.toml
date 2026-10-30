@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+aico-core = { path = "../aico-core" }
 aico-storage = { path = "../aico-storage" }
 tokio.workspace = true
 serde.workspace = true

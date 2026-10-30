@@ -6,6 +6,7 @@ pub mod git;
 pub mod terminal;
 pub mod quotas;
 pub mod crawler;
+pub mod github_service;
 
 pub use server::{
     AppState, CodeAnnotationInfo, CodeFileInfo, DiscoveredEpic, DiscoveredSpecInfo, HealthResponse,

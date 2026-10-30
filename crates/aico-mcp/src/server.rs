@@ -105,6 +105,22 @@ impl McpServerManager {
                     "required": ["req_id", "statement"]
                 }),
             },
+            // @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-5::REQ-010
+            ToolDefinition {
+                name: "create_project".to_string(),
+                description: "Scaffold a new AICO project specifications directory and configure .aico-project.json".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "project_name": { "type": "string", "description": "The kebab-case name of the project" },
+                        "display_name": { "type": "string", "description": "Optional human-readable title" },
+                        "url": { "type": "string", "description": "Optional remote Git URL" },
+                        "local_only": { "type": "boolean", "description": "Whether to skip GitHub remote creation" },
+                        "private": { "type": "boolean", "description": "Whether the GitHub repository is private" }
+                    },
+                    "required": ["project_name"]
+                }),
+            },
         ]
     }
 
@@ -236,6 +252,22 @@ impl McpServerManager {
 
                 match tracker.verify_task(task_id, req_id) {
                     Ok(report) => Ok(serde_json::to_value(report).unwrap()),
+                    Err(e) => Err(ToolError::ExecutionFailed(e.to_string())),
+                }
+            }
+            // @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-5::REQ-010
+            "create_project" => {
+                let project_name = params
+                    .get("project_name")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| ToolError::InvalidParameters(name.to_string(), "Missing 'project_name'".to_string()))?;
+                let ws_root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+                match aico_core::wizard::CodebaseWizard::scaffold_project_specs(&ws_root, project_name) {
+                    Ok(path) => Ok(serde_json::json!({
+                        "status": "created",
+                        "project_name": project_name,
+                        "specs_path": path.to_string_lossy().to_string(),
+                    })),
                     Err(e) => Err(ToolError::ExecutionFailed(e.to_string())),
                 }
             }

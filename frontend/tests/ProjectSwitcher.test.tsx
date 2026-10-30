@@ -118,14 +118,15 @@ describe('ProjectSwitcher', () => {
             project_name: 'my-service',
             name: 'My Service UI',
             display_name: 'My Service UI',
-            url: undefined,
+            url: 'https://github.com/<username>/my-service-specs.git',
+            local_only: false,
+            private: true,
             repositories: [
               {
                 id: 'service-backend',
                 name: 'My Service Codebase',
                 path: '../codebase/service-backend',
                 type: 'codebase',
-                url: undefined,
               },
             ],
           }),
@@ -195,5 +196,76 @@ describe('ProjectSwitcher', () => {
     // Reset URL back
     window.history.pushState({}, '', '/');
     useTabStore.getState().reset();
+  });
+
+  // @verifies spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-7::REQ-001
+  // @verifies spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-7::REQ-002
+  // @verifies spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-7::REQ-005
+  // @verifies spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-7::REQ-006
+  it('verifies Add Project flow, local-only mode, and removal of default codebase text', () => {
+    render(<ProjectSwitcher projects={mockProjects} />);
+
+    // REQ-001: Trigger button shows "+ Add Project"
+    const addBtn = screen.getByTestId('btn-new-project-trigger');
+    expect(addBtn).toHaveTextContent('+ Add Project');
+    fireEvent.click(addBtn);
+
+    // REQ-001: Modal title is "Add Project (.aico-project.json)"
+    expect(screen.getByText('Add Project (.aico-project.json)')).toBeInTheDocument();
+
+    // REQ-002: Does NOT show misleading "Default codebase repository (<id>) will be created automatically"
+    expect(screen.queryByText(/will be created automatically/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/No linked codebase repositories configured/i)).toBeInTheDocument();
+
+    // REQ-005: Typing project name auto-prefills specs URL with -specs.git
+    const slugInput = screen.getByTestId('input-new-project-name');
+    fireEvent.change(slugInput, { target: { value: 'nebula' } });
+    const specsUrlInput = screen.getByTestId('input-project-specs-url') as HTMLInputElement;
+    expect(specsUrlInput.value).toContain('nebula-specs.git');
+
+    // REQ-006: Local repository only hides specs URL input
+    const localOnlyCheckbox = screen.getByTestId('checkbox-local-only');
+    fireEvent.click(localOnlyCheckbox);
+    expect(screen.queryByTestId('input-project-specs-url')).not.toBeInTheDocument();
+
+    // Uncheck local-only restores URL input
+    fireEvent.click(localOnlyCheckbox);
+    expect(screen.getByTestId('input-project-specs-url')).toBeInTheDocument();
+  });
+
+  // @verifies spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-7::REQ-003
+  it('verifies Browse ../codebase opens folder picker and links repository', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((url: string) => {
+      if (url === '/api/v1/workspace/codebase-folders') {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve([
+              { id: 'engine-core', name: 'Engine Core', path: '../codebase/engine-core', is_git: true },
+            ]),
+        } as any);
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as any);
+    });
+
+    render(<ProjectSwitcher projects={mockProjects} />);
+    fireEvent.click(screen.getByTestId('btn-new-project-trigger'));
+
+    const browseBtn = screen.getByTestId('btn-browse-codebase');
+    expect(browseBtn).toBeInTheDocument();
+    fireEvent.click(browseBtn);
+
+    const folderItem = await screen.findByTestId('codebase-folder-item-engine-core');
+    expect(folderItem).toBeInTheDocument();
+    expect(screen.getByText('engine-core')).toBeInTheDocument();
+
+    // Clicking folder adds it to repositories
+    fireEvent.click(folderItem);
+    expect(screen.getByTestId('manifest-repo-row-0')).toBeInTheDocument();
+    const repoId = screen.getByTestId('input-repo-id-0') as HTMLInputElement;
+    expect(repoId.value).toBe('engine-core');
+
+    // REQ-002: Static codebase badge instead of select
+    expect(screen.getByTestId('static-repo-type-0')).toHaveTextContent('codebase');
   });
 });

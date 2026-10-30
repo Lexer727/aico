@@ -18,11 +18,13 @@ use tokio::net::TcpListener;
 use tokio::sync::RwLock;
 
 use aico_core::{AicoConfig, DiscoveredProject, ProjectStatus, WorkspaceRegistry};
+use aico_core::github::GitHubCredentialManager;
 use crate::auth::LanAuthenticator;
 use crate::git::{
     collect_project_git_status, git_ai_commit_repo, git_clone_repo, git_commit_repo, git_pull_repo, git_push_repo,
     GitRepoStatus,
 };
+use crate::github_service::{CheckRepoRequest, CreateRepoRequest, GitHubService};
 use crate::ws::WebSocketHub;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -363,6 +365,15 @@ impl HostServer {
             .route("/api/v1/projects", get(list_projects_handler).post(handle_create_project))
             .route("/api/v1/projects/manifest", get(handle_get_project_manifest).put(handle_update_project_manifest).post(handle_update_project_manifest))
             .route("/api/v1/projects/active", post(set_active_project_handler))
+            // @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-1::REQ-004
+            .route("/api/v1/github/status", get(handle_github_status))
+            .route("/api/v1/github/token", post(handle_save_github_token).delete(handle_delete_github_token))
+            // @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-2::REQ-008
+            .route("/api/v1/github/check-repo", post(handle_github_check_repo))
+            // @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-2::REQ-009
+            .route("/api/v1/github/create-repo", post(handle_github_create_repo))
+            // @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-3::REQ-003
+            .route("/api/v1/workspace/codebase-folders", get(handle_get_codebase_folders))
             // @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-2::REQ-005
             .route("/api/v1/projects/switch", post(set_active_project_handler))
             // @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-4::REQ-003
@@ -2872,6 +2883,10 @@ fn default_manifest_repo_type() -> String {
     "codebase".to_string()
 }
 
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Debug, Deserialize)]
 pub struct CreateProjectRequest {
     #[serde(default)]
@@ -2884,6 +2899,10 @@ pub struct CreateProjectRequest {
     pub url: Option<String>,
     #[serde(default)]
     pub repositories: Option<Vec<ManifestRepoPayload>>,
+    #[serde(default)]
+    pub local_only: Option<bool>,
+    #[serde(default = "default_true")]
+    pub private: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2919,6 +2938,125 @@ pub struct UpdateProjectManifestRequest {
     pub repositories: Vec<ManifestRepoPayload>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct SaveGitHubTokenRequest {
+    pub token: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodebaseFolderItem {
+    pub id: String,
+    pub name: String,
+    pub path: String,
+    pub is_git: bool,
+}
+
+// @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-1::REQ-004
+async fn handle_github_status() -> impl IntoResponse {
+    let status = GitHubService::get_status().await;
+    Json(status)
+}
+
+// @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-1::REQ-004
+async fn handle_save_github_token(
+    Json(payload): Json<SaveGitHubTokenRequest>,
+) -> impl IntoResponse {
+    match GitHubService::verify_and_save_token(&payload.token).await {
+        Ok(username) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "status": "ok",
+                "username": username
+            })),
+        ).into_response(),
+        Err(err) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": err
+            })),
+        ).into_response(),
+    }
+}
+
+// @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-1::REQ-004
+async fn handle_delete_github_token() -> impl IntoResponse {
+    match GitHubCredentialManager::delete_token() {
+        Ok(()) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "status": "ok"
+            })),
+        ).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "error": format!("Failed to delete token: {}", e)
+            })),
+        ).into_response(),
+    }
+}
+
+// @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-2::REQ-008
+async fn handle_github_check_repo(
+    Json(payload): Json<CheckRepoRequest>,
+) -> impl IntoResponse {
+    let res = GitHubService::check_repository(&payload.url).await;
+    Json(res)
+}
+
+// @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-2::REQ-009
+async fn handle_github_create_repo(
+    Json(payload): Json<CreateRepoRequest>,
+) -> impl IntoResponse {
+    match GitHubService::create_repository(&payload.name, payload.private, payload.description.as_deref()).await {
+        Ok(res) => (StatusCode::CREATED, Json(res)).into_response(),
+        Err(err) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": err })),
+        ).into_response(),
+    }
+}
+
+// @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-3::REQ-003
+async fn handle_get_codebase_folders(
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let registry = state.registry.read().await;
+    let ws_root = get_workspace_root(&registry);
+    drop(registry);
+
+    let codebase_dir = ws_root.join("codebase");
+    let mut folders = Vec::new();
+
+    if codebase_dir.exists() && codebase_dir.is_dir() {
+        if let Ok(entries) = std::fs::read_dir(&codebase_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    let folder_name = entry.file_name().to_string_lossy().to_string();
+                    if !folder_name.starts_with('.') {
+                        let is_git = path.join(".git").exists();
+                        folders.push(CodebaseFolderItem {
+                            id: folder_name.clone(),
+                            name: folder_name.clone(),
+                            path: format!("../codebase/{}", folder_name),
+                            is_git,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    folders.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    Json(folders)
+}
+
+// @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-4::REQ-006
+// @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-4::REQ-007
+// @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-4::REQ-008
+// @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-4::REQ-009
+// @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-4::REQ-011
 // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-4::REQ-004
 // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-4::REQ-007
 // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-2::REQ-010
@@ -2967,16 +3105,13 @@ async fn handle_create_project(
         ).into_response();
     }
 
-    // @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-6::REQ-002
-    let subdirs = ["adr", "epics", "features"];
-    for sub in &subdirs {
-        if let Err(e) = std::fs::create_dir_all(target_specs_dir.join(sub)) {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({ "error": format!("Failed to create directory {}: {}", sub, e) })),
-            ).into_response();
-        }
-    }
+    let is_local_only = payload.local_only.unwrap_or(false);
+    let clean_specs_url = payload
+        .url
+        .as_deref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
 
     let title = slug
         .split('-')
@@ -3005,18 +3140,147 @@ async fn handle_create_project(
         })
         .unwrap_or_else(|| format!("{} Specs", title));
 
-    let clean_specs_url = payload
-        .url
-        .as_deref()
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string());
-
     let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
     let now = format_rfc3339_utc(secs);
+
+    // If remote specs URL is provided and not local-only:
+    if !is_local_only && clean_specs_url.is_some() {
+        let specs_url = clean_specs_url.as_ref().unwrap();
+        let check_res = GitHubService::check_repository(specs_url).await;
+
+        if check_res.exists && check_res.is_specs {
+            // Case A: Exists and is AICO specs repo -> git clone specs and any declared linked repos
+            let clone_out = std::process::Command::new("git")
+                .args(["clone", specs_url, &target_specs_dir.to_string_lossy()])
+                .output();
+
+            match clone_out {
+                Ok(out) if out.status.success() => {},
+                Ok(out) => {
+                    let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                    let _ = std::fs::remove_dir_all(&target_specs_dir);
+                    return (
+                        StatusCode::BAD_GATEWAY,
+                        Json(serde_json::json!({
+                            "error": format!("Failed to clone specifications repository: {}", err)
+                        })),
+                    ).into_response();
+                }
+                Err(e) => {
+                    let _ = std::fs::remove_dir_all(&target_specs_dir);
+                    return (
+                        StatusCode::BAD_GATEWAY,
+                        Json(serde_json::json!({
+                            "error": format!("Failed to execute git clone: {}", e)
+                        })),
+                    ).into_response();
+                }
+            }
+
+            // Read the cloned .aico-project.json manifest
+            let manifest_path = target_specs_dir.join(".aico-project.json");
+            let manifest_str = match std::fs::read_to_string(&manifest_path) {
+                Ok(content) => content,
+                Err(e) => {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(serde_json::json!({
+                            "error": format!("Failed to read cloned .aico-project.json: {}", e)
+                        })),
+                    ).into_response();
+                }
+            };
+
+            let parsed_manifest = aico_core::ProjectManifest::from_json_str(&manifest_str).unwrap_or_else(|_| {
+                aico_core::ProjectManifest {
+                    name: slug.clone(),
+                    id: Some(format!("{}-specs", slug)),
+                    version: Some("0.1.0".to_string()),
+                    codebase_path: None,
+                    created_at: Some(now.clone()),
+                    repositories: None,
+                }
+            });
+
+            // If manifest specifies linked repositories with git URLs, clone any that don't exist yet
+            if let Some(ref repos) = parsed_manifest.repositories {
+                for r in repos {
+                    if let Some(rurl) = &r.url {
+                        let clean_rurl = rurl.trim();
+                        if !clean_rurl.is_empty() {
+                            let rel = r.path.strip_prefix("../").unwrap_or(&r.path);
+                            let target_codebase = ws_root.join(rel);
+                            if !target_codebase.exists() {
+                                if let Some(parent) = target_codebase.parent() {
+                                    let _ = std::fs::create_dir_all(parent);
+                                }
+                                let _ = std::process::Command::new("git")
+                                    .args(["clone", clean_rurl, &target_codebase.to_string_lossy()])
+                                    .output();
+                            }
+                        }
+                    }
+                }
+            }
+
+            let codebase_path = parsed_manifest
+                .resolve_codebase_path(&target_specs_dir)
+                .filter(|p| p.exists());
+            let proj_status = if codebase_path.is_some() {
+                ProjectStatus::Active
+            } else {
+                ProjectStatus::CodebaseMissing
+            };
+
+            let mut reg = state.registry.write().await;
+            let proj = DiscoveredProject {
+                id: format!("{}-specs", slug),
+                name: parsed_manifest.display_name(),
+                specs_path: target_specs_dir.clone(),
+                codebase_path,
+                manifest: parsed_manifest,
+                status: proj_status,
+            };
+            reg.register(proj.clone());
+            reg.set_active(&proj.id);
+            drop(reg);
+
+            state.ws_hub.broadcast("active_project_changed", &proj.id);
+            state.ws_hub.broadcast("projects_updated", &proj.id);
+            let _ = state.storage_federation.register_project(&proj.id, &proj.specs_path).await;
+
+            return (StatusCode::CREATED, Json(proj)).into_response();
+        } else if !check_res.exists {
+            // Case D: Remote does not exist on GitHub yet -> create repository on GitHub
+            let repo_name = check_res.repo.clone().unwrap_or_else(|| format!("{}-specs", slug));
+            match GitHubService::create_repository(&repo_name, payload.private, None).await {
+                Ok(_) => {},
+                Err(e) => {
+                    return (
+                        StatusCode::BAD_GATEWAY,
+                        Json(serde_json::json!({
+                            "error": format!("Failed to create remote repository on GitHub: {}", e)
+                        })),
+                    ).into_response();
+                }
+            }
+        }
+    }
+
+    // Standard local scaffolding path (for new repos, empty existing repos, or local-only)
+    let subdirs = ["adr", "epics", "features"];
+    for sub in &subdirs {
+        if let Err(e) = std::fs::create_dir_all(target_specs_dir.join(sub)) {
+            let _ = std::fs::remove_dir_all(&target_specs_dir);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": format!("Failed to create directory {}: {}", sub, e) })),
+            ).into_response();
+        }
+    }
 
     let repo_entries_json: Vec<serde_json::Value> = if let Some(custom_repos) = payload.repositories {
         let mut entries = Vec::new();
@@ -3049,12 +3313,7 @@ async fn handle_create_project(
         }
         entries
     } else {
-        vec![serde_json::json!({
-            "id": slug,
-            "name": format!("{} Codebase", title),
-            "path": format!("../codebase/{}", slug),
-            "type": "codebase"
-        })]
+        vec![]
     };
 
     let mut manifest_json = serde_json::json!({
@@ -3065,11 +3324,14 @@ async fn handle_create_project(
         "repositories": repo_entries_json
     });
     if let Some(ref u) = clean_specs_url {
-        manifest_json["url"] = serde_json::Value::String(u.clone());
+        if !is_local_only {
+            manifest_json["url"] = serde_json::Value::String(u.clone());
+        }
     }
 
     let manifest_str = serde_json::to_string_pretty(&manifest_json).unwrap_or_default();
     if let Err(e) = std::fs::write(target_specs_dir.join(".aico-project.json"), &manifest_str) {
+        let _ = std::fs::remove_dir_all(&target_specs_dir);
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({ "error": format!("Failed to write .aico-project.json: {}", e) })),
@@ -3080,6 +3342,7 @@ async fn handle_create_project(
         "---\nid: glossary-{slug}\ntype: glossary\naico_skills_version: \"0.1.2\"\ntitle: \"{title} Ubiquitous Domain Glossary\"\nstatus: \"Draft\"\nderives_from: []\ncreated_at: \"{now}\"\n---\n\n# {title} Ubiquitous Domain Glossary\n\n## 1. Core Domain Terms\n"
     );
     if let Err(e) = std::fs::write(target_specs_dir.join("glossary.md"), glossary_content) {
+        let _ = std::fs::remove_dir_all(&target_specs_dir);
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({ "error": format!("Failed to write glossary.md: {}", e) })),
@@ -3091,12 +3354,52 @@ async fn handle_create_project(
         .current_dir(&target_specs_dir)
         .output();
 
+    if !is_local_only && clean_specs_url.is_some() {
+        let specs_url = clean_specs_url.as_ref().unwrap();
+        let _ = std::process::Command::new("git")
+            .args(["remote", "add", "origin", specs_url])
+            .current_dir(&target_specs_dir)
+            .output();
+
+        let _ = std::process::Command::new("git")
+            .args(["add", "."])
+            .current_dir(&target_specs_dir)
+            .output();
+
+        let _ = std::process::Command::new("git")
+            .args([
+                "-c", "user.name=AICO",
+                "-c", "user.email=aico@localhost",
+                "commit", "-m", "chore: initial AICO specs scaffolding",
+            ])
+            .current_dir(&target_specs_dir)
+            .output();
+
+        let _ = std::process::Command::new("git")
+            .args(["branch", "-M", "main"])
+            .current_dir(&target_specs_dir)
+            .output();
+
+        let push_res = std::process::Command::new("git")
+            .args(["push", "-u", "origin", "main"])
+            .current_dir(&target_specs_dir)
+            .output();
+        if let Ok(p_out) = push_res {
+            if !p_out.status.success() {
+                let _ = std::process::Command::new("git")
+                    .args(["push", "-u", "origin", "master"])
+                    .current_dir(&target_specs_dir)
+                    .output();
+            }
+        }
+    }
+
     let parsed_manifest = aico_core::ProjectManifest::from_json_str(&manifest_str).unwrap_or_else(|_| {
         aico_core::ProjectManifest {
             name: slug.clone(),
             id: Some(format!("{}-specs", slug)),
             version: Some("0.1.0".to_string()),
-            codebase_path: Some(format!("../codebase/{}", slug)),
+            codebase_path: None,
             created_at: Some(now),
             repositories: None,
         }

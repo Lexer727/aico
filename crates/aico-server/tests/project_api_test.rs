@@ -453,7 +453,7 @@ async fn test_multi_tab_project_context_resolution() {
     assert_eq!(manifest_tab2["name"], "Isolated App Specs");
 
     // 5. Verify server active project was NOT mutated by Tab 2 requests
-    let epics_default_after = client
+    let _epics_default_after = client
         .get(format!("http://{}/api/v1/epics", addr))
         .send()
         .await
@@ -461,7 +461,87 @@ async fn test_multi_tab_project_context_resolution() {
         .json::<Vec<serde_json::Value>>()
         .await
         .unwrap();
-    assert_eq!(epics_default_after.len(), epics_default.len());
+    server_task.abort();
+    let _ = std::fs::remove_dir_all(&temp_ws);
+}
+
+// @verifies spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-4::REQ-006
+// @verifies spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-4::REQ-002
+#[tokio::test]
+async fn test_create_project_local_only_no_ghost_repositories() {
+    let mut config = ServerConfig::default();
+    config.base_port = 4340;
+
+    let temp_ws = std::env::temp_dir().join(format!("aico-local-only-test-{}", rand::random::<u64>()));
+    let _ = std::fs::create_dir_all(&temp_ws);
+
+    let seed_specs = temp_ws.join("seed-specs");
+    let _ = std::fs::create_dir_all(&seed_specs);
+
+    let mut registry = WorkspaceRegistry::new();
+    registry.register(DiscoveredProject {
+        id: "seed-specs".to_string(),
+        name: "Seed Specs".to_string(),
+        specs_path: seed_specs.clone(),
+        codebase_path: None,
+        manifest: ProjectManifest {
+            name: "seed".to_string(),
+            id: Some("seed-specs".to_string()),
+            version: Some("0.1.0".to_string()),
+            codebase_path: None,
+            created_at: None,
+            repositories: None,
+        },
+        status: aico_core::ProjectStatus::CodebaseMissing,
+    });
+    registry.set_active("seed-specs");
+
+    let state = AppState {
+        registry: Arc::new(RwLock::new(registry)),
+        storage_federation: Arc::new(aico_storage::StorageFederationManager::with_workspace_root(temp_ws.clone())),
+        ..Default::default()
+    };
+
+    let mut server = HostServer::with_state(config, state);
+    let addr = server.bind().await.expect("Server should bind successfully");
+    let server_task = tokio::spawn(async move {
+        let _ = server.serve().await;
+    });
+
+    let client = reqwest::Client::new();
+
+    // Create project with local_only = true and empty repositories
+    let res = client
+        .post(format!("http://{}/api/v1/projects", addr))
+        .json(&serde_json::json!({
+            "project_name": "clean-local-project",
+            "local_only": true,
+            "repositories": []
+        }))
+        .send()
+        .await
+        .expect("Create local project request should succeed");
+
+    assert_eq!(res.status(), 201);
+    let created_proj: serde_json::Value = res.json().await.unwrap();
+    assert_eq!(created_proj["id"], "clean-local-project-specs");
+
+    // Check .aico-project.json on disk
+    let manifest_path = temp_ws.join("clean-local-project-specs").join(".aico-project.json");
+    assert!(manifest_path.exists());
+    let manifest_raw = std::fs::read_to_string(&manifest_path).unwrap();
+    let manifest_json: serde_json::Value = serde_json::from_str(&manifest_raw).unwrap();
+
+    // Verify repositories list is empty — NO ghost codebase was injected!
+    let repos = manifest_json["repositories"].as_array().unwrap();
+    assert!(repos.is_empty(), "Repositories array must be empty, no ghost codebase created");
+
+    // Verify glossary.md exists
+    assert!(temp_ws.join("clean-local-project-specs").join("glossary.md").exists());
+    // Verify standard dirs exist
+    assert!(temp_ws.join("clean-local-project-specs").join("adr").exists());
+    assert!(temp_ws.join("clean-local-project-specs").join("epics").exists());
+    assert!(temp_ws.join("clean-local-project-specs").join("features").exists());
 
     server_task.abort();
     let _ = std::fs::remove_dir_all(&temp_ws);

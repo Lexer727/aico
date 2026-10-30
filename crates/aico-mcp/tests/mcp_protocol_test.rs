@@ -40,7 +40,7 @@ fn test_handle_json_rpc_tools_list() {
     assert_eq!(res["jsonrpc"], "2.0");
     assert_eq!(res["id"], "req-2");
     let tools = res["result"]["tools"].as_array().expect("tools array");
-    assert_eq!(tools.len(), 6);
+    assert_eq!(tools.len(), 7);
     let names: Vec<&str> = tools
         .iter()
         .filter_map(|t| t["name"].as_str())
@@ -51,6 +51,7 @@ fn test_handle_json_rpc_tools_list() {
     assert!(names.contains(&"verify_task"));
     assert!(names.contains(&"extract_annotations"));
     assert!(names.contains(&"validate_ears"));
+    assert!(names.contains(&"create_project"));
 }
 
 #[test]
@@ -126,4 +127,48 @@ fn test_handle_json_rpc_invalid_params() {
     assert_eq!(res["jsonrpc"], "2.0");
     assert_eq!(res["id"], 6);
     assert_eq!(res["error"]["code"], -32602);
+}
+
+// @verifies spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-5::REQ-010
+#[test]
+fn test_handle_json_rpc_create_project_tool() {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let temp_dir = std::env::temp_dir().join(format!("aico-mcp-test-{}", nanos));
+    let _ = std::fs::create_dir_all(&temp_dir);
+
+    // Save and switch cwd temporarily
+    let orig_cwd = std::env::current_dir().unwrap();
+    std::env::set_current_dir(&temp_dir).unwrap();
+
+    let req = json!({
+        "jsonrpc": "2.0",
+        "id": 7,
+        "method": "tools/call",
+        "params": {
+            "name": "create_project",
+            "arguments": {
+                "project_name": "agent-scaffolded",
+                "display_name": "Agent Scaffolded Project",
+                "local_only": true
+            }
+        }
+    });
+
+    let res = handle_json_rpc(&req, None);
+    assert_eq!(res["jsonrpc"], "2.0");
+    assert_eq!(res["id"], 7);
+    assert_eq!(res["result"]["isError"], false);
+    let text = res["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(text.contains("agent-scaffolded"));
+
+    // Check directory on disk
+    assert!(temp_dir.join("agent-scaffolded-specs").exists());
+    assert!(temp_dir.join("agent-scaffolded-specs").join(".aico-project.json").exists());
+
+    // Restore cwd and cleanup
+    std::env::set_current_dir(orig_cwd).unwrap();
+    let _ = std::fs::remove_dir_all(&temp_dir);
 }

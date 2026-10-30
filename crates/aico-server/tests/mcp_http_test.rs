@@ -70,7 +70,7 @@ async fn test_mcp_get_discovery() {
     assert_eq!(body["status"], "ok");
     assert_eq!(body["transport"], "streamable-http");
     assert_eq!(body["server"]["name"], "aico");
-    assert_eq!(body["tools_count"], 6);
+    assert_eq!(body["tools_count"], 7);
 
     server_task.abort();
 }
@@ -113,7 +113,7 @@ async fn test_mcp_post_json_rpc_flow() {
     assert_eq!(res.status(), 200);
     let list_res: serde_json::Value = res.json().await.expect("list json");
     let tools = list_res["result"]["tools"].as_array().expect("tools array");
-    assert_eq!(tools.len(), 6);
+    assert_eq!(tools.len(), 7);
 
     // 3. tools/call
     let call_req = json!({
@@ -184,7 +184,7 @@ async fn test_mcp_discovery_roundtrip() {
     let res = client.post(format!("http://{}/mcp", addr)).json(&tools_req).send().await.expect("post tools");
     assert_eq!(res.status(), 200);
     let list_res: serde_json::Value = res.json().await.expect("json");
-    assert_eq!(list_res["result"]["tools"].as_array().unwrap().len(), 6);
+    assert_eq!(list_res["result"]["tools"].as_array().unwrap().len(), 7);
 
     server_task.abort();
 }

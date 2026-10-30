@@ -6,6 +6,7 @@ pub mod watcher;
 pub mod human_gate;
 pub mod config;
 pub mod skills_sync;
+pub mod github;
 
 pub use manifest::{ProjectManifest, ProjectRepository, ManifestError};
 pub use scanner::{RootScanner, DiscoveredProject, ProjectStatus};
@@ -18,4 +19,5 @@ pub use human_gate::{
 };
 pub use config::{AicoConfig, AssetsConfig};
 pub use skills_sync::{SkillsSynchronizer, SyncReport, SkillsSyncError};
+pub use github::{GitHubConfig, GitHubCredentialManager, ResolvedGitHubToken, TokenSource};
 

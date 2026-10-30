@@ -84,4 +84,54 @@ describe('SettingsModal Component', () => {
     const vectorBadge = await screen.findByTestId('vector-status-badge');
     expect(vectorBadge).toHaveTextContent(/Indexed: 12 files, 45 chunks/i);
   });
+
+  // @verifies spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-6::REQ-004
+  it('renders GitHub Integration card and supports token input and status verification', async () => {
+    const onClose = vi.fn();
+    const fetchMock = vi.fn().mockImplementation((url: string, opts?: any) => {
+      if (url === '/api/v1/github/status') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            authenticated: false,
+            username: null,
+            source: 'none',
+            scopes: [],
+          }),
+        });
+      }
+      if (url === '/api/v1/github/token' && opts?.method === 'POST') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ status: 'ok', username: 'testuser' }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+    globalThis.fetch = fetchMock;
+
+    render(<SettingsModal isOpen={true} onClose={onClose} />);
+
+    expect(screen.getByTestId('section-github-integration')).toBeInTheDocument();
+    expect(screen.getByText('GitHub Integration')).toBeInTheDocument();
+
+    const tokenInput = screen.getByTestId('github-token-input');
+    const verifyBtn = screen.getByTestId('verify-github-token-btn');
+    expect(tokenInput).toBeInTheDocument();
+    expect(verifyBtn).toBeInTheDocument();
+
+    fireEvent.change(tokenInput, { target: { value: 'ghp_fakeToken12345' } });
+    fireEvent.click(verifyBtn);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/github/token',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ token: 'ghp_fakeToken12345' }),
+      })
+    );
+
+    const successMsg = await screen.findByTestId('github-success-msg');
+    expect(successMsg).toHaveTextContent(/Connected successfully as @testuser/i);
+  });
 });

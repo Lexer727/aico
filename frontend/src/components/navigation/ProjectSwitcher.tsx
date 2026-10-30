@@ -106,7 +106,8 @@ export const ProjectSwitcher: React.FC<ProjectSwitcherProps> = ({
         )}
       </div>
 
-      {/* Standalone New Project Button Next to Project Switcher Dropdown */}
+      {/* Standalone Add Project Button Next to Project Switcher Dropdown */}
+      {/* @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-7::REQ-001 */}
       <button
         type="button"
         data-testid="btn-new-project-trigger"
@@ -114,11 +115,11 @@ export const ProjectSwitcher: React.FC<ProjectSwitcherProps> = ({
           setIsOpen(false);
           setIsCreateModalOpen(true);
         }}
-        title="Create New Project (.aico-project.json)"
+        title="Add Project (.aico-project.json)"
         className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-indigo-300 bg-indigo-950/60 hover:bg-indigo-900/70 border border-indigo-800/70 rounded-md transition-colors shadow-sm cursor-pointer"
       >
         <Plus className="w-3.5 h-3.5 text-indigo-400" />
-        <span className="hidden sm:inline">New Project</span>
+        <span className="hidden sm:inline">+ Add Project</span>
       </button>
 
       <ProjectConfigModal

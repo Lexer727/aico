@@ -50,4 +50,67 @@ impl CodebaseWizard {
         }
         self.initialize_codebase(path)
     }
+
+    /// Scaffold a new project specifications repository
+    // @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-4::REQ-009
+    // @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-5::REQ-010
+    pub fn scaffold_project_specs(
+        workspace_root: &Path,
+        project_name: &str,
+    ) -> Result<std::path::PathBuf, std::io::Error> {
+        let clean_slug = project_name
+            .trim()
+            .strip_suffix("-specs")
+            .unwrap_or(project_name.trim())
+            .to_lowercase()
+            .replace(' ', "-");
+
+        let specs_dir = workspace_root.join(format!("{}-specs", clean_slug));
+        if specs_dir.exists() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                format!("Specs directory already exists: {}", specs_dir.display()),
+            ));
+        }
+
+        for sub in &["adr", "epics", "features"] {
+            fs::create_dir_all(specs_dir.join(sub))?;
+        }
+
+        let title = clean_slug
+            .split('-')
+            .map(|word| {
+                let mut chars = word.chars();
+                match chars.next() {
+                    None => String::new(),
+                    Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        let manifest = serde_json::json!({
+            "project_name": clean_slug,
+            "id": format!("{}-specs", clean_slug),
+            "name": format!("{} Specs", title),
+            "repositories": []
+        });
+
+        fs::write(
+            specs_dir.join(".aico-project.json"),
+            serde_json::to_string_pretty(&manifest).unwrap(),
+        )?;
+
+        let glossary = format!(
+            "---\nid: glossary-{clean_slug}\ntype: glossary\naico_skills_version: \"0.1.2\"\ntitle: \"{title} Ubiquitous Domain Glossary\"\nstatus: \"Draft\"\nderives_from: []\n---\n\n# {title} Ubiquitous Domain Glossary\n\n## 1. Core Domain Terms\n"
+        );
+        fs::write(specs_dir.join("glossary.md"), glossary)?;
+
+        let _ = Command::new("git")
+            .arg("init")
+            .current_dir(&specs_dir)
+            .output();
+
+        Ok(specs_dir)
+    }
 }

@@ -158,6 +158,9 @@ describe('EpicHub Task Plan & ShellLayout Refinements', () => {
             project_name: 'project-new',
             name: 'Project New Specs',
             display_name: 'Project New Specs',
+            url: 'https://github.com/<username>/project-new-specs.git',
+            local_only: false,
+            private: true,
           }),
         })
       );

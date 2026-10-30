@@ -2,10 +2,11 @@ use aico_mcp::{McpServerManager, ToolError};
 
 // @verifies ft-core-mcp-tools::TASK-CORE-005-2::REQ-001
 // @verifies spec-ft-tooling-mcp-repurpose::TASK-TOOL-002-1::REQ-001
+// @verifies spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-5::REQ-010
 #[test]
 fn test_list_tools_returns_sdd_core_tools() {
     let tools = McpServerManager::list_tools();
-    assert_eq!(tools.len(), 6);
+    assert_eq!(tools.len(), 7);
 
     let names: Vec<String> = tools.into_iter().map(|t| t.name).collect();
     assert!(!names.contains(&"create_sdd_artifact".to_string()));
@@ -15,6 +16,7 @@ fn test_list_tools_returns_sdd_core_tools() {
     assert!(names.contains(&"verify_task".to_string()));
     assert!(names.contains(&"extract_annotations".to_string()));
     assert!(names.contains(&"validate_ears".to_string()));
+    assert!(names.contains(&"create_project".to_string()));
 }
 
 // @verifies ft-core-mcp-tools::TASK-CORE-005-2::REQ-008
