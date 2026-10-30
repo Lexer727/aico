@@ -4,7 +4,7 @@
 
 > Zero-daemon, local-first Spec-Driven Development (SDD) platform, runtime daemon, embedded dual storage, and WebUI shell for autonomous AI coding agents.
 
-`aico` is the primary codebase repository of the **AICO (Autonomous Intelligent Code Orchestrator)** ecosystem. It provides the embedded Rust runtime server, local storage engines, Model Context Protocol (MCP) tool gates, and the reactive single-page dashboard for inspecting, navigating, and orchestrating Spec-Driven Development.
+`aico` is the primary codebase repository for **AICO (AI-Co-Development)**. It provides the embedded Rust runtime server, local storage engines, Model Context Protocol (MCP) tool gates, and the reactive single-page dashboard for inspecting, navigating, and orchestrating AI enabled Spec-Driven Development.
 
 ---
 
