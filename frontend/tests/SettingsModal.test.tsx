@@ -37,7 +37,8 @@ describe('SettingsModal Component', () => {
     expect(topologySection).toBeInTheDocument();
     expect(screen.getByText('Workspace Architecture & Topology')).toBeInTheDocument();
     expect(screen.getByText('d:/aico')).toBeInTheDocument();
-    expect(screen.getByText('d:/aico/*-specs/')).toBeInTheDocument();
+    // @verifies spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-4::REQ-007
+    expect(screen.getByText('d:/aico/specs/*-specs/')).toBeInTheDocument();
     expect(screen.getByText('d:/aico/codebase/*/')).toBeInTheDocument();
   });
 

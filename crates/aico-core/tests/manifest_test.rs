@@ -1,4 +1,4 @@
-use aico_core::{ProjectManifest, ManifestError};
+use aico_core::{ProjectManifest, ManifestError, ProjectRepository};
 use std::path::PathBuf;
 
 // @verifies ft-core-discovery::TASK-CORE-004-1::REQ-002
@@ -193,6 +193,52 @@ fn test_elevated_specs_repo_and_default_codebase_path() {
     assert_eq!(effective[1].path, "d:/aico/codebase/aico");
     assert_eq!(effective[2].id, "aico-skills");
     assert_eq!(effective[2].path, "d:/aico/codebase/aico-skills");
+}
+
+// @verifies spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-2::REQ-004
+#[test]
+fn test_nested_specs_relative_path_resolution() {
+    let manifest = ProjectManifest {
+        name: "demo".to_string(),
+        id: Some("demo-specs".to_string()),
+        version: Some("0.1.0".to_string()),
+        codebase_path: None,
+        created_at: None,
+        repositories: Some(vec![
+            ProjectRepository {
+                id: "demo-codebase".to_string(),
+                name: "Demo Codebase".to_string(),
+                path: "../../codebase/demo-codebase".to_string(),
+                repo_type: "codebase".to_string(),
+                url: None,
+            },
+            ProjectRepository {
+                id: "legacy-codebase".to_string(),
+                name: "Legacy Codebase".to_string(),
+                path: "../codebase/legacy-codebase".to_string(),
+                repo_type: "codebase".to_string(),
+                url: None,
+            },
+        ]),
+    };
+
+    // 1. Nested specs directory (specs/demo-specs)
+    let nested_specs_dir = PathBuf::from("d:/workspace/specs/demo-specs");
+    let effective = manifest.get_effective_repositories(&nested_specs_dir);
+
+    // Both should resolve to d:/workspace/codebase/<id>
+    let demo_cb = effective.iter().find(|r| r.id == "demo-codebase").unwrap();
+    assert_eq!(demo_cb.path, "d:/workspace/codebase/demo-codebase");
+
+    let legacy_cb = effective.iter().find(|r| r.id == "legacy-codebase").unwrap();
+    assert_eq!(legacy_cb.path, "d:/workspace/codebase/legacy-codebase");
+
+    // 2. Direct resolve_path tests
+    let resolved_two_hops = ProjectManifest::resolve_path("../../codebase/app", &nested_specs_dir);
+    assert_eq!(resolved_two_hops.to_string_lossy().replace('\\', "/"), "d:/workspace/codebase/app");
+
+    let resolved_one_hop_nested = ProjectManifest::resolve_path("../codebase/app", &nested_specs_dir);
+    assert_eq!(resolved_one_hop_nested.to_string_lossy().replace('\\', "/"), "d:/workspace/codebase/app");
 }
 
 

@@ -197,7 +197,8 @@ export const ProjectConfigModal: React.FC<ProjectConfigModalProps> = ({
   if (!isOpen) return null;
 
   const computedSlug = toSlug(projectName);
-  const specsFolderPreview = computedSlug ? `${computedSlug}-specs` : '<project-name>-specs';
+  // @implements spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-4::REQ-006
+  const specsFolderPreview = computedSlug ? `specs/${computedSlug}-specs` : 'specs/<project-name>-specs';
 
   const cleanSpecsUrl = specsUrl.trim().replace(/\/+$/, '');
   const hasSpecsSuffix =
@@ -417,7 +418,8 @@ export const ProjectConfigModal: React.FC<ProjectConfigModalProps> = ({
       return {
         id: cleanId,
         name: r.name.trim() || `${toTitleCase(cleanId)} Codebase`,
-        path: `../codebase/${cleanId}`,
+        // @implements spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-4::REQ-006
+        path: `../../codebase/${cleanId}`,
         type: 'codebase',
         url: r.url.trim() || undefined,
       };
@@ -810,7 +812,7 @@ export const ProjectConfigModal: React.FC<ProjectConfigModalProps> = ({
                       Linked Repositories ({repositories.length})
                     </span>
                     <p className="text-[10px] text-zinc-500">
-                      Configure codebase repositories mapped under <code className="text-zinc-400">../codebase/&lt;id&gt;</code>
+                      Configure codebase repositories mapped under <code className="text-zinc-400">../../codebase/&lt;id&gt;</code>
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -822,7 +824,7 @@ export const ProjectConfigModal: React.FC<ProjectConfigModalProps> = ({
                       className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 text-xs font-medium transition-colors cursor-pointer"
                     >
                       <FolderTree className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Browse ../codebase</span>
+                      <span>Browse ../../codebase</span>
                     </button>
                     <button
                       type="button"
@@ -843,7 +845,7 @@ export const ProjectConfigModal: React.FC<ProjectConfigModalProps> = ({
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-zinc-200 text-xs flex items-center gap-1.5">
                         <FolderTree className="w-3.5 h-3.5 text-emerald-400" />
-                        Discovered Codebase Folders (../codebase/)
+                        Discovered Codebase Folders (../../codebase/)
                       </span>
                       <button
                         type="button"
@@ -854,9 +856,9 @@ export const ProjectConfigModal: React.FC<ProjectConfigModalProps> = ({
                       </button>
                     </div>
                     {isLoadingFolders ? (
-                      <div className="py-3 text-center text-zinc-500 text-[11px]">Scanning ../codebase/...</div>
+                      <div className="py-3 text-center text-zinc-500 text-[11px]">Scanning ../../codebase/...</div>
                     ) : codebaseFolders.length === 0 ? (
-                      <div className="py-3 text-center text-zinc-500 text-[11px]">No subfolders found in ../codebase/</div>
+                      <div className="py-3 text-center text-zinc-500 text-[11px]">No subfolders found in ../../codebase/</div>
                     ) : (
                       <div className="space-y-1 max-h-40 overflow-y-auto">
                         {codebaseFolders.map((f) => (
@@ -885,13 +887,14 @@ export const ProjectConfigModal: React.FC<ProjectConfigModalProps> = ({
 
                 {repositories.length === 0 ? (
                   <div className="p-3 rounded-lg border border-dashed border-zinc-800 text-center text-[11px] text-zinc-500">
-                    No linked codebase repositories configured. Click &quot;Add Repository&quot; or &quot;Browse ../codebase&quot; to link one.
+                    No linked codebase repositories configured. Click &quot;Add Repository&quot; or &quot;Browse ../../codebase&quot; to link one.
                   </div>
                 ) : (
                   <div className="space-y-2.5">
                     {repositories.map((repo, idx) => {
                       const cleanRepoId = toSlug(repo.id);
-                      const fixedRepoPath = `../codebase/${cleanRepoId || '<id>'}`;
+                      // @implements spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-4::REQ-006
+                      const fixedRepoPath = `../../codebase/${cleanRepoId || '<id>'}`;
                       return (
                         <div
                           key={idx}

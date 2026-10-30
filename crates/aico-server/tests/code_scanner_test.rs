@@ -17,7 +17,7 @@ async fn test_codebase_scanner_and_raw_file_api() {
     let project = DiscoveredProject {
         id: "aico".to_string(),
         name: "aico".to_string(),
-        specs_path: PathBuf::from("d:/aico/aico-specs"),
+        specs_path: PathBuf::from("d:/aico/specs/aico-specs"),
         codebase_path: Some(PathBuf::from("d:/aico/codebase/aico")),
         manifest: ProjectManifest {
             name: "aico".to_string(),

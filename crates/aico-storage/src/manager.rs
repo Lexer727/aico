@@ -230,10 +230,16 @@ impl StorageFederationManager {
         let ws_root = match inner.workspace_root {
             Some(ref root) => root.clone(),
             None => {
-                let inferred = specs_path
-                    .parent()
-                    .map(|p| p.to_path_buf())
-                    .unwrap_or_else(|| specs_path.clone());
+                // @implements spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-1::REQ-003
+                let inferred = if let Some(parent) = specs_path.parent() {
+                    if parent.file_name().and_then(|n| n.to_str()) == Some("specs") {
+                        parent.parent().map(|p| p.to_path_buf()).unwrap_or_else(|| parent.to_path_buf())
+                    } else {
+                        parent.to_path_buf()
+                    }
+                } else {
+                    specs_path.clone()
+                };
                 inner.workspace_root = Some(inferred.clone());
                 inferred
             }

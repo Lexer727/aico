@@ -296,7 +296,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-zinc-400">Specs Root:</span>
-                <span className="font-mono text-zinc-300">d:/aico/aico-specs</span>
+                <span className="font-mono text-zinc-300">d:/aico/specs/aico-specs</span>
               </div>
             </div>
 
@@ -366,8 +366,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               <div className="grid grid-cols-2 gap-2 pt-1 border-t border-zinc-800/60">
                 <div className="bg-zinc-900/80 p-2 rounded border border-zinc-800">
                   <span className="text-[10px] text-zinc-500 uppercase font-semibold block mb-0.5">Project Specifications</span>
-                  <span className="font-mono text-zinc-200 block text-[11px]">d:/aico/*-specs/</span>
-                  <span className="text-[10px] text-zinc-400 block mt-0.5">e.g. d:/aico/aico-specs</span>
+                  {/* @implements spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-4::REQ-007 */}
+                  <span className="font-mono text-zinc-200 block text-[11px]">d:/aico/specs/*-specs/</span>
+                  <span className="text-[10px] text-zinc-400 block mt-0.5">e.g. d:/aico/specs/aico-specs</span>
                 </div>
                 <div className="bg-zinc-900/80 p-2 rounded border border-zinc-800">
                   <span className="text-[10px] text-zinc-500 uppercase font-semibold block mb-0.5">Codebase Repositories</span>

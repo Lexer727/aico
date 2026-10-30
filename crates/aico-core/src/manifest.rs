@@ -113,7 +113,8 @@ impl ProjectManifest {
                     if r.repo_type == "specs" {
                         r.path = ".".to_string();
                     } else {
-                        r.path = format!("../codebase/{}", r.id);
+                        // @implements spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-2::REQ-004
+                        r.path = format!("../../codebase/{}", r.id);
                     }
                 }
             }
@@ -171,14 +172,50 @@ impl ProjectManifest {
     }
 
     /// Resolve any path relative to specs repository directory
+    // @implements spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-2::REQ-004
     pub fn resolve_path<P: AsRef<Path>>(raw_path: &str, specs_dir: P) -> PathBuf {
         let p = Path::new(raw_path);
-        let resolved = if p.is_absolute() {
-            p.to_path_buf()
-        } else {
-            specs_dir.as_ref().join(p)
-        };
+        if p.is_absolute() {
+            return p.to_path_buf();
+        }
 
+        let specs_ref = specs_dir.as_ref();
+        let primary_resolved = Self::normalize_path(specs_ref.join(p));
+
+        if primary_resolved.exists() {
+            return primary_resolved;
+        }
+
+        // Resilient fallback for nested vs root specs directories:
+        let is_nested = specs_ref.parent().and_then(|p| p.file_name()).and_then(|n| n.to_str()) == Some("specs");
+
+        // 1. If specs_dir is inside a "specs/" container and raw_path is "../codebase/..." (single parent hop),
+        //    step up to the workspace root:
+        if is_nested && !p.starts_with("../..") {
+            if let Some(ws_root) = specs_ref.parent().and_then(|p| p.parent()) {
+                if let Ok(rel_to_cb) = p.strip_prefix("../") {
+                    let candidate = Self::normalize_path(ws_root.join(rel_to_cb));
+                    if candidate.exists() || !primary_resolved.exists() {
+                        return candidate;
+                    }
+                }
+            }
+        }
+
+        // 2. If raw_path is "../../codebase/..." but specs_dir was at root level:
+        if !is_nested {
+            if let Ok(rel_two) = p.strip_prefix("../../") {
+                let candidate = Self::normalize_path(specs_ref.join("..").join(rel_two));
+                if candidate.exists() || !primary_resolved.exists() {
+                    return candidate;
+                }
+            }
+        }
+
+        primary_resolved
+    }
+
+    fn normalize_path(resolved: PathBuf) -> PathBuf {
         let mut normalized = PathBuf::new();
         for component in resolved.components() {
             match component {
@@ -228,7 +265,8 @@ impl ProjectManifest {
                         if r.repo_type == "specs" {
                             ".".to_string()
                         } else {
-                            format!("../codebase/{}", r.id)
+                            // @implements spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-2::REQ-004
+                            format!("../../codebase/{}", r.id)
                         }
                     } else {
                         r.path.clone()

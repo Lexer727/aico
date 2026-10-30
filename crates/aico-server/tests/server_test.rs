@@ -99,7 +99,8 @@ async fn test_create_project_scaffolds_specs_and_inits_git() {
     let proj: serde_json::Value = res.json().await.expect("Response should parse as JSON");
     assert_eq!(proj["id"], "alpha-platform-specs");
 
-    let specs_dir = temp_dir.join("alpha-platform-specs");
+    // @verifies spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-2::REQ-005
+    let specs_dir = temp_dir.join("specs").join("alpha-platform-specs");
     assert!(specs_dir.exists(), "Specs directory should be created");
     assert!(!specs_dir.join(".aico").exists(), "Specs repo must not contain .aico folder");
     assert!(temp_dir.join(".aico").join("storage").join("graph").join("alpha-platform-specs").exists(), "Workspace root .aico/storage/graph/<project_id> should exist");
@@ -259,7 +260,8 @@ async fn test_git_manifest_and_operations_endpoints() {
 
     // 1. Verify clone target directory resolution
     let target_specs = resolve_clone_target_dir(&temp_dir, "my-proj-specs", "specs");
-    assert_eq!(target_specs, temp_dir.join("my-proj-specs")); // REQ-007
+    // @verifies spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-2::REQ-005
+    assert_eq!(target_specs, temp_dir.join("specs").join("my-proj-specs")); // REQ-005 / REQ-007
 
     let target_codebase = resolve_clone_target_dir(&temp_dir, "my-codebase", "codebase");
     assert_eq!(target_codebase, temp_dir.join("codebase").join("my-codebase")); // REQ-006

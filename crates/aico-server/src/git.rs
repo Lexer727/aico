@@ -59,7 +59,8 @@ impl ProjectRepoEntry {
                 if self.repo_type == "specs" {
                     ".".to_string()
                 } else {
-                    format!("../codebase/{}", self.id)
+                    // @implements spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-2::REQ-004
+                    format!("../../codebase/{}", self.id)
                 }
             }
         }
@@ -85,9 +86,10 @@ pub struct ProjectManifest {
 
 // @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-2::REQ-006
 // @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-2::REQ-007
+// @implements spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-2::REQ-005
 pub fn resolve_clone_target_dir(workspace_root: &Path, repo_id: &str, repo_type: &str) -> PathBuf {
     if repo_type == "specs" {
-        workspace_root.join(repo_id)
+        workspace_root.join("specs").join(repo_id)
     } else {
         workspace_root.join("codebase").join(repo_id)
     }

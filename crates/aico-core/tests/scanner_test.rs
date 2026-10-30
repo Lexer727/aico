@@ -31,6 +31,46 @@ fn test_root_scanner_discovers_specs_and_codebases() {
     let _ = fs::remove_dir_all(temp_root);
 }
 
+// @verifies spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-1::REQ-001
+// @verifies spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-1::REQ-002
+// @verifies spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-2::REQ-004
+#[test]
+fn test_root_scanner_discovers_nested_specs_and_codebases() {
+    let temp_root = std::env::temp_dir().join(format!(
+        "aico_test_nested_specs_{}",
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+    ));
+    let nested_specs = temp_root.join("specs").join("beta-specs");
+    let codebase_dir = temp_root.join("codebase").join("beta");
+
+    fs::create_dir_all(&nested_specs).unwrap();
+    fs::create_dir_all(&codebase_dir).unwrap();
+
+    let manifest_content = r#"{
+        "project_name": "beta",
+        "id": "beta-specs",
+        "name": "Beta Specs",
+        "repositories": [
+            {
+                "id": "beta",
+                "name": "Beta Codebase",
+                "path": "../../codebase/beta",
+                "type": "codebase"
+            }
+        ]
+    }"#;
+    fs::write(nested_specs.join(".aico-project.json"), manifest_content).unwrap();
+
+    let discovered = RootScanner::scan(&temp_root).expect("Scanner should discover nested specs");
+    assert_eq!(discovered.len(), 1, "Should discover 1 project in specs/");
+    assert_eq!(discovered[0].id, "beta-specs");
+    assert_eq!(discovered[0].name, "Beta Specs");
+    assert_eq!(discovered[0].specs_path, nested_specs);
+    assert_eq!(discovered[0].codebase_path, Some(codebase_dir));
+
+    let _ = fs::remove_dir_all(temp_root);
+}
+
 // @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-19::REQ-027
 #[test]
 fn test_root_scanner_preserves_display_name_from_elevated_manifest() {

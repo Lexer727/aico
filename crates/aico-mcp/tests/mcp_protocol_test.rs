@@ -165,8 +165,10 @@ fn test_handle_json_rpc_create_project_tool() {
     assert!(text.contains("agent-scaffolded"));
 
     // Check directory on disk
-    assert!(temp_dir.join("agent-scaffolded-specs").exists());
-    assert!(temp_dir.join("agent-scaffolded-specs").join(".aico-project.json").exists());
+    // @verifies spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-2::REQ-005
+    let scaffolded_specs = temp_dir.join("specs").join("agent-scaffolded-specs");
+    assert!(scaffolded_specs.exists());
+    assert!(scaffolded_specs.join(".aico-project.json").exists());
 
     // Restore cwd and cleanup
     std::env::set_current_dir(orig_cwd).unwrap();

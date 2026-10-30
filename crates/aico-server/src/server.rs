@@ -2372,10 +2372,20 @@ async fn get_raw_file_handler(
         if proj.specs_path.exists() {
             proj.specs_path.clone()
         } else {
-            root_dir.join(format!("{}-specs", proj.name))
+            let nested = root_dir.join("specs").join(format!("{}-specs", proj.name));
+            if nested.exists() {
+                nested
+            } else {
+                root_dir.join(format!("{}-specs", proj.name))
+            }
         }
     } else {
-        root_dir.join("aico-specs")
+        let nested_default = root_dir.join("specs").join("aico-specs");
+        if nested_default.exists() {
+            nested_default
+        } else {
+            root_dir.join("aico-specs")
+        }
     };
 
     let rel_path = target_path.join(&query.path);
@@ -2818,17 +2828,30 @@ async fn handle_hybrid_search(
 // PROJECT CREATOR, LINEAGE GRAPH & GIT OPERATIONS ENDPOINTS
 // ---------------------------------------------------------------------------
 
+// @implements spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-1::REQ-003
 pub fn get_workspace_root(registry: &WorkspaceRegistry) -> PathBuf {
     if let Ok(root_env) = std::env::var("AICO_ROOT") {
         return PathBuf::from(root_env);
     }
     if let Some(active) = registry.get_active() {
-        if let Some(parent) = StdPath::new(&active.specs_path).parent() {
+        let p = StdPath::new(&active.specs_path);
+        if let Some(parent) = p.parent() {
+            if parent.file_name().and_then(|n| n.to_str()) == Some("specs") {
+                if let Some(grandparent) = parent.parent() {
+                    return grandparent.to_path_buf();
+                }
+            }
             return parent.to_path_buf();
         }
     }
     if let Some(first) = registry.list_cloned().first() {
-        if let Some(parent) = StdPath::new(&first.specs_path).parent() {
+        let p = StdPath::new(&first.specs_path);
+        if let Some(parent) = p.parent() {
+            if parent.file_name().and_then(|n| n.to_str()) == Some("specs") {
+                if let Some(grandparent) = parent.parent() {
+                    return grandparent.to_path_buf();
+                }
+            }
             return parent.to_path_buf();
         }
     }
@@ -3065,10 +3088,11 @@ async fn handle_get_codebase_folders(
                     let folder_name = entry.file_name().to_string_lossy().to_string();
                     if !folder_name.starts_with('.') {
                         let is_git = path.join(".git").exists();
+                        // @implements spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-2::REQ-004
                         folders.push(CodebaseFolderItem {
                             id: folder_name.clone(),
                             name: folder_name.clone(),
-                            path: format!("../codebase/{}", folder_name),
+                            path: format!("../../codebase/{}", folder_name),
                             is_git,
                         });
                     }
@@ -3124,7 +3148,17 @@ async fn handle_create_project(
     let ws_root = get_workspace_root(&registry);
     drop(registry);
 
-    let target_specs_dir = ws_root.join(format!("{}-specs", slug));
+    // @implements spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-2::REQ-005
+    let specs_container = ws_root.join("specs");
+    if let Err(e) = std::fs::create_dir_all(&specs_container) {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "error": format!("Failed to create specs directory: {}", e)
+            })),
+        ).into_response();
+    }
+    let target_specs_dir = specs_container.join(format!("{}-specs", slug));
     if target_specs_dir.exists() {
         return (
             StatusCode::CONFLICT,
@@ -3240,7 +3274,8 @@ async fn handle_create_project(
                     if let Some(rurl) = &r.url {
                         let clean_rurl = rurl.trim();
                         if !clean_rurl.is_empty() {
-                            let rel = r.path.strip_prefix("../").unwrap_or(&r.path);
+                            // @implements spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-2::REQ-004
+                            let rel = r.path.strip_prefix("../../").unwrap_or_else(|| r.path.strip_prefix("../").unwrap_or(&r.path));
                             let target_codebase = ws_root.join(rel);
                             if !target_codebase.exists() {
                                 if let Some(parent) = target_codebase.parent() {
@@ -3332,7 +3367,8 @@ async fn handle_create_project(
             let mut obj = serde_json::json!({
                 "id": rid,
                 "name": rname,
-                "path": format!("../codebase/{}", rid),
+                // @implements spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-2::REQ-004
+                "path": format!("../../codebase/{}", rid),
                 "type": rtype,
             });
             if let Some(u) = rurl {
@@ -3545,8 +3581,9 @@ async fn handle_get_project_manifest(
                             .and_then(|v| v.as_str())
                             .map(|s| s.trim().to_string())
                             .filter(|s| !s.is_empty());
+                        // @implements spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-2::REQ-004
                         repos.push(ProjectRepoConfigEntry {
-                            path: format!("../codebase/{}", rid),
+                            path: format!("../../codebase/{}", rid),
                             id: rid,
                             name: rname,
                             repo_type: rtype,
@@ -3581,7 +3618,8 @@ async fn handle_get_project_manifest(
                 .map(|r| ProjectRepoConfigEntry {
                     id: r.id.clone(),
                     name: r.name.clone(),
-                    path: format!("../codebase/{}", r.id),
+                    // @implements spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-2::REQ-004
+                    path: format!("../../codebase/{}", r.id),
                     repo_type: r.repo_type.clone(),
                     url: r.url.clone().filter(|u| !u.trim().is_empty()),
                 })
@@ -3699,7 +3737,8 @@ async fn handle_update_project_manifest(
         let mut obj = serde_json::json!({
             "id": rid,
             "name": rname,
-            "path": format!("../codebase/{}", rid),
+            // @implements spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-2::REQ-004
+            "path": format!("../../codebase/{}", rid),
             "type": rtype,
         });
         if let Some(u) = rurl {

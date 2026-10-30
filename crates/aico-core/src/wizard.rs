@@ -54,6 +54,7 @@ impl CodebaseWizard {
     /// Scaffold a new project specifications repository
     // @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-4::REQ-009
     // @implements spec-ft-core-add-project-and-github-scaffolding::TASK-CORE-020-5::REQ-010
+    // @implements spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-2::REQ-005
     pub fn scaffold_project_specs(
         workspace_root: &Path,
         project_name: &str,
@@ -65,7 +66,9 @@ impl CodebaseWizard {
             .to_lowercase()
             .replace(' ', "-");
 
-        let specs_dir = workspace_root.join(format!("{}-specs", clean_slug));
+        let specs_container = workspace_root.join("specs");
+        fs::create_dir_all(&specs_container)?;
+        let specs_dir = specs_container.join(format!("{}-specs", clean_slug));
         if specs_dir.exists() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::AlreadyExists,

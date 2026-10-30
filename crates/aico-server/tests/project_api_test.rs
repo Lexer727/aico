@@ -14,7 +14,7 @@ async fn test_project_management_rest_api() {
     let project = DiscoveredProject {
         id: "core-project".to_string(),
         name: "core-project".to_string(),
-        specs_path: PathBuf::from("d:/aico/aico-specs"),
+        specs_path: PathBuf::from("d:/aico/specs/aico-specs"),
         codebase_path: Some(PathBuf::from("d:/aico/codebase/core")),
         manifest: ProjectManifest {
             name: "core-project".to_string(),
@@ -263,7 +263,8 @@ async fn test_create_and_update_project_manifest_api() {
     assert_eq!(repos.len(), 1);
     assert_eq!(repos[0]["id"], "demo-core");
     assert_eq!(repos[0]["name"], "Demo Core Engine");
-    assert_eq!(repos[0]["path"], "../codebase/demo-core");
+    // @verifies spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-2::REQ-004
+    assert_eq!(repos[0]["path"], "../../codebase/demo-core");
     assert!(repos[0].get("url").is_none() || repos[0]["url"].is_null());
 
     // 3. GET /api/v1/git/status -> URLs should be null/absent when not set
@@ -317,10 +318,10 @@ async fn test_create_and_update_project_manifest_api() {
     assert_eq!(manifest_cfg2["url"], "https://github.com/example/demo-app-specs");
     let repos2 = manifest_cfg2["repositories"].as_array().unwrap();
     assert_eq!(repos2.len(), 2);
-    assert_eq!(repos2[0]["path"], "../codebase/demo-core");
+    assert_eq!(repos2[0]["path"], "../../codebase/demo-core");
     assert_eq!(repos2[0]["url"], "https://github.com/example/demo-core");
     assert_eq!(repos2[1]["id"], "demo-skills");
-    assert_eq!(repos2[1]["path"], "../codebase/demo-skills");
+    assert_eq!(repos2[1]["path"], "../../codebase/demo-skills");
     assert_eq!(repos2[1]["type"], "skills");
     assert!(repos2[1].get("url").is_none() || repos2[1]["url"].is_null());
 
@@ -355,7 +356,7 @@ async fn test_multi_tab_project_context_resolution() {
     let project1 = DiscoveredProject {
         id: "core-project".to_string(),
         name: "Core Project".to_string(),
-        specs_path: PathBuf::from("d:/aico/aico-specs"),
+        specs_path: PathBuf::from("d:/aico/specs/aico-specs"),
         codebase_path: Some(PathBuf::from("d:/aico/codebase/core")),
         manifest: ProjectManifest {
             name: "Core Project".to_string(),
@@ -527,7 +528,9 @@ async fn test_create_project_local_only_no_ghost_repositories() {
     assert_eq!(created_proj["id"], "clean-local-project-specs");
 
     // Check .aico-project.json on disk
-    let manifest_path = temp_ws.join("clean-local-project-specs").join(".aico-project.json");
+    // @verifies spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-2::REQ-005
+    let created_specs_dir = temp_ws.join("specs").join("clean-local-project-specs");
+    let manifest_path = created_specs_dir.join(".aico-project.json");
     assert!(manifest_path.exists());
     let manifest_raw = std::fs::read_to_string(&manifest_path).unwrap();
     let manifest_json: serde_json::Value = serde_json::from_str(&manifest_raw).unwrap();
@@ -537,11 +540,11 @@ async fn test_create_project_local_only_no_ghost_repositories() {
     assert!(repos.is_empty(), "Repositories array must be empty, no ghost codebase created");
 
     // Verify glossary.md exists
-    assert!(temp_ws.join("clean-local-project-specs").join("glossary.md").exists());
+    assert!(created_specs_dir.join("glossary.md").exists());
     // Verify standard dirs exist
-    assert!(temp_ws.join("clean-local-project-specs").join("adr").exists());
-    assert!(temp_ws.join("clean-local-project-specs").join("epics").exists());
-    assert!(temp_ws.join("clean-local-project-specs").join("features").exists());
+    assert!(created_specs_dir.join("adr").exists());
+    assert!(created_specs_dir.join("epics").exists());
+    assert!(created_specs_dir.join("features").exists());
 
     server_task.abort();
     let _ = std::fs::remove_dir_all(&temp_ws);

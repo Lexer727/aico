@@ -100,7 +100,8 @@ describe('ProjectSwitcher', () => {
     // Enter project_name and verify live <project_name>-specs preview
     const slugInput = screen.getByTestId('input-new-project-name');
     fireEvent.change(slugInput, { target: { value: 'my-service' } });
-    expect(screen.getByTestId('preview-specs-folder')).toHaveTextContent('my-service-specs');
+    // @verifies spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-4::REQ-006
+    expect(screen.getByTestId('preview-specs-folder')).toHaveTextContent('specs/my-service-specs');
 
     // Customize display name and optional specs URL
     const displayNameInput = screen.getByTestId('input-project-display-name') as HTMLInputElement;
@@ -114,7 +115,7 @@ describe('ProjectSwitcher', () => {
     fireEvent.change(repoIdInput, { target: { value: 'service-backend' } });
 
     const repoPathPreview = screen.getByTestId('preview-repo-path-0') as HTMLInputElement;
-    expect(repoPathPreview.value).toBe('../codebase/service-backend');
+    expect(repoPathPreview.value).toBe('../../codebase/service-backend');
     expect(repoPathPreview.readOnly).toBe(true);
 
     // Submit form
@@ -136,7 +137,7 @@ describe('ProjectSwitcher', () => {
               {
                 id: 'service-backend',
                 name: 'My Service Codebase',
-                path: '../codebase/service-backend',
+                path: '../../codebase/service-backend',
                 type: 'codebase',
               },
             ],
