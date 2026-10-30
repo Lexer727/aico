@@ -73,12 +73,15 @@ async fn test_git_status_endpoint() {
 async fn test_create_project_scaffolds_specs_and_inits_git() {
     let temp_dir = std::env::temp_dir().join(format!("aico_test_create_proj_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
     std::fs::create_dir_all(&temp_dir).unwrap();
-    std::env::set_var("AICO_ROOT", &temp_dir);
+    let state = AppState {
+        storage_federation: std::sync::Arc::new(aico_storage::StorageFederationManager::with_workspace_root(&temp_dir)),
+        ..Default::default()
+    };
 
     let mut config = ServerConfig::default();
     config.base_port = 4310;
 
-    let mut server = HostServer::new(config);
+    let mut server = HostServer::with_state(config, state);
     let addr = server.bind().await.expect("Server should bind successfully");
 
     let server_task = tokio::spawn(async move {
@@ -893,4 +896,54 @@ async fn test_incremental_startup_vector_crawler_and_compaction() {
 
     let _ = std::fs::remove_dir_all(&temp_root);
 }
+
+// @verifies ft-core-canonical-workspace-storage-root::TASK-CORE-023-4::REQ-001
+// @verifies ft-core-canonical-workspace-storage-root::TASK-CORE-023-4::REQ-002
+// @verifies ft-core-canonical-workspace-storage-root::TASK-CORE-023-4::REQ-004
+#[tokio::test]
+async fn test_nested_specs_lineage_graph_persists_to_canonical_root_not_specs_folder() {
+    let temp_root = std::env::temp_dir().join(format!("aico_canonical_root_{}", rand::random::<u32>()));
+    let nested_specs_dir = temp_root.join("specs").join("nested-project");
+    let dummy_epic_dir = nested_specs_dir.join("epics").join("ec-dummy").join("features").join("ft-dummy");
+    std::fs::create_dir_all(&dummy_epic_dir).expect("create dummy epic dir");
+
+    let dummy_spec_file = dummy_epic_dir.join("spec-ft-dummy.md");
+    std::fs::write(
+        &dummy_spec_file,
+        "---\nid: ft-dummy\ntitle: Dummy Feature\nstatus: Draft\n---\n# Dummy Feature\n\n## 1. Requirements\n\n### REQ-001: Minimal requirement\nWhen invoked, the system shall succeed.\n",
+    )
+    .unwrap();
+
+    // 1. Verify resolve_workspace_root_from_specs_path resolves to temp_root
+    let resolved = aico_server::resolve_workspace_root_from_specs_path(&nested_specs_dir);
+    assert_eq!(resolved, temp_root, "Grandparent workspace root should be resolved");
+
+    // 2. Fetch or refresh graph cache
+    let cache_manager = aico_server::GraphCacheManager::new();
+    let _graph = cache_manager.get_or_refresh_graph(&nested_specs_dir).await;
+
+    // 3. Snapshot must exist under <temp_root>/.aico/storage/graph/nested-project/lineage_graph.json
+    let canonical_snapshot = temp_root
+        .join(".aico")
+        .join("storage")
+        .join("graph")
+        .join("nested-project")
+        .join("lineage_graph.json");
+    assert!(
+        canonical_snapshot.exists(),
+        "Snapshot must be saved under canonical root .aico/storage/graph, found none at {}",
+        canonical_snapshot.display()
+    );
+
+    // 4. Stray folder under specs/.aico must NOT exist
+    let rogue_specs_storage = temp_root.join("specs").join(".aico");
+    assert!(
+        !rogue_specs_storage.exists(),
+        "No .aico directory must ever exist in specs/ folder: {}",
+        rogue_specs_storage.display()
+    );
+
+    let _ = std::fs::remove_dir_all(&temp_root);
+}
+
 

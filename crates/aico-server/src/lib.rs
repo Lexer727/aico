@@ -11,6 +11,7 @@ pub mod github_service;
 pub use server::{
     AppState, CodeAnnotationInfo, CodeFileInfo, DiscoveredEpic, DiscoveredSpecInfo, HealthResponse,
     HostServer, ServerConfig, SetActiveProjectRequest, SystemStats, scan_codebase_files,
+    resolve_workspace_root_from_specs_path, GraphCacheManager,
 };
 pub use ws::{WebSocketHub, HubMessage};
 pub use auth::LanAuthenticator;

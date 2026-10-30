@@ -57,7 +57,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    let state = AppState::default();
+    // @implements spec-ft-core-canonical-workspace-storage-root::TASK-CORE-023-3::REQ-004
+    let state = AppState {
+        storage_federation: std::sync::Arc::new(aico_storage::StorageFederationManager::with_workspace_root(&root_dir)),
+        ..Default::default()
+    };
 
     // 3. Scan for project workspaces
     match RootScanner::scan(&root_dir) {

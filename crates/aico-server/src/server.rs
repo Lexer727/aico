@@ -167,7 +167,8 @@ impl GraphCacheManager {
 
         // Persist snapshot to <workspace_root>/.aico/storage/graph/<project_id>/lineage_graph.json
         // @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-6::REQ-002
-        let workspace_root = specs_path.parent().unwrap_or(specs_path);
+        // @implements spec-ft-core-canonical-workspace-storage-root::TASK-CORE-023-1::REQ-002
+        let workspace_root = resolve_workspace_root_from_specs_path(specs_path);
         let project_id = specs_path
             .file_name()
             .and_then(|n| n.to_str())
@@ -2828,37 +2829,51 @@ async fn handle_hybrid_search(
 // PROJECT CREATOR, LINEAGE GRAPH & GIT OPERATIONS ENDPOINTS
 // ---------------------------------------------------------------------------
 
+// @implements spec-ft-core-canonical-workspace-storage-root::TASK-CORE-023-1::REQ-001
+pub fn resolve_workspace_root_from_specs_path(specs_path: &StdPath) -> PathBuf {
+    if let Ok(root_env) = std::env::var("AICO_ROOT") {
+        return PathBuf::from(root_env);
+    }
+    if let Some(parent) = specs_path.parent() {
+        if parent.file_name().and_then(|n| n.to_str()) == Some("specs") {
+            if let Some(grandparent) = parent.parent() {
+                return grandparent.to_path_buf();
+            }
+        }
+        return parent.to_path_buf();
+    }
+    if StdPath::new("d:/aico").exists() {
+        PathBuf::from("d:/aico")
+    } else {
+        specs_path.to_path_buf()
+    }
+}
+
 // @implements spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-1::REQ-003
+// @implements spec-ft-core-canonical-workspace-storage-root::TASK-CORE-023-1::REQ-001
 pub fn get_workspace_root(registry: &WorkspaceRegistry) -> PathBuf {
     if let Ok(root_env) = std::env::var("AICO_ROOT") {
         return PathBuf::from(root_env);
     }
     if let Some(active) = registry.get_active() {
-        let p = StdPath::new(&active.specs_path);
-        if let Some(parent) = p.parent() {
-            if parent.file_name().and_then(|n| n.to_str()) == Some("specs") {
-                if let Some(grandparent) = parent.parent() {
-                    return grandparent.to_path_buf();
-                }
-            }
-            return parent.to_path_buf();
-        }
+        return resolve_workspace_root_from_specs_path(StdPath::new(&active.specs_path));
     }
     if let Some(first) = registry.list_cloned().first() {
-        let p = StdPath::new(&first.specs_path);
-        if let Some(parent) = p.parent() {
-            if parent.file_name().and_then(|n| n.to_str()) == Some("specs") {
-                if let Some(grandparent) = parent.parent() {
-                    return grandparent.to_path_buf();
-                }
-            }
-            return parent.to_path_buf();
-        }
+        return resolve_workspace_root_from_specs_path(StdPath::new(&first.specs_path));
     }
     if StdPath::new("d:/aico").exists() {
         PathBuf::from("d:/aico")
     } else {
         std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+    }
+}
+
+pub async fn resolve_server_workspace_root(state: &AppState) -> PathBuf {
+    if let Some(root) = state.storage_federation.workspace_root().await {
+        root
+    } else {
+        let registry = state.registry.read().await;
+        get_workspace_root(&registry)
     }
 }
 
@@ -3073,9 +3088,7 @@ async fn handle_github_cli_sync() -> impl IntoResponse {
 async fn handle_get_codebase_folders(
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    let registry = state.registry.read().await;
-    let ws_root = get_workspace_root(&registry);
-    drop(registry);
+    let ws_root = resolve_server_workspace_root(&state).await;
 
     let codebase_dir = ws_root.join("codebase");
     let mut folders = Vec::new();
@@ -3144,9 +3157,7 @@ async fn handle_create_project(
         ).into_response();
     }
 
-    let registry = state.registry.read().await;
-    let ws_root = get_workspace_root(&registry);
-    drop(registry);
+    let ws_root = resolve_server_workspace_root(&state).await;
 
     // @implements spec-ft-core-nested-specs-folder-and-relative-paths::TASK-CORE-022-2::REQ-005
     let specs_container = ws_root.join("specs");
@@ -4603,12 +4614,10 @@ async fn handle_git_clone(
     State(state): State<AppState>,
     Json(payload): Json<GitCloneRequest>,
 ) -> impl IntoResponse {
-    let registry = state.registry.read().await;
     let ws_root = match payload.workspace_root {
         Some(ref r) if !r.trim().is_empty() => PathBuf::from(r),
-        _ => get_workspace_root(&registry),
+        _ => resolve_server_workspace_root(&state).await,
     };
-    drop(registry);
 
     let repo_type = payload.repo_type.as_deref().unwrap_or("codebase");
     match git_clone_repo(&ws_root, &payload.repo_id, &payload.url, repo_type) {

@@ -526,12 +526,9 @@ async fn resolve_working_dir(state: &AppState, cwd: Option<String>, project_id: 
                 reg.get_active().cloned()
             };
             match target_proj {
-                Some(active) => active
-                    .specs_path
-                    .parent()
-                    .filter(|p| !p.as_os_str().is_empty())
-                    .map(Path::to_path_buf)
-                    .unwrap_or_else(|| active.specs_path.clone()),
+                // @implements ft-terminal-conpty-bridge::TASK-PTY-007::REQ-006
+                // @implements spec-ft-core-canonical-workspace-storage-root::TASK-CORE-023-2::REQ-003
+                Some(active) => crate::server::resolve_workspace_root_from_specs_path(&active.specs_path),
                 None => std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
             }
         }

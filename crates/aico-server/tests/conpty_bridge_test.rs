@@ -241,6 +241,72 @@ async fn test_default_cwd_resolves_to_workspace_root_parent_of_specs_path() {
     let _ = std::fs::remove_dir_all(&temp_root);
 }
 
+// @verifies ft-core-canonical-workspace-storage-root::TASK-CORE-023-4::REQ-003
+#[tokio::test]
+async fn test_nested_specs_default_cwd_resolves_to_grandparent_workspace_root() {
+    use aico_core::{DiscoveredProject, ProjectManifest, ProjectStatus};
+
+    let temp_root = std::env::temp_dir().join(format!("aico_ws_nested_{}", rand::random::<u32>()));
+    let nested_specs_dir = temp_root.join("specs").join("aico-specs");
+    let codebase_dir = temp_root.join("codebase").join("aico");
+    std::fs::create_dir_all(&nested_specs_dir).expect("create nested_specs_dir");
+    std::fs::create_dir_all(&codebase_dir).expect("create codebase_dir");
+
+    let state = AppState::default();
+    {
+        let mut reg = state.registry.write().await;
+        reg.register(DiscoveredProject {
+            id: "aico".to_string(),
+            name: "aico".to_string(),
+            specs_path: nested_specs_dir.clone(),
+            codebase_path: Some(codebase_dir),
+            manifest: ProjectManifest {
+                name: "aico".to_string(),
+                id: None,
+                version: Some("0.1.1".to_string()),
+                codebase_path: Some("../codebase/aico".to_string()),
+                repositories: Some(Vec::new()),
+                created_at: None,
+            },
+            status: ProjectStatus::Active,
+        });
+        reg.set_active("aico");
+    }
+
+    let config = ServerConfig {
+        base_port: 5045,
+        max_port_attempts: 10,
+        host: "127.0.0.1".to_string(),
+    };
+    let mut server = HostServer::with_state(config, state);
+    let addr = server.bind().await.expect("Failed to bind server");
+    let server_task = tokio::spawn(async move {
+        let _ = server.serve().await;
+    });
+
+    // Omit `cwd` in init so the server resolves the default working directory
+    let (mut write, mut read) = open_terminal(
+        addr,
+        serde_json::json!({ "type": "init", "shell": "powershell", "cols": 120, "rows": 30 }),
+    )
+    .await;
+
+    send_input(&mut write, "Write-Host (\"CWD=\" + (Get-Location).Path)\r").await;
+    let expected_marker = format!("CWD={}", temp_root.display());
+    let out = read_until(&mut read, &expected_marker, 15).await;
+
+    assert!(
+        out.contains(&expected_marker),
+        "Default terminal cwd for nested specs should be grandparent Workspace Root ({}), not specs dir ({}). Got: {}",
+        temp_root.display(),
+        nested_specs_dir.display(),
+        out
+    );
+
+    server_task.abort();
+    let _ = std::fs::remove_dir_all(&temp_root);
+}
+
 // @verifies ft-terminal-conpty-bridge::TASK-PTY-006::REQ-010
 #[tokio::test]
 async fn test_initial_conpty_dsr_query_is_stripped_from_websocket_output() {
