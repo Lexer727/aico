@@ -41,6 +41,11 @@ jobs:
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install Protoc (Protobuf Compiler)
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
 
@@ -77,8 +82,9 @@ jobs:
         shell: powershell
         run: |
           choco install innosetup -y
+          $iscc = if (Test-Path "C:\Program Files (x86)\Inno Setup 6\ISCC.exe") { "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" } else { "iscc" }
           $ver = "${{ steps.package.outputs.version }}"
-          iscc /DAppVersion="$ver" /DPayloadDir="dist/release" installer/aico.iss
+          & $iscc /DAppVersion="$ver" /DPayloadDir="dist/release" installer/aico.iss
 
       - name: Upload Artifacts (Workflow dispatch & backup)
         uses: actions/upload-artifact@v4
