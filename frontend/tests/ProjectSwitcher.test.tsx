@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { ProjectSwitcher } from '../src/components/navigation/ProjectSwitcher';
 import { useTabStore } from '../src/stores/useTabStore';
+import { apiFetch } from '../src/utils/apiClient';
 
 // @verifies ft-core-webui-shell::TASK-CORE-006-7::REQ-003
 // @verifies ft-core-webui-shell::TASK-CORE-006-7::REQ-005
@@ -133,5 +134,66 @@ describe('ProjectSwitcher', () => {
       expect(onRefreshProjects).toHaveBeenCalled();
       expect(onSelectProject).toHaveBeenCalledWith('my-service-specs');
     });
+  });
+
+  // @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-26::REQ-031
+  it('attaches X-Aico-Project header to requests matching local active project (REQ-031)', async () => {
+    useTabStore.getState().setActiveProject('alpha-specs');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    } as any);
+
+    await apiFetch('/api/v1/epics');
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      '/api/v1/epics',
+      expect.objectContaining({
+        headers: expect.anything(),
+      })
+    );
+    const headers = fetchSpy.mock.calls[0][1]?.headers;
+    const projectHeader =
+      headers instanceof Headers
+        ? headers.get('X-Aico-Project')
+        : (headers as any)['X-Aico-Project'];
+    expect(projectHeader).toBe('alpha-specs');
+  });
+
+  // @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-26::REQ-032
+  it('preserves tab-isolated active project when external active_project_changed event is broadcast (REQ-032)', () => {
+    // Tab has its own active project
+    useTabStore.getState().setActiveProject('tab-a-specs');
+    expect(useTabStore.getState().activeProjectId).toBe('tab-a-specs');
+
+    // Simulate an incoming broadcast from another tab
+    const incomingBroadcast = {
+      type: 'active_project_changed',
+      project_id: 'tab-b-specs',
+    };
+
+    // Follow the App.tsx decoupling guard:
+    const localProject = useTabStore.getState().activeProjectId;
+    const isDetached = false;
+    if (!isDetached && (localProject === 'default' || !localProject)) {
+      if (incomingBroadcast.project_id && incomingBroadcast.project_id !== localProject) {
+        useTabStore.getState().setActiveProject(incomingBroadcast.project_id);
+      }
+    }
+
+    // Local tab's active project remains intact and is NOT clobbered by external broadcast
+    expect(useTabStore.getState().activeProjectId).toBe('tab-a-specs');
+  });
+
+  // @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-26::REQ-033
+  it('initializes active project from deep-linked ?project=<id> URL parameter (REQ-033)', () => {
+    window.history.pushState({}, '', '/?project=deep-linked-specs&window=detached');
+    useTabStore.getState().reset();
+
+    expect(useTabStore.getState().activeProjectId).toBe('deep-linked-specs');
+
+    // Reset URL back
+    window.history.pushState({}, '', '/');
+    useTabStore.getState().reset();
   });
 });

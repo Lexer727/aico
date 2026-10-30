@@ -25,6 +25,7 @@ import { GitRepositoriesCard } from './GitRepositoriesCard';
 import { TagBadge } from '../../components/common/TagBadge';
 import { InlineMarkdown } from '../../components/common/MarkdownView';
 import { VisualLineageCanvas } from '../epic-hub/VisualLineageCanvas';
+import { apiFetch } from '../../utils/apiClient';
 
 export interface StorageStatsInfo {
   project_id: string;
@@ -113,7 +114,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       return;
     }
     const query = projectName ? `?project_id=${encodeURIComponent(projectName)}` : '';
-    fetch(`/api/v1/storage/stats${query}`)
+    apiFetch(`/api/v1/storage/stats${query}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data) setStats(data);

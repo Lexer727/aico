@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import clsx from 'clsx';
+import { apiFetch } from '../../utils/apiClient';
 import {
   Layers,
   ShieldCheck,
@@ -141,7 +142,7 @@ export const VisualLineageCanvas: React.FC<VisualLineageCanvasProps> = ({
         if (epicId) queryParams.set('epic', epicId);
 
         const url = `/api/v1/graph${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
-        const res = await fetch(url);
+        const res = await apiFetch(url);
         if (res.ok) {
           const data = await res.json();
           if (isMounted) {

@@ -3,7 +3,7 @@ use axum::{
         ws::{Message, WebSocket, WebSocketUpgrade},
         Path, Query, State,
     },
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::IntoResponse,
     routing::{delete, get, post},
     Json, Router,
@@ -757,9 +757,48 @@ async fn list_projects_handler(
     Json(registry.list_cloned())
 }
 
-#[derive(Debug, Deserialize)]
+
+#[derive(Deserialize, Debug, Default, Clone)]
+pub struct ProjectQuery {
+    pub project: Option<String>,
+    pub project_id: Option<String>,
+}
+
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-23::REQ-030
+pub async fn resolve_project_context(
+    state: &AppState,
+    headers: &HeaderMap,
+    query: &ProjectQuery,
+) -> Option<DiscoveredProject> {
+    let target_id = query
+        .project
+        .as_deref()
+        .or(query.project_id.as_deref())
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            headers
+                .get("x-aico-project")
+                .or_else(|| headers.get("X-Aico-Project"))
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+        });
+
+    let registry = state.registry.read().await;
+    if let Some(pid) = target_id {
+        if let Some(p) = registry.list_cloned().into_iter().find(|p| p.id == pid || p.name == pid) {
+            return Some(p);
+        }
+    }
+
+    registry.get_active().cloned().or_else(|| registry.list_cloned().into_iter().next())
+}
+
+#[derive(Debug, Deserialize, Default)]
 pub struct StorageStatsQuery {
     pub project_id: Option<String>,
+    pub project: Option<String>,
 }
 
 // @implements ft-core-discovery::TASK-CORE-004-3::REQ-008
@@ -790,16 +829,17 @@ async fn set_active_project_handler(
 }
 
 // @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-4::REQ-003
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-23::REQ-030
 async fn get_storage_stats_handler(
-    State(state): State<AppState>,
+    headers: HeaderMap,
     Query(query): Query<StorageStatsQuery>,
+    State(state): State<AppState>,
 ) -> Result<Json<aico_storage::StorageStats>, (StatusCode, String)> {
-    let registry = state.registry.read().await;
-    let target_proj = if let Some(ref pid) = query.project_id {
-        registry.list_cloned().into_iter().find(|p| p.id == *pid || p.name == *pid)
-    } else {
-        registry.get_active().cloned().or_else(|| registry.list_cloned().into_iter().next())
+    let pq = ProjectQuery {
+        project: query.project.clone(),
+        project_id: query.project_id.clone(),
     };
+    let target_proj = resolve_project_context(&state, &headers, &pq).await;
 
     if let Some(proj) = target_proj {
         let _ = state.storage_federation.register_project(&proj.id, &proj.specs_path).await;
@@ -807,7 +847,7 @@ async fn get_storage_stats_handler(
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
         Ok(Json(stats))
     } else {
-        let stats = state.storage_federation.telemetry_stats(query.project_id.as_deref()).await
+        let stats = state.storage_federation.telemetry_stats(query.project_id.as_deref().or(query.project.as_deref())).await
             .map_err(|_| (StatusCode::NOT_FOUND, "No project storage found".to_string()))?;
         Ok(Json(stats))
     }
@@ -820,18 +860,18 @@ pub struct ReindexRequest {
 
 // @implements spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-2::REQ-005
 // @implements spec-ft-storage-workspace-crawler-and-reindexing::TASK-STORAGE-004-2::REQ-008
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-23::REQ-030
 async fn handle_storage_reindex(
+    headers: HeaderMap,
     State(state): State<AppState>,
     body: Option<Json<ReindexRequest>>,
 ) -> Result<Json<crate::crawler::CrawlReport>, (StatusCode, String)> {
     let req = body.map(|Json(b)| b).unwrap_or_default();
-    let registry = state.registry.read().await;
-    let target_proj = if let Some(ref pid) = req.project_id {
-        registry.list_cloned().into_iter().find(|p| p.id == *pid || p.name == *pid)
-    } else {
-        registry.get_active().cloned().or_else(|| registry.list_cloned().into_iter().next())
+    let pq = ProjectQuery {
+        project: req.project_id.clone(),
+        project_id: req.project_id.clone(),
     };
-    drop(registry);
+    let target_proj = resolve_project_context(&state, &headers, &pq).await;
 
     let proj = match target_proj {
         Some(p) => p,
@@ -1042,6 +1082,8 @@ pub struct SystemStats {
 #[derive(Debug, Deserialize)]
 pub struct RawFileQuery {
     pub path: String,
+    pub project: Option<String>,
+    pub project_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -2072,16 +2114,18 @@ pub fn scan_adrs_for_project(specs_path: &std::path::Path) -> Vec<DiscoveredAdrI
     adrs
 }
 
+
 // @implements ft-core-epic-hub::TASK-CORE-007-12::REQ-001
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-23::REQ-030
 async fn list_epics_handler(
+    headers: HeaderMap,
+    Query(query): Query<ProjectQuery>,
     State(state): State<AppState>,
 ) -> Json<Vec<DiscoveredEpic>> {
-    let registry = state.registry.read().await;
-    let active_project = registry.get_active();
-
-    let target_path = if let Some(proj) = active_project {
+    let project = resolve_project_context(&state, &headers, &query).await;
+    let target_path = if let Some(proj) = project {
         if proj.specs_path.exists() {
-            proj.specs_path.clone()
+            proj.specs_path
         } else {
             std::path::PathBuf::from("d:/aico/aico-specs")
         }
@@ -2093,16 +2137,17 @@ async fn list_epics_handler(
 }
 
 // @implements ft-core-epic-hub::TASK-CORE-007-12::REQ-001
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-23::REQ-030
 async fn get_epic_handler(
     Path(id): Path<String>,
+    headers: HeaderMap,
+    Query(query): Query<ProjectQuery>,
     State(state): State<AppState>,
 ) -> Result<Json<DiscoveredEpic>, StatusCode> {
-    let registry = state.registry.read().await;
-    let active_project = registry.get_active();
-
-    let target_path = if let Some(proj) = active_project {
+    let project = resolve_project_context(&state, &headers, &query).await;
+    let target_path = if let Some(proj) = project {
         if proj.specs_path.exists() {
-            proj.specs_path.clone()
+            proj.specs_path
         } else {
             std::path::PathBuf::from("d:/aico/aico-specs")
         }
@@ -2120,15 +2165,16 @@ async fn get_epic_handler(
 }
 
 // @implements ft-core-epic-hub::TASK-CORE-007-12::REQ-001
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-23::REQ-030
 async fn list_features_handler(
+    headers: HeaderMap,
+    Query(query): Query<ProjectQuery>,
     State(state): State<AppState>,
 ) -> Json<Vec<DiscoveredFeatureInfo>> {
-    let registry = state.registry.read().await;
-    let active_project = registry.get_active();
-
-    let target_path = if let Some(proj) = active_project {
+    let project = resolve_project_context(&state, &headers, &query).await;
+    let target_path = if let Some(proj) = project {
         if proj.specs_path.exists() {
-            proj.specs_path.clone()
+            proj.specs_path
         } else {
             std::path::PathBuf::from("d:/aico/aico-specs")
         }
@@ -2140,16 +2186,17 @@ async fn list_features_handler(
 }
 
 // @implements ft-core-epic-hub::TASK-CORE-007-12::REQ-001
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-23::REQ-030
 async fn get_feature_handler(
     Path(id): Path<String>,
+    headers: HeaderMap,
+    Query(query): Query<ProjectQuery>,
     State(state): State<AppState>,
 ) -> Result<Json<DiscoveredFeatureInfo>, StatusCode> {
-    let registry = state.registry.read().await;
-    let active_project = registry.get_active();
-
-    let target_path = if let Some(proj) = active_project {
+    let project = resolve_project_context(&state, &headers, &query).await;
+    let target_path = if let Some(proj) = project {
         if proj.specs_path.exists() {
-            proj.specs_path.clone()
+            proj.specs_path
         } else {
             std::path::PathBuf::from("d:/aico/aico-specs")
         }
@@ -2176,15 +2223,16 @@ async fn get_feature_handler(
 }
 
 // @implements ft-core-epic-hub::TASK-CORE-007-3::REQ-008
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-23::REQ-030
 async fn list_adrs_handler(
+    headers: HeaderMap,
+    Query(query): Query<ProjectQuery>,
     State(state): State<AppState>,
 ) -> Json<Vec<DiscoveredAdrInfo>> {
-    let registry = state.registry.read().await;
-    let active_project = registry.get_active();
-
-    let target_path = if let Some(proj) = active_project {
+    let project = resolve_project_context(&state, &headers, &query).await;
+    let target_path = if let Some(proj) = project {
         if proj.specs_path.exists() {
-            proj.specs_path.clone()
+            proj.specs_path
         } else {
             std::path::PathBuf::from("d:/aico/aico-specs")
         }
@@ -2196,16 +2244,17 @@ async fn list_adrs_handler(
 }
 
 // @implements ft-core-epic-hub::TASK-CORE-007-3::REQ-008
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-23::REQ-030
 async fn get_adr_handler(
     Path(id): Path<String>,
+    headers: HeaderMap,
+    Query(query): Query<ProjectQuery>,
     State(state): State<AppState>,
 ) -> Result<Json<DiscoveredAdrInfo>, StatusCode> {
-    let registry = state.registry.read().await;
-    let active_project = registry.get_active();
-
-    let target_path = if let Some(proj) = active_project {
+    let project = resolve_project_context(&state, &headers, &query).await;
+    let target_path = if let Some(proj) = project {
         if proj.specs_path.exists() {
-            proj.specs_path.clone()
+            proj.specs_path
         } else {
             std::path::PathBuf::from("d:/aico/aico-specs")
         }
@@ -2223,15 +2272,16 @@ async fn get_adr_handler(
 }
 
 // @implements ft-core-epic-hub::TASK-CORE-007-12::REQ-001
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-23::REQ-030
 async fn get_glossary_handler(
+    headers: HeaderMap,
+    Query(query): Query<ProjectQuery>,
     State(state): State<AppState>,
 ) -> Json<Vec<TermInfo>> {
-    let registry = state.registry.read().await;
-    let active_project = registry.get_active();
-
-    let target_path = if let Some(proj) = active_project {
+    let project = resolve_project_context(&state, &headers, &query).await;
+    let target_path = if let Some(proj) = project {
         if proj.specs_path.exists() {
-            proj.specs_path.clone()
+            proj.specs_path
         } else {
             std::path::PathBuf::from("d:/aico/aico-specs")
         }
@@ -2243,12 +2293,14 @@ async fn get_glossary_handler(
 }
 
 // @implements ft-core-omni-search-fulltext::TASK-CORE-009-7::REQ-010
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-23::REQ-030
 async fn list_code_files_handler(
+    headers: HeaderMap,
+    Query(query): Query<ProjectQuery>,
     State(state): State<AppState>,
 ) -> Json<Vec<CodeFileInfo>> {
-    let registry = state.registry.read().await;
-    let active = registry.get_active().or_else(|| registry.list().into_iter().next());
-    if let Some(proj) = active {
+    let project = resolve_project_context(&state, &headers, &query).await;
+    if let Some(proj) = project {
         if let Some(code_path) = &proj.codebase_path {
             if code_path.exists() {
                 return Json(scan_codebase_files(code_path));
@@ -2263,7 +2315,9 @@ async fn list_code_files_handler(
 // @implements ft-core-workspace-path-normalization::TASK-CORE-014-1::REQ-002
 // @implements ft-core-code-path-simplification-and-omnisearch::TASK-CORE-015-1::REQ-002
 // @implements ft-core-multirepo-code-path-normalization::TASK-CORE-016-1::REQ-002
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-23::REQ-030
 async fn get_raw_file_handler(
+    headers: HeaderMap,
     Query(query): Query<RawFileQuery>,
     State(state): State<AppState>,
 ) -> Result<String, StatusCode> {
@@ -2294,9 +2348,12 @@ async fn get_raw_file_handler(
         };
     }
 
-    let registry = state.registry.read().await;
-    let active_project = registry.get_active().or_else(|| registry.list().into_iter().next());
-    let target_path = if let Some(proj) = active_project {
+    let project_query = ProjectQuery {
+        project: query.project.clone(),
+        project_id: query.project_id.clone(),
+    };
+    let active_project = resolve_project_context(&state, &headers, &project_query).await;
+    let target_path = if let Some(ref proj) = active_project {
         if proj.specs_path.exists() {
             proj.specs_path.clone()
         } else {
@@ -2344,14 +2401,14 @@ async fn get_stats_handler(
 // @implements ft-git-backend-status::TASK-GIT-001-3::REQ-005
 // @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-1::REQ-001
 // @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-2::REQ-005
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-23::REQ-030
 async fn get_git_status_handler(
+    headers: HeaderMap,
+    Query(query): Query<ProjectQuery>,
     State(state): State<AppState>,
 ) -> Json<Vec<GitRepoStatus>> {
-    let registry = state.registry.read().await;
-    let active_project = registry.get_active().cloned().or_else(|| registry.list_cloned().into_iter().next());
-    drop(registry);
-
-    let results = if let Some(proj) = active_project {
+    let project = resolve_project_context(&state, &headers, &query).await;
+    let results = if let Some(proj) = project {
         collect_project_git_status(&proj.specs_path).await
     } else {
         vec![]
@@ -2911,7 +2968,7 @@ async fn handle_create_project(
     }
 
     // @implements ft-storage-multi-project-federation-and-telemetry::TASK-STORAGE-003-6::REQ-002
-    let subdirs = [".aico", "adr", "epics", "features"];
+    let subdirs = ["adr", "epics", "features"];
     for sub in &subdirs {
         if let Err(e) = std::fs::create_dir_all(target_specs_dir.join(sub)) {
             return (
@@ -3079,17 +3136,13 @@ async fn handle_create_project(
 // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-19::REQ-027
 // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-19::REQ-028
 // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-19::REQ-029
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-23::REQ-030
 async fn handle_get_project_manifest(
+    headers: HeaderMap,
+    Query(query): Query<ProjectQuery>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    let registry = state.registry.read().await;
-    let active_project = registry
-        .get_active()
-        .cloned()
-        .or_else(|| registry.list_cloned().into_iter().next());
-    drop(registry);
-
-    let proj = match active_project {
+    let proj = match resolve_project_context(&state, &headers, &query).await {
         Some(p) => p,
         None => {
             return (
@@ -3229,7 +3282,10 @@ async fn handle_get_project_manifest(
 // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-19::REQ-027
 // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-19::REQ-028
 // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-19::REQ-029
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-23::REQ-030
 async fn handle_update_project_manifest(
+    headers: HeaderMap,
+    Query(query): Query<ProjectQuery>,
     State(state): State<AppState>,
     Json(payload): Json<UpdateProjectManifestRequest>,
 ) -> impl IntoResponse {
@@ -3242,14 +3298,7 @@ async fn handle_update_project_manifest(
             .into_response();
     }
 
-    let registry = state.registry.read().await;
-    let active_project = registry
-        .get_active()
-        .cloned()
-        .or_else(|| registry.list_cloned().into_iter().next());
-    drop(registry);
-
-    let proj = match active_project {
+    let proj = match resolve_project_context(&state, &headers, &query).await {
         Some(p) => p,
         None => {
             return (
@@ -3388,6 +3437,7 @@ async fn handle_update_project_manifest(
 #[derive(Debug, Deserialize)]
 pub struct GraphQuery {
     pub project: Option<String>,
+    pub project_id: Option<String>,
     pub epic: Option<String>,
 }
 
@@ -3421,17 +3471,17 @@ pub struct LineageGraphResponse {
 // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-4::REQ-005
 // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-14::REQ-023
 // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-5::REQ-006
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-23::REQ-030
 async fn handle_get_graph(
+    headers: HeaderMap,
     State(state): State<AppState>,
     Query(query): Query<GraphQuery>,
 ) -> impl IntoResponse {
-    let registry = state.registry.read().await;
-    let active_project = if let Some(ref pid) = query.project {
-        registry.list_cloned().into_iter().find(|p| p.id == *pid || p.name == *pid)
-    } else {
-        registry.get_active().cloned().or_else(|| registry.list_cloned().into_iter().next())
+    let pq = ProjectQuery {
+        project: query.project.clone(),
+        project_id: query.project_id.clone(),
     };
-    drop(registry);
+    let active_project = resolve_project_context(&state, &headers, &pq).await;
 
     let proj = match active_project {
         Some(p) => p,
@@ -4007,7 +4057,8 @@ fn scan_features_for_graph(
 }
 
 // @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-6::REQ-008
-async fn resolve_repo_dir(state: &AppState, repo_id: Option<&str>, path: Option<&str>) -> Result<PathBuf, String> {
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-23::REQ-030
+async fn resolve_repo_dir(state: &AppState, repo_id: Option<&str>, path: Option<&str>, project_id: Option<&str>) -> Result<PathBuf, String> {
     if let Some(p) = path {
         if !p.trim().is_empty() {
             let path_buf = PathBuf::from(p);
@@ -4018,10 +4069,14 @@ async fn resolve_repo_dir(state: &AppState, repo_id: Option<&str>, path: Option<
     }
 
     let registry = state.registry.read().await;
-    let active = registry.get_active().cloned().or_else(|| registry.list_cloned().into_iter().next());
+    let target_proj = if let Some(pid) = project_id {
+        registry.list_cloned().into_iter().find(|p| p.id == pid || p.name == pid)
+    } else {
+        registry.get_active().cloned().or_else(|| registry.list_cloned().into_iter().next())
+    };
     drop(registry);
 
-    let proj = active.ok_or_else(|| "No active project registered".to_string())?;
+    let proj = target_proj.ok_or_else(|| "No active project registered".to_string())?;
 
     if let Some(rid) = repo_id {
         // 1. Search effective repositories first (ensures codebase repo matching proj.id is found)
@@ -4049,16 +4104,21 @@ async fn resolve_repo_dir(state: &AppState, repo_id: Option<&str>, path: Option<
 
 #[derive(Debug, Deserialize)]
 pub struct GitActionRequest {
+    #[serde(default)]
+    pub project: Option<String>,
     pub repo_id: Option<String>,
     pub path: Option<String>,
 }
 
 // @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-2::REQ-004
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-23::REQ-030
 async fn handle_git_pull(
+    headers: HeaderMap,
     State(state): State<AppState>,
     Json(payload): Json<GitActionRequest>,
 ) -> impl IntoResponse {
-    let repo_dir = match resolve_repo_dir(&state, payload.repo_id.as_deref(), payload.path.as_deref()).await {
+    let pid = payload.project.as_deref().or_else(|| headers.get("x-aico-project").and_then(|v| v.to_str().ok()));
+    let repo_dir = match resolve_repo_dir(&state, payload.repo_id.as_deref(), payload.path.as_deref(), pid).await {
         Ok(dir) => dir,
         Err(err) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": err }))).into_response(),
     };
@@ -4070,11 +4130,14 @@ async fn handle_git_pull(
 }
 
 // @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-2::REQ-004
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-23::REQ-030
 async fn handle_git_push(
+    headers: HeaderMap,
     State(state): State<AppState>,
     Json(payload): Json<GitActionRequest>,
 ) -> impl IntoResponse {
-    let repo_dir = match resolve_repo_dir(&state, payload.repo_id.as_deref(), payload.path.as_deref()).await {
+    let pid = payload.project.as_deref().or_else(|| headers.get("x-aico-project").and_then(|v| v.to_str().ok()));
+    let repo_dir = match resolve_repo_dir(&state, payload.repo_id.as_deref(), payload.path.as_deref(), pid).await {
         Ok(dir) => dir,
         Err(err) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": err }))).into_response(),
     };
@@ -4087,6 +4150,8 @@ async fn handle_git_push(
 
 #[derive(Debug, Deserialize)]
 pub struct GitCommitRequest {
+    #[serde(default)]
+    pub project: Option<String>,
     pub repo_id: Option<String>,
     pub path: Option<String>,
     #[serde(default)]
@@ -4095,7 +4160,9 @@ pub struct GitCommitRequest {
 
 // @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-2::REQ-004
 // @implements spec-ft-git-manifest-and-workflow-skill::TASK-GIT-005-2::REQ-008
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-23::REQ-030
 async fn handle_git_commit(
+    headers: HeaderMap,
     State(state): State<AppState>,
     Json(payload): Json<GitCommitRequest>,
 ) -> impl IntoResponse {
@@ -4107,7 +4174,8 @@ async fn handle_git_commit(
         ).into_response();
     }
 
-    let repo_dir = match resolve_repo_dir(&state, payload.repo_id.as_deref(), payload.path.as_deref()).await {
+    let pid = payload.project.as_deref().or_else(|| headers.get("x-aico-project").and_then(|v| v.to_str().ok()));
+    let repo_dir = match resolve_repo_dir(&state, payload.repo_id.as_deref(), payload.path.as_deref(), pid).await {
         Ok(dir) => dir,
         Err(err) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": err }))).into_response(),
     };
@@ -4129,11 +4197,14 @@ pub struct GitAiCommitRequest {
 }
 
 // @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-4::REQ-004
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-23::REQ-030
 async fn handle_git_ai_commit(
+    headers: HeaderMap,
     State(state): State<AppState>,
     Json(payload): Json<GitAiCommitRequest>,
 ) -> impl IntoResponse {
-    let repo_dir = match resolve_repo_dir(&state, payload.repo_id.as_deref(), payload.path.as_deref()).await {
+    let pid = payload.project.as_deref().or_else(|| headers.get("x-aico-project").and_then(|v| v.to_str().ok()));
+    let repo_dir = match resolve_repo_dir(&state, payload.repo_id.as_deref(), payload.path.as_deref(), pid).await {
         Ok(dir) => dir,
         Err(err) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": err }))).into_response(),
     };

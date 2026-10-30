@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FileCode, CheckCircle2, Loader2, Tag } from 'lucide-react';
+import { apiFetch } from '../../utils/apiClient';
 
 interface CodeViewerProps {
   filePath: string;
@@ -110,7 +111,7 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({ filePath, onSelectFeatur
 
     async function loadFile() {
       try {
-        const res = await fetch(`/api/v1/raw?path=${encodeURIComponent(filePath)}`);
+        const res = await apiFetch(`/api/v1/raw?path=${encodeURIComponent(filePath)}`);
         if (res.ok) {
           const content = await res.text();
           if (isMounted) {

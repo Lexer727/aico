@@ -36,6 +36,8 @@ pub enum ClientTerminalMessage {
         cwd: Option<String>,
         cols: Option<u16>,
         rows: Option<u16>,
+        #[serde(default)]
+        project_id: Option<String>,
     },
     #[serde(rename = "input")]
     Input { data: String },
@@ -512,12 +514,18 @@ pub async fn terminal_ws_handler(ws: WebSocketUpgrade, State(state): State<AppSt
 
 // @implements ft-terminal-conpty-bridge::TASK-PTY-006::REQ-003
 // @implements ft-terminal-panel-ui::TASK-TERM-002-7::REQ-011
-async fn resolve_working_dir(state: &AppState, cwd: Option<String>) -> PathBuf {
+// @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-23::REQ-030
+async fn resolve_working_dir(state: &AppState, cwd: Option<String>, project_id: Option<String>) -> PathBuf {
     match cwd {
         Some(dir) if !dir.trim().is_empty() => PathBuf::from(dir),
         _ => {
             let reg = state.registry.read().await;
-            match reg.get_active() {
+            let target_proj = if let Some(ref pid) = project_id {
+                reg.list_cloned().into_iter().find(|p| p.id == *pid || p.name == *pid)
+            } else {
+                reg.get_active().cloned()
+            };
+            match target_proj {
                 Some(active) => active
                     .specs_path
                     .parent()
@@ -561,7 +569,7 @@ async fn handle_terminal_socket(socket: WebSocket, state: AppState) {
         };
 
         match serde_json::from_str::<ClientTerminalMessage>(&text) {
-            Ok(ClientTerminalMessage::Init { tab_id, shell, cwd, cols, rows }) => {
+            Ok(ClientTerminalMessage::Init { tab_id, shell, cwd, cols, rows, project_id }) => {
                 if let Some((old_id, old_tab_id, old_pty)) = session.take() {
                     if let Some(tid) = old_tab_id {
                         state.terminal_sessions.remove_named(&tid);
@@ -589,7 +597,7 @@ async fn handle_terminal_socket(socket: WebSocket, state: AppState) {
                 }
 
                 let shell_type = ShellType::from_str(&shell);
-                let working_dir = resolve_working_dir(&state, cwd).await;
+                let working_dir = resolve_working_dir(&state, cwd, project_id).await;
                 let last_output = Arc::new(AtomicU64::new(0));
                 match spawn_pty_session(
                     &shell_type,

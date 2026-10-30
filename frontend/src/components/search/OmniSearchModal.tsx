@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search, X, Layers, BookOpen, FileCode, Scale, Package } from 'lucide-react';
 import { searchWorkspace, type SearchableEntity, type SearchScope } from '../../utils/searchEngine';
+import { apiFetch } from '../../utils/apiClient';
 
 export type { SearchScope };
 
@@ -66,7 +67,7 @@ export const OmniSearchModal: React.FC<OmniSearchModalProps> = ({
     let isMounted = true;
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/v1/search?q=${encodeURIComponent(q)}`);
+        const res = await apiFetch(`/api/v1/search?q=${encodeURIComponent(q)}`);
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data) && isMounted) {

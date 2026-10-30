@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Settings, Shield, Server, Database, Sliders, FolderTree, Bell, RefreshCw, Layers } from 'lucide-react';
+import { apiFetch } from '../../utils/apiClient';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -35,7 +36,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     setIsRebuildingGraph(true);
     setGraphStatusMessage(null);
     try {
-      const res = await fetch('/api/v1/storage/rebuild-graph', {
+      const res = await apiFetch('/api/v1/storage/rebuild-graph', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
@@ -57,7 +58,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     setIsReindexingVectors(true);
     setVectorStatusMessage(null);
     try {
-      const res = await fetch('/api/v1/storage/reindex', {
+      const res = await apiFetch('/api/v1/storage/reindex', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),

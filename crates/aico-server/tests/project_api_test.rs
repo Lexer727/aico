@@ -327,3 +327,142 @@ async fn test_create_and_update_project_manifest_api() {
     server_task.abort();
     let _ = std::fs::remove_dir_all(&temp_ws);
 }
+
+// @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-23::REQ-030
+// @verifies spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-26::REQ-030
+#[tokio::test]
+async fn test_multi_tab_project_context_resolution() {
+    let mut config = ServerConfig::default();
+    config.base_port = 4310;
+
+    let temp_ws = std::env::temp_dir().join(format!("aico-multi-tab-{}", rand::random::<u64>()));
+    let proj2_dir = temp_ws.join("isolated-app-specs");
+    std::fs::create_dir_all(&proj2_dir).unwrap();
+
+    let manifest2_content = serde_json::json!({
+        "project_name": "isolated-app",
+        "id": "isolated-app-specs",
+        "name": "Isolated App Specs",
+        "repositories": []
+    });
+    std::fs::write(
+        proj2_dir.join(".aico-project.json"),
+        serde_json::to_string_pretty(&manifest2_content).unwrap(),
+    )
+    .unwrap();
+
+    let mut registry = WorkspaceRegistry::new();
+    let project1 = DiscoveredProject {
+        id: "core-project".to_string(),
+        name: "Core Project".to_string(),
+        specs_path: PathBuf::from("d:/aico/aico-specs"),
+        codebase_path: Some(PathBuf::from("d:/aico/codebase/core")),
+        manifest: ProjectManifest {
+            name: "Core Project".to_string(),
+            id: None,
+            version: Some("0.1.0".to_string()),
+            codebase_path: Some("../codebase/core".to_string()),
+            created_at: None,
+            repositories: None,
+        },
+        status: aico_core::ProjectStatus::Active,
+    };
+    let project2 = DiscoveredProject {
+        id: "isolated-app-specs".to_string(),
+        name: "Isolated App Specs".to_string(),
+        specs_path: proj2_dir.clone(),
+        codebase_path: None,
+        manifest: ProjectManifest {
+            name: "Isolated App Specs".to_string(),
+            id: Some("isolated-app-specs".to_string()),
+            version: Some("0.1.0".to_string()),
+            codebase_path: None,
+            created_at: None,
+            repositories: None,
+        },
+        status: aico_core::ProjectStatus::Active,
+    };
+
+    registry.register(project1);
+    registry.register(project2);
+    registry.set_active("core-project");
+
+    let test_storage = temp_ws.join(".storage");
+    let _ = std::fs::create_dir_all(&test_storage);
+
+    let state = AppState {
+        registry: Arc::new(RwLock::new(registry)),
+        storage_federation: Arc::new(aico_storage::StorageFederationManager::with_workspace_root(test_storage.clone())),
+        ..Default::default()
+    };
+
+    let mut server = HostServer::with_state(config, state);
+    let addr = server.bind().await.expect("Server should bind successfully");
+
+    let server_task = tokio::spawn(async move {
+        server.serve().await.expect("Server should run");
+    });
+
+    let client = reqwest::Client::new();
+
+    // 1. GET /api/v1/epics without project header -> falls back to active project ("core-project")
+    let epics_default = client
+        .get(format!("http://{}/api/v1/epics", addr))
+        .send()
+        .await
+        .unwrap()
+        .json::<Vec<serde_json::Value>>()
+        .await
+        .unwrap();
+    assert!(!epics_default.is_empty(), "Default epics should come from core-project");
+
+    // 2. GET /api/v1/epics with X-Aico-Project: isolated-app-specs -> isolated empty project
+    let epics_tab2 = client
+        .get(format!("http://{}/api/v1/epics", addr))
+        .header("X-Aico-Project", "isolated-app-specs")
+        .send()
+        .await
+        .unwrap()
+        .json::<Vec<serde_json::Value>>()
+        .await
+        .unwrap();
+    assert_eq!(epics_tab2.len(), 0, "Tab 2 request with X-Aico-Project should see 0 epics");
+
+    // 3. GET /api/v1/epics?project=isolated-app-specs -> query parameter resolution
+    let epics_query = client
+        .get(format!("http://{}/api/v1/epics?project=isolated-app-specs", addr))
+        .send()
+        .await
+        .unwrap()
+        .json::<Vec<serde_json::Value>>()
+        .await
+        .unwrap();
+    assert_eq!(epics_query.len(), 0, "Query param ?project= should see 0 epics");
+
+    // 4. GET /api/v1/projects/manifest with X-Aico-Project header
+    let manifest_tab2 = client
+        .get(format!("http://{}/api/v1/projects/manifest", addr))
+        .header("X-Aico-Project", "isolated-app-specs")
+        .send()
+        .await
+        .unwrap()
+        .json::<serde_json::Value>()
+        .await
+        .unwrap();
+    assert_eq!(manifest_tab2["project_name"], "isolated-app");
+    assert_eq!(manifest_tab2["name"], "Isolated App Specs");
+
+    // 5. Verify server active project was NOT mutated by Tab 2 requests
+    let epics_default_after = client
+        .get(format!("http://{}/api/v1/epics", addr))
+        .send()
+        .await
+        .unwrap()
+        .json::<Vec<serde_json::Value>>()
+        .await
+        .unwrap();
+    assert_eq!(epics_default_after.len(), epics_default.len());
+
+    server_task.abort();
+    let _ = std::fs::remove_dir_all(&temp_ws);
+}

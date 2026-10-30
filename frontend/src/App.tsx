@@ -40,6 +40,7 @@ import { useTabStore, getWindowId, type TabItem } from './stores/useTabStore';
 import { useDockStore } from './stores/useDockStore';
 import { MobilePairingModal } from './components/navigation/MobilePairingModal';
 import { DesktopWindowSwitcher } from './components/navigation/DesktopWindowSwitcher';
+import { apiFetch } from './utils/apiClient';
 import { Search, QrCode, ExternalLink } from 'lucide-react';
 
 if (typeof window !== 'undefined') {
@@ -120,9 +121,10 @@ export const MainWorkspace: React.FC = () => {
 
   // Dynamic Epic discovery from Axum Server REST API
   // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-20::REQ-026
+  // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-24::REQ-031
   const fetchEpics = useCallback(async () => {
     try {
-      const res = await fetch('/api/v1/epics');
+      const res = await apiFetch('/api/v1/epics');
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {
@@ -144,7 +146,7 @@ export const MainWorkspace: React.FC = () => {
 
   const fetchFeatures = useCallback(async () => {
     try {
-      const res = await fetch('/api/v1/features');
+      const res = await apiFetch('/api/v1/features');
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {
@@ -166,7 +168,7 @@ export const MainWorkspace: React.FC = () => {
 
   const fetchAdrs = useCallback(async () => {
     try {
-      const res = await fetch('/api/v1/adrs');
+      const res = await apiFetch('/api/v1/adrs');
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {
@@ -186,7 +188,7 @@ export const MainWorkspace: React.FC = () => {
 
   const fetchGlossaryTerms = useCallback(async () => {
     try {
-      const res = await fetch('/api/v1/glossary');
+      const res = await apiFetch('/api/v1/glossary');
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {
@@ -200,7 +202,7 @@ export const MainWorkspace: React.FC = () => {
 
   const fetchProjects = useCallback(async () => {
     try {
-      const res = await fetch('/api/v1/projects');
+      const res = await apiFetch('/api/v1/projects');
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
@@ -210,7 +212,12 @@ export const MainWorkspace: React.FC = () => {
             specs_path: p.specs_path,
           }));
           setProjects(mapped);
-          if (activeProjectId === 'default' || !mapped.some((p: { id: string }) => p.id === activeProjectId)) {
+          const urlProject = typeof window !== 'undefined' && window.location ? new URLSearchParams(window.location.search).get('project') : null;
+          if (urlProject && mapped.some((p: { id: string }) => p.id === urlProject)) {
+            if (activeProjectId !== urlProject) {
+              setActiveProject(urlProject);
+            }
+          } else if (activeProjectId === 'default' || !mapped.some((p: { id: string }) => p.id === activeProjectId)) {
             setActiveProject(mapped[0].id);
           }
         }
@@ -222,7 +229,7 @@ export const MainWorkspace: React.FC = () => {
 
   const fetchCodeFiles = useCallback(async () => {
     try {
-      const res = await fetch('/api/v1/code/files');
+      const res = await apiFetch('/api/v1/code/files');
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {
@@ -267,15 +274,18 @@ export const MainWorkspace: React.FC = () => {
     if (lastMessage && typeof lastMessage === 'object') {
       const msg = lastMessage as { topic?: string; payload?: string };
       if (msg.topic === 'active_project_changed' && msg.payload) {
-        clearArtifactCaches();
-        setActiveProject(msg.payload);
-        fetchProjects();
-        fetchEpics();
-        fetchFeatures();
-        fetchAdrs();
-        fetchCodeFiles();
-        fetchGlossaryTerms();
-        setWorkspaceRefreshKey((prev) => prev + 1);
+        // @implements spec-ft-core-workspace-graph-and-project-creator::TASK-CORE-017-24::REQ-032
+        // Desktop browser windows maintain independent active project state and do not hijack each other
+        if (msg.payload === activeProjectId) {
+          clearArtifactCaches();
+          fetchProjects();
+          fetchEpics();
+          fetchFeatures();
+          fetchAdrs();
+          fetchCodeFiles();
+          fetchGlossaryTerms();
+          setWorkspaceRefreshKey((prev) => prev + 1);
+        }
       } else if (msg.topic === 'projects_updated') {
         clearArtifactCaches();
         fetchProjects();
@@ -1177,6 +1187,7 @@ export const MainWorkspace: React.FC = () => {
           isMobileMode ? (
             <div data-testid="mobile-terminal-fullscreen" className="flex-1 flex flex-col h-full min-h-0 min-w-0 overflow-hidden bg-zinc-950">
               <TerminalConsole
+                projectId={activeProjectId}
                 onWorkspaceRefresh={handleRefreshWorkspace}
                 isMobile={true}
                 targetWindowId={targetWindowId}
@@ -1185,6 +1196,7 @@ export const MainWorkspace: React.FC = () => {
           ) : (
             <DockablePanel hideHeader isMobile={false}>
               <TerminalConsole
+                projectId={activeProjectId}
                 onWorkspaceRefresh={handleRefreshWorkspace}
                 isMobile={false}
                 targetWindowId={targetWindowId}

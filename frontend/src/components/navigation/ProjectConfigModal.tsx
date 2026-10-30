@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Briefcase, FolderGit2, Globe, Lock, Plus, Trash2, X } from 'lucide-react';
+import { apiFetch } from '../../utils/apiClient';
 
 export interface ManifestRepoDraft {
   id: string;
@@ -99,7 +100,7 @@ export const ProjectConfigModal: React.FC<ProjectConfigModalProps> = ({
         setIsLoadingManifest(false);
       } else {
         setIsLoadingManifest(true);
-        fetch('/api/v1/projects/manifest')
+        apiFetch('/api/v1/projects/manifest')
           .then((res) => (res.ok ? res.json() : null))
           .then((data: ProjectManifestData | null) => {
             if (data) {
@@ -258,7 +259,7 @@ export const ProjectConfigModal: React.FC<ProjectConfigModalProps> = ({
     setIsSubmitting(true);
     try {
       if (mode === 'create') {
-        const res = await fetch('/api/v1/projects', {
+        const res = await apiFetch('/api/v1/projects', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -294,7 +295,7 @@ export const ProjectConfigModal: React.FC<ProjectConfigModalProps> = ({
         }
         onClose();
       } else {
-        const res = await fetch('/api/v1/projects/manifest', {
+        const res = await apiFetch('/api/v1/projects/manifest', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

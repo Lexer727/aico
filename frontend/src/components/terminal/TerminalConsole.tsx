@@ -19,6 +19,7 @@ import { useDockStore } from '../../stores/useDockStore';
 import { useWebSocket } from '../../context/WebSocketContext';
 import { getWindowId } from '../../stores/useTabStore';
 import { useTerminalTitleSync } from '../../hooks/useTerminalTitleSync';
+import { getActiveProjectId } from '../../utils/apiClient';
 import clsx from 'clsx';
 
 export type ShellType = 'powershell' | 'bash' | 'cmd' | 'agy' | 'claude';
@@ -39,6 +40,7 @@ export interface TerminalTab {
 
 export interface TerminalConsoleProps {
   cwd?: string;
+  projectId?: string;
   onWorkspaceRefresh?: () => void;
   isMobile?: boolean;
   targetWindowId?: string;
@@ -317,6 +319,7 @@ interface XtermSessionHandle {
 // @implements ft-terminal-xterm-ui::TASK-XTERM-012::REQ-015
 export const TerminalConsole: React.FC<TerminalConsoleProps> = ({
   cwd,
+  projectId,
   onWorkspaceRefresh,
   isMobile = false,
   targetWindowId,
@@ -915,6 +918,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({
           } catch {
             // ignore
           }
+          const effectiveProjectId = projectId || getActiveProjectId() || undefined;
           ws.send(
             JSON.stringify({
               type: 'init',
@@ -923,6 +927,7 @@ export const TerminalConsole: React.FC<TerminalConsoleProps> = ({
               cwd: cwdRef.current || undefined,
               cols: currentHandle?.term.cols || 120,
               rows: currentHandle?.term.rows || 30,
+              project_id: effectiveProjectId,
             })
           );
           initializedRef.current[tabId] = true;

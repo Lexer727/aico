@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { fetchGitStatus, type GitRepoStatus } from '../feature-task-data';
 import { ProjectConfigModal } from '../../components/navigation/ProjectConfigModal';
+import { apiFetch } from '../../utils/apiClient';
 
 // @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-3::REQ-002
 // @implements ft-core-dashboard-and-repo-card-refinement::TASK-CORE-018-3::REQ-003
@@ -76,7 +77,7 @@ export const GitRepositoriesCard: React.FC<GitRepositoriesCardProps> = ({
     setActionLoading((prev) => ({ ...prev, [repo.id]: 'clone' }));
     setActionFeedback(null);
     try {
-      const res = await fetch('/api/v1/git/clone', {
+      const res = await apiFetch('/api/v1/git/clone', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -118,7 +119,7 @@ export const GitRepositoriesCard: React.FC<GitRepositoriesCardProps> = ({
     setActionLoading((prev) => ({ ...prev, [repo.id]: 'pull' }));
     setActionFeedback(null);
     try {
-      const res = await fetch('/api/v1/git/pull', {
+      const res = await apiFetch('/api/v1/git/pull', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -159,7 +160,7 @@ export const GitRepositoriesCard: React.FC<GitRepositoriesCardProps> = ({
     setActionLoading((prev) => ({ ...prev, [repo.id]: 'push' }));
     setActionFeedback(null);
     try {
-      const res = await fetch('/api/v1/git/push', {
+      const res = await apiFetch('/api/v1/git/push', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -202,7 +203,7 @@ export const GitRepositoriesCard: React.FC<GitRepositoriesCardProps> = ({
     setActionLoading((prev) => ({ ...prev, [repo.id]: 'commit' }));
     setActionFeedback(null);
     try {
-      const res = await fetch('/api/v1/git/ai-commit', {
+      const res = await apiFetch('/api/v1/git/ai-commit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

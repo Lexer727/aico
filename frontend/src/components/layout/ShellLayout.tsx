@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import { AiStatusMonitor } from './AiStatusMonitor';
+import { apiFetch } from '../../utils/apiClient';
 import type {
   DiscoveredEpic,
   DiscoveredFeature,
@@ -393,7 +394,7 @@ export const ShellLayout: React.FC<ShellLayoutProps> = ({
     let isCurrent = true;
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/v1/search?q=${encodeURIComponent(q)}`);
+        const res = await apiFetch(`/api/v1/search?q=${encodeURIComponent(q)}`);
         if (res.ok && isCurrent) {
           const data = await res.json();
           const items = Array.isArray(data) ? data : data.results || [];
